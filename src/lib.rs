@@ -38,6 +38,229 @@ macro_rules! enctry(
     )
 )
 
+/// A convenience encoder for encoding CSV data to strings.
+pub struct StrEncoder<'a> {
+    /// The underlying Encoder. Options like the separator, line endings and
+    /// enforcing consistent record lengths can be set with it.
+    ///
+    /// It is OK to call `encode` and `encode_all` methods on the underlying
+    /// encoder, but the corresponding methods on `StrEncoder` will be more
+    /// convenient since they can't (theoretically) fail as a result of an
+    /// IO error.
+    encoder: Encoder<'a>,
+    priv w: MemWriter,
+}
+
+impl<'a> StrEncoder<'a> {
+    /// Creates a new CSV string encoder. At any time, `to_str` can be called
+    /// to retrieve the cumulative CSV data.
+    pub fn new() -> StrEncoder<'a> {
+        let mut w = MemWriter::new();
+        let enc = Encoder::to_writer(&mut w as &mut Writer);
+        StrEncoder {
+            encoder: enc,
+            w: w,
+        }
+    }
+
+    /// Returns the encoded CSV data as a string.
+    pub fn to_str(self) -> ~str {
+        str::from_utf8_owned(self.w.unwrap()).unwrap()
+    }
+
+    /// This is just like `Encoder::encode`, except it calls `fail!` if there
+    /// was an error.
+    pub fn encode<E: Encodable<Encoder<'a>>>(&mut self, e: E) {
+        match self.encoder.encode(e) {
+            Ok(_) => {},
+            Err(err) => fail!("{}", err),
+        }
+    }
+
+    /// This is just like `Encoder::encode_all`, except it calls `fail!` if 
+    /// there was an error.
+    pub fn encode_all<E: Encodable<Encoder<'a>>>(&mut self, es: Vec<E>) {
+        match self.encoder.encode_all(es) {
+            Ok(_) => {},
+            Err(err) => fail!("{}", err),
+        }
+     }
+}
+
+/// An encoder can encode Rust values into CSV records or documents.
+pub struct Encoder<'a> {
+    priv buf: &'a mut Writer,
+    priv err: IoResult<()>,
+    priv sep: char,
+    priv same_len: bool,
+    priv first_len: uint,
+    priv use_crlf: bool,
+}
+
+impl<'a> Encoder<'a> {
+    /// Creates an encoder that encodes CSV data with the `Writer` given.
+    pub fn to_writer(w: &mut Writer) -> Encoder<'a> {
+        Encoder {
+            buf: w,
+            err: Ok(()),
+            sep: ',',
+            same_len: true,
+            first_len: 0,
+            use_crlf: false,
+        }
+    }
+
+    /// Encodes a record as CSV data. Only values with types that correspond
+    /// to records can be given here (i.e., structs, tuples or vectors).
+    pub fn encode<E: Encodable<Encoder<'a>>>(&mut self, e: E) -> IoResult<()> {
+        e.encode(self);
+        self.err.clone()
+    }
+
+    /// Calls `encode` on each element in the vector given.
+    pub fn encode_all<E: Encodable<Encoder<'a>>>
+                     (&mut self, es: Vec<E>) -> IoResult<()> {
+        for e in es.move_iter() {
+            try!(self.encode(e))
+        }
+        Ok(())
+    }
+
+    /// Sets the separator character that delimits values in a record.
+    pub fn separator(&mut self, c: char) {
+        self.sep = c;
+    }
+
+    /// When `yes` is `true`, all records written must have the same length.
+    /// If a record is written that has a different length than other records
+    /// already written, the encoding will fail.
+    pub fn enforce_same_length(&mut self, yes: bool) {
+        self.same_len = yes;
+    }
+
+    /// When `yes` is `true`, CRLF (`\r\n`) line endings will be used.
+    pub fn crlf(&mut self, yes: bool) {
+        self.use_crlf = yes;
+    }
+
+    fn write_to_str<T: fmt::Show>(&mut self, t: T) {
+        enctry!(self.buf.write_str(t.to_str()))
+    }
+
+    fn quoted<'a>(&mut self, s: &'a str) -> str::MaybeOwned<'a> {
+        if s.find(|c: char| c == self.sep || c == '\n' || c == '"').is_some() {
+            str::Owned(self.quote(s))
+        } else {
+            str::Slice(s)
+        }
+    }
+
+    fn quote(&mut self, s: &str) -> ~str {
+        let mut s = s.replace("\"", "\"\"");
+        s.unshift_char('"');
+        s.push_char('"');
+        s
+    }
+}
+
+impl<'a> serialize::Encoder for Encoder<'a> {
+    fn emit_nil(&mut self) { unimplemented!() }
+    fn emit_uint(&mut self, v: uint) { self.write_to_str(v) }
+    fn emit_u64(&mut self, v: u64) { self.write_to_str(v) }
+    fn emit_u32(&mut self, v: u32) { self.write_to_str(v) }
+    fn emit_u16(&mut self, v: u16) { self.write_to_str(v) }
+    fn emit_u8(&mut self, v: u8) { self.write_to_str(v) }
+    fn emit_int(&mut self, v: int) { self.write_to_str(v) }
+    fn emit_i64(&mut self, v: i64) { self.write_to_str(v) }
+    fn emit_i32(&mut self, v: i32) { self.write_to_str(v) }
+    fn emit_i16(&mut self, v: i16) { self.write_to_str(v) }
+    fn emit_i8(&mut self, v: i8) { self.write_to_str(v) }
+    fn emit_bool(&mut self, v: bool) { self.write_to_str(v) }
+    fn emit_f64(&mut self, v: f64) {
+        enctry!(self.buf.write_str(::std::f64::to_str_digits(v, 10)))
+    }
+    fn emit_f32(&mut self, v: f32) {
+        enctry!(self.buf.write_str(::std::f32::to_str_digits(v, 10)))
+    }
+    fn emit_char(&mut self, v: char) { self.write_to_str(v) }
+    fn emit_str(&mut self, v: &str) {
+        let s = self.quoted(v).to_str();
+        enctry!(self.buf.write_str(s))
+    }
+    fn emit_enum(&mut self, _: &str, f: |&mut Encoder<'a>|) {
+        f(self)
+    }
+    fn emit_enum_variant(&mut self, v_name: &str, _: uint, _: uint,
+                         _: |&mut Encoder<'a>|) {
+        enctry!(self.buf.write_str(v_name))
+    }
+    fn emit_enum_variant_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
+        fail!("Cannot encode enum variants with arguments.")
+    }
+    fn emit_enum_struct_variant(&mut self, v_name: &str, v_id: uint, len: uint,
+                                f: |&mut Encoder<'a>|) {
+        self.emit_enum_variant(v_name, v_id, len, f)
+    }
+    fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
+                                      _: |&mut Encoder<'a>|) {
+        fail!("Cannot encode enum variants with arguments.")
+    }
+    fn emit_struct(&mut self, _: &str, len: uint, f: |&mut Encoder<'a>|) {
+        self.emit_seq(len, f)
+    }
+    fn emit_struct_field(&mut self, _: &str, f_idx: uint,
+                         f: |&mut Encoder<'a>|) {
+        self.emit_seq_elt(f_idx, f)
+    }
+    fn emit_tuple(&mut self, _: uint, _: |&mut Encoder<'a>|) {
+        unimplemented!()
+    }
+    fn emit_tuple_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
+        unimplemented!()
+    }
+    fn emit_tuple_struct(&mut self, _: &str, _: uint,
+                         _: |&mut Encoder<'a>|) {
+        unimplemented!()
+    }
+    fn emit_tuple_struct_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
+        unimplemented!()
+    }
+    fn emit_option(&mut self, _: |&mut Encoder<'a>|) {
+        unimplemented!()
+    }
+    fn emit_option_none(&mut self) { unimplemented!() }
+    fn emit_option_some(&mut self, _: |&mut Encoder<'a>|) { unimplemented!() }
+    fn emit_seq(&mut self, len: uint, f: |this: &mut Encoder<'a>|) {
+        if self.same_len {
+            if self.first_len == 0 {
+                self.first_len = len
+            } else if self.first_len != len {
+                fail!("Record has length {} but other records have length {}",
+                      len, self.first_len)
+            }
+        }
+        f(self);
+        if self.use_crlf {
+            enctry!(self.buf.write_str("\r\n"))
+        } else {
+            enctry!(self.buf.write_str("\n"))
+        }
+    }
+    fn emit_seq_elt(&mut self, idx: uint, f: |this: &mut Encoder<'a>|) {
+        if idx > 0 {
+            enctry!(self.buf.write_char(self.sep))
+        }
+        f(self)
+    }
+    fn emit_map(&mut self, _: uint, _: |&mut Encoder<'a>|) { unimplemented!() }
+    fn emit_map_elt_key(&mut self, _: uint, _: |&mut Encoder<'a>|) {
+        unimplemented!()
+    }
+    fn emit_map_elt_val(&mut self, _: uint, _: |&mut Encoder<'a>|) {
+        unimplemented!()
+    }
+}
+
 /// Information for a CSV decoding error.
 pub struct Error {
     /// The line on which the error occurred.
@@ -273,136 +496,11 @@ pub struct Decoder<'a> {
     priv p: Parser<'a>,
 }
 
-/// An encoder can encode Rust values into CSV records or documents.
-pub struct Encoder<'a> {
-    priv buf: &'a mut Writer,
-    priv err: IoResult<()>,
-    priv sep: char,
-    priv same_len: bool,
-    priv first_len: uint,
-    priv use_crlf: bool,
-}
-
 /// A representation of a value found in a CSV document.
 /// A CSV document's structure is simple (non-recursive).
 enum Value {
     Record(Vec<~str>),
     String(~str),
-}
-
-/// A convenience encoder for encoding CSV data to strings.
-pub struct StrEncoder<'a> {
-    /// The underlying Encoder. Options like the separator, line endings and
-    /// enforcing consistent record lengths can be set with it.
-    ///
-    /// It is OK to call `encode` and `encode_all` methods on the underlying
-    /// encoder, but the corresponding methods on `StrEncoder` will be more
-    /// convenient since they can't (theoretically) fail as a result of an
-    /// IO error.
-    encoder: Encoder<'a>,
-    priv w: MemWriter,
-}
-
-impl<'a> StrEncoder<'a> {
-    /// Creates a new CSV string encoder. At any time, `to_str` can be called
-    /// to retrieve the cumulative CSV data.
-    pub fn new() -> StrEncoder<'a> {
-        let mut w = MemWriter::new();
-        let enc = Encoder::to_writer(&mut w as &mut Writer);
-        StrEncoder {
-            encoder: enc,
-            w: w,
-        }
-    }
-
-    /// Returns the encoded CSV data as a string.
-    pub fn to_str(self) -> ~str {
-        str::from_utf8_owned(self.w.unwrap()).unwrap()
-    }
-
-    /// This is just like `Encoder::encode`, except it calls `fail!` if there
-    /// was an error.
-    pub fn encode<E: Encodable<Encoder<'a>>>(&mut self, e: E) {
-        match self.encoder.encode(e) {
-            Ok(_) => {},
-            Err(err) => fail!("{}", err),
-        }
-    }
-
-    /// This is just like `Encoder::encode_all`, except it calls `fail!` if 
-    /// there was an error.
-    pub fn encode_all<E: Encodable<Encoder<'a>>>(&mut self, es: Vec<E>) {
-        match self.encoder.encode_all(es) {
-            Ok(_) => {},
-            Err(err) => fail!("{}", err),
-        }
-     }
-}
-
-impl<'a> Encoder<'a> {
-    /// Creates an encoder that encodes CSV data with the `Writer` given.
-    pub fn to_writer(w: &mut Writer) -> Encoder<'a> {
-        Encoder {
-            buf: w,
-            err: Ok(()),
-            sep: ',',
-            same_len: true,
-            first_len: 0,
-            use_crlf: false,
-        }
-    }
-
-    /// Encodes a record as CSV data. Only values with types that correspond
-    /// to records can be given here (i.e., structs, tuples or vectors).
-    pub fn encode<E: Encodable<Encoder<'a>>>(&mut self, e: E) -> IoResult<()> {
-        e.encode(self);
-        self.err.clone()
-    }
-
-    /// Calls `encode` on each element in the vector given.
-    pub fn encode_all<E: Encodable<Encoder<'a>>>
-                     (&mut self, es: Vec<E>) -> IoResult<()> {
-        for e in es.move_iter() {
-            try!(self.encode(e))
-        }
-        Ok(())
-    }
-
-    /// Sets the separator character that delimits values in a record.
-    pub fn separator(&mut self, c: char) {
-        self.sep = c;
-    }
-
-    /// When `yes` is `true`, all records written must have the same length.
-    /// If a record is written that has a different length than other records
-    /// already written, the encoding will fail.
-    pub fn enforce_same_length(&mut self, yes: bool) {
-        self.same_len = yes;
-    }
-
-    /// When `yes` is `true`, CRLF (`\r\n`) line endings will be used.
-    pub fn crlf(&mut self, yes: bool) {
-        self.use_crlf = yes;
-    }
-
-    fn write_to_str<T: fmt::Show>(&mut self, t: T) {
-        enctry!(self.buf.write_str(t.to_str()))
-    }
-
-    fn quoted<'a>(&mut self, s: &'a str) -> str::MaybeOwned<'a> {
-        if s.find(|c: char| c == self.sep || c == '\n' || c == '"').is_some() {
-            str::Owned(self.quote(s))
-        } else {
-            str::Slice(s)
-        }
-    }
-
-    fn quote(&mut self, s: &str) -> ~str {
-        let mut s = s.replace("\"", "\"\"");
-        s.unshift_char('"');
-        s.push_char('"');
-        s
-    }
 }
 
 impl<'a> Decoder<'a> {
@@ -565,104 +663,6 @@ impl<'a> Decoder<'a> {
     }
 }
 
-impl<'a> serialize::Encoder for Encoder<'a> {
-    fn emit_nil(&mut self) { unimplemented!() }
-    fn emit_uint(&mut self, v: uint) { self.write_to_str(v) }
-    fn emit_u64(&mut self, v: u64) { self.write_to_str(v) }
-    fn emit_u32(&mut self, v: u32) { self.write_to_str(v) }
-    fn emit_u16(&mut self, v: u16) { self.write_to_str(v) }
-    fn emit_u8(&mut self, v: u8) { self.write_to_str(v) }
-    fn emit_int(&mut self, v: int) { self.write_to_str(v) }
-    fn emit_i64(&mut self, v: i64) { self.write_to_str(v) }
-    fn emit_i32(&mut self, v: i32) { self.write_to_str(v) }
-    fn emit_i16(&mut self, v: i16) { self.write_to_str(v) }
-    fn emit_i8(&mut self, v: i8) { self.write_to_str(v) }
-    fn emit_bool(&mut self, v: bool) { self.write_to_str(v) }
-    fn emit_f64(&mut self, v: f64) {
-        enctry!(self.buf.write_str(::std::f64::to_str_digits(v, 10)))
-    }
-    fn emit_f32(&mut self, v: f32) {
-        enctry!(self.buf.write_str(::std::f32::to_str_digits(v, 10)))
-    }
-    fn emit_char(&mut self, v: char) { self.write_to_str(v) }
-    fn emit_str(&mut self, v: &str) {
-        let s = self.quoted(v).to_str();
-        enctry!(self.buf.write_str(s))
-    }
-    fn emit_enum(&mut self, _: &str, f: |&mut Encoder<'a>|) {
-        f(self)
-    }
-    fn emit_enum_variant(&mut self, v_name: &str, _: uint, _: uint,
-                         _: |&mut Encoder<'a>|) {
-        enctry!(self.buf.write_str(v_name))
-    }
-    fn emit_enum_variant_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
-        fail!("Cannot encode enum variants with arguments.")
-    }
-    fn emit_enum_struct_variant(&mut self, v_name: &str, v_id: uint, len: uint,
-                                f: |&mut Encoder<'a>|) {
-        self.emit_enum_variant(v_name, v_id, len, f)
-    }
-    fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
-                                      _: |&mut Encoder<'a>|) {
-        fail!("Cannot encode enum variants with arguments.")
-    }
-    fn emit_struct(&mut self, _: &str, len: uint, f: |&mut Encoder<'a>|) {
-        self.emit_seq(len, f)
-    }
-    fn emit_struct_field(&mut self, _: &str, f_idx: uint,
-                         f: |&mut Encoder<'a>|) {
-        self.emit_seq_elt(f_idx, f)
-    }
-    fn emit_tuple(&mut self, _: uint, _: |&mut Encoder<'a>|) {
-        unimplemented!()
-    }
-    fn emit_tuple_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
-        unimplemented!()
-    }
-    fn emit_tuple_struct(&mut self, _: &str, _: uint,
-                         _: |&mut Encoder<'a>|) {
-        unimplemented!()
-    }
-    fn emit_tuple_struct_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
-        unimplemented!()
-    }
-    fn emit_option(&mut self, _: |&mut Encoder<'a>|) {
-        unimplemented!()
-    }
-    fn emit_option_none(&mut self) { unimplemented!() }
-    fn emit_option_some(&mut self, _: |&mut Encoder<'a>|) { unimplemented!() }
-    fn emit_seq(&mut self, len: uint, f: |this: &mut Encoder<'a>|) {
-        if self.same_len {
-            if self.first_len == 0 {
-                self.first_len = len
-            } else if self.first_len != len {
-                fail!("Record has length {} but other records have length {}",
-                      len, self.first_len)
-            }
-        }
-        f(self);
-        if self.use_crlf {
-            enctry!(self.buf.write_str("\r\n"))
-        } else {
-            enctry!(self.buf.write_str("\n"))
-        }
-    }
-    fn emit_seq_elt(&mut self, idx: uint, f: |this: &mut Encoder<'a>|) {
-        if idx > 0 {
-            enctry!(self.buf.write_char(self.sep))
-        }
-        f(self)
-    }
-    fn emit_map(&mut self, _: uint, _: |&mut Encoder<'a>|) { unimplemented!() }
-    fn emit_map_elt_key(&mut self, _: uint, _: |&mut Encoder<'a>|) {
-        unimplemented!()
-    }
-    fn emit_map_elt_val(&mut self, _: uint, _: |&mut Encoder<'a>|) {
-        unimplemented!()
-    }
-}
-
 impl<'a> serialize::Decoder for Decoder<'a> {
     fn read_nil(&mut self) { unimplemented!() }
     fn read_uint(&mut self) -> uint { self.pop_from_str() }
@@ -818,7 +818,8 @@ mod test {
 
         debug!("-------------------");
 
-        let mut dec = Decoder::from_str("A:B:C:D\ngreen:-0.14: \"\":c\r\nred:1:y:z");
+        let mut dec = Decoder::from_str(
+                         "A:B:C:D\ngreen:-0.14: \"\":c\r\nred:1:y:z");
         dec.separator(':');
         dec.has_headers(true);
         debug!("HEADERS: {}", dec.headers());
