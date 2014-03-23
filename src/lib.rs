@@ -3,9 +3,6 @@
 #[license = "UNLICENSE"];
 #[doc(html_root_url = "http://burntsushi.net/rustdoc/rust-csv")];
 
-#[allow(dead_code)];
-#[allow(unused_variable)];
-
 //! This crate provides a CSV encoder and decoder that works with Rust's
 //! `serialize` crate.
 
@@ -41,27 +38,6 @@ macro_rules! enctry(
     )
 )
 
-/// A decoder can decode CSV values (or entire documents) into values with
-/// Rust types automatically.
-///
-/// Raw records (as strings) can also be accessed with the `record` method
-/// or with a standard iterator.
-pub struct Decoder<'a> {
-    priv stack: Vec<Value>,
-    priv err: Option<Error>,
-    priv p: Parser<'a>,
-}
-
-/// An encoder can encode Rust values into CSV records or documents.
-pub struct Encoder<'a> {
-    priv buf: &'a mut Writer,
-    priv err: IoResult<()>,
-    priv sep: char,
-    priv same_len: bool,
-    priv first_len: uint,
-    priv use_crlf: bool,
-}
-
 /// Information for a CSV decoding error.
 pub struct Error {
     /// The line on which the error occurred.
@@ -95,6 +71,216 @@ struct Parser<'a> {
     look: Option<char>, // one character look-ahead
     line: uint, // current line
     col: uint, // current column
+}
+
+impl<'a> Parser<'a> {
+    fn next_char(&mut self) -> Option<Error> {
+        match self.read_next() {
+            Ok(c) => self.cur = c,
+            Err(err) => return Some(err),
+        }
+        if !self.is_eof() {
+            if self.cur_is('\n') {
+                self.line += 1;
+                self.col = 1;
+            } else {
+                self.col += 1;
+            }
+        }
+        None
+    }
+
+    fn read_next(&mut self) -> Result<Option<char>, Error> {
+        match self.look {
+            Some(c) => { self.look = None; Ok(Some(c)) },
+            None => match self.buf.read_char() {
+                Ok(c) => Ok(Some(c)),
+                Err(err) => {
+                    if err.kind == EndOfFile {
+                        Ok(None)
+                    } else {
+                        Err(self.err(format!("Could not read char: {}", err)))
+                    }
+                },
+            },
+        }
+    }
+
+    fn err(&self, msg: &str) -> Error {
+        Error {
+            line: self.line,
+            col: self.col,
+            msg: msg.to_owned(),
+            eof: false,
+        }
+    }
+
+    fn err_eof(&self) -> Error {
+        Error {
+            line: self.line,
+            col: self.col,
+            msg: ~"EOF",
+            eof: true,
+        }
+    }
+
+    fn parse_record(&mut self) -> Result<Vec<~str>, Error> {
+        let mut vals: Vec<~str> = vec!();
+        while !self.is_eof() {
+            let val = try!(self.parse_value());
+            vals.push(val);
+            if self.is_lineterm() {
+                // If it's a CRLF ending, consume the '\r'
+                if self.cur_is('\r') { opttry!(self.next_char()) }
+                break
+            }
+        }
+        if self.is_eof() && vals.len() == 0 {
+            return Err(self.err_eof())
+        }
+        if self.same_len {
+            if self.first_len == 0 {
+                self.first_len = vals.len()
+            } else if self.first_len != vals.len() {
+                return Err(self.err(format!(
+                    "Record has length {} but other records have length {}",
+                    vals.len(), self.first_len)))
+            }
+        }
+        assert!(vals.len() > 0);
+        if self.has_headers && self.headers.len() == 0 {
+            self.headers = vals;
+            return self.parse_record()
+        }
+        Ok(vals)
+    }
+
+    fn parse_value(&mut self) -> Result<~str, Error> {
+        let mut only_whitespace = true;
+        let mut res = ~"";
+        loop {
+            opttry!(self.next_char());
+            if self.is_eof() || self.is_lineterm() || self.is_sep() {
+                break
+            } else if self.cur.unwrap().is_whitespace() {
+                res.push_char(self.cur.unwrap());
+                continue
+            } else if only_whitespace && self.cur_is('"') {
+                // Throw away any leading whitespace.
+                return self.parse_quoted_value()
+            }
+            only_whitespace = false;
+            res.push_char(self.cur.unwrap());
+        }
+        Ok(res)
+    }
+
+    fn parse_quoted_value(&mut self) -> Result<~str, Error> {
+        // Assumes that " has already been read.
+        let mut res = ~"";
+        loop {
+            opttry!(self.next_char());
+            if self.is_eof() {
+                return Err(self.err("EOF while parsing quoted value."))
+            } else if self.cur_is('"') {
+                if self.is_escaped_quote() {
+                    opttry!(self.next_char()); // throw away second "
+                    res.push_char('"');
+                    continue
+                }
+
+                // Eat and spit out everything up to next separator.
+                // If we see something that isn't whitespace, it's an error.
+                loop {
+                    opttry!(self.next_char());
+                    if self.is_eof() || self.is_lineterm() || self.is_sep() {
+                        break
+                    } else if !self.cur.unwrap().is_whitespace() {
+                        let msg = format!(
+                            "Expected EOF, line terminator, separator or \
+                            whitespace following quoted value but found \
+                            '{}' instead.", self.cur.unwrap());
+                        return Err(self.err(msg));
+                    }
+                }
+                break
+            } else if self.cur_is('\\') && self.peek_is('"') {
+                // We also try to support \ escaped quotes even though
+                // the spec says "" is used.
+                opttry!(self.next_char()); // throw away the "
+                res.push_char('"');
+                continue
+            }
+
+            res.push_char(self.cur.unwrap());
+        }
+        Ok(res)
+    }
+
+    fn is_eof(&self) -> bool {
+        self.cur.is_none()
+    }
+
+    fn cur_is(&self, c: char) -> bool {
+        self.cur == Some(c)
+    }
+
+    fn peek(&mut self) -> Result<Option<char>, Error> {
+        match self.look {
+            Some(c) => Ok(Some(c)),
+            None => {
+                self.look = try!(self.read_next());
+                Ok(self.look)
+            },
+        }
+    }
+
+    fn peek_is(&mut self, c: char) -> bool {
+        match self.peek() {
+            Ok(Some(p)) => p == c,
+            _ => false,
+        }
+    }
+
+    fn is_lineterm(&mut self) -> bool {
+        if self.cur_is('\n') {
+            return true
+        }
+        if self.cur_is('\r') {
+            return self.peek_is('\n')
+        }
+        false
+    }
+
+    fn is_sep(&mut self) -> bool {
+        self.cur_is(self.sep)
+    }
+
+    fn is_escaped_quote(&mut self) -> bool {
+        // Assumes that self.cur == '"'
+        self.peek_is('"')
+    }
+}
+
+/// A decoder can decode CSV values (or entire documents) into values with
+/// Rust types automatically.
+///
+/// Raw records (as strings) can also be accessed with the `record` method
+/// or with a standard iterator.
+pub struct Decoder<'a> {
+    priv stack: Vec<Value>,
+    priv err: Option<Error>,
+    priv p: Parser<'a>,
+}
+
+/// An encoder can encode Rust values into CSV records or documents.
+pub struct Encoder<'a> {
+    priv buf: &'a mut Writer,
+    priv err: IoResult<()>,
+    priv sep: char,
+    priv same_len: bool,
+    priv first_len: uint,
+    priv use_crlf: bool,
 }
 
 /// A representation of a value found in a CSV document.
@@ -328,195 +514,6 @@ impl<'a> Iterator<Vec<~str>> for Decoder<'a> {
     }
 }
 
-impl<'a> Parser<'a> {
-    fn next_char(&mut self) -> Option<Error> {
-        match self.read_next() {
-            Ok(c) => self.cur = c,
-            Err(err) => return Some(err),
-        }
-        if !self.is_eof() {
-            if self.cur_is('\n') {
-                self.line += 1;
-                self.col = 1;
-            } else {
-                self.col += 1;
-            }
-        }
-        None
-    }
-
-    fn read_next(&mut self) -> Result<Option<char>, Error> {
-        match self.look {
-            Some(c) => { self.look = None; Ok(Some(c)) },
-            None => match self.buf.read_char() {
-                Ok(c) => Ok(Some(c)),
-                Err(err) => {
-                    if err.kind == EndOfFile {
-                        Ok(None)
-                    } else {
-                        Err(self.err(format!("Could not read char: {}", err)))
-                    }
-                },
-            },
-        }
-    }
-
-    fn err(&self, msg: &str) -> Error {
-        Error {
-            line: self.line,
-            col: self.col,
-            msg: msg.to_owned(),
-            eof: false,
-        }
-    }
-
-    fn err_eof(&self) -> Error {
-        Error {
-            line: self.line,
-            col: self.col,
-            msg: ~"EOF",
-            eof: true,
-        }
-    }
-
-    fn parse_record(&mut self) -> Result<Vec<~str>, Error> {
-        let mut vals: Vec<~str> = vec!();
-        while !self.is_eof() {
-            let val = try!(self.parse_value());
-            vals.push(val);
-            if self.is_lineterm() {
-                // If it's a CRLF ending, consume the '\r'
-                if self.cur_is('\r') { opttry!(self.next_char()) }
-                break
-            }
-        }
-        if self.is_eof() && vals.len() == 0 {
-            return Err(self.err_eof())
-        }
-        if self.same_len {
-            if self.first_len == 0 {
-                self.first_len = vals.len()
-            } else if self.first_len != vals.len() {
-                return Err(self.err(format!(
-                    "Record has length {} but other records have length {}",
-                    vals.len(), self.first_len)))
-            }
-        }
-        assert!(vals.len() > 0);
-        if self.has_headers && self.headers.len() == 0 {
-            self.headers = vals;
-            return self.parse_record()
-        }
-        Ok(vals)
-    }
-
-    fn parse_value(&mut self) -> Result<~str, Error> {
-        let mut only_whitespace = true;
-        let mut res = ~"";
-        loop {
-            opttry!(self.next_char());
-            if self.is_eof() || self.is_lineterm() || self.is_sep() {
-                break
-            } else if self.cur.unwrap().is_whitespace() {
-                res.push_char(self.cur.unwrap());
-                continue
-            } else if only_whitespace && self.cur_is('"') {
-                // Throw away any leading whitespace.
-                return self.parse_quoted_value()
-            }
-            only_whitespace = false;
-            res.push_char(self.cur.unwrap());
-        }
-        Ok(res)
-    }
-
-    fn parse_quoted_value(&mut self) -> Result<~str, Error> {
-        // Assumes that " has already been read.
-        let mut res = ~"";
-        loop {
-            opttry!(self.next_char());
-            if self.is_eof() {
-                return Err(self.err("EOF while parsing quoted value."))
-            } else if self.cur_is('"') {
-                if self.is_escaped_quote() {
-                    opttry!(self.next_char()); // throw away second "
-                    res.push_char('"');
-                    continue
-                }
-
-                // Eat and spit out everything up to next separator.
-                // If we see something that isn't whitespace, it's an error.
-                loop {
-                    opttry!(self.next_char());
-                    if self.is_eof() || self.is_lineterm() || self.is_sep() {
-                        break
-                    } else if !self.cur.unwrap().is_whitespace() {
-                        let msg = format!(
-                            "Expected EOF, line terminator, separator or \
-                            whitespace following quoted value but found \
-                            '{}' instead.", self.cur.unwrap());
-                        return Err(self.err(msg));
-                    }
-                }
-                break
-            } else if self.cur_is('\\') && self.peek_is('"') {
-                // We also try to support \ escaped quotes even though
-                // the spec says "" is used.
-                opttry!(self.next_char()); // throw away the "
-                res.push_char('"');
-                continue
-            }
-
-            res.push_char(self.cur.unwrap());
-        }
-        Ok(res)
-    }
-
-    fn is_eof(&self) -> bool {
-        self.cur.is_none()
-    }
-
-    fn cur_is(&self, c: char) -> bool {
-        self.cur == Some(c)
-    }
-
-    fn peek(&mut self) -> Result<Option<char>, Error> {
-        match self.look {
-            Some(c) => Ok(Some(c)),
-            None => {
-                self.look = try!(self.read_next());
-                Ok(self.look)
-            },
-        }
-    }
-
-    fn peek_is(&mut self, c: char) -> bool {
-        match self.peek() {
-            Ok(Some(p)) => p == c,
-            _ => false,
-        }
-    }
-
-    fn is_lineterm(&mut self) -> bool {
-        if self.cur_is('\n') {
-            return true
-        }
-        if self.cur_is('\r') {
-            return self.peek_is('\n')
-        }
-        false
-    }
-
-    fn is_sep(&mut self) -> bool {
-        self.cur_is(self.sep)
-    }
-
-    fn is_escaped_quote(&mut self) -> bool {
-        // Assumes that self.cur == '"'
-        self.peek_is('"')
-    }
-}
-
 impl<'a> Decoder<'a> {
     fn pop(&mut self) -> Value {
         if self.stack.len() == 0 {
@@ -592,49 +589,49 @@ impl<'a> serialize::Encoder for Encoder<'a> {
         let s = self.quoted(v).to_str();
         enctry!(self.buf.write_str(s))
     }
-    fn emit_enum(&mut self, name: &str, f: |&mut Encoder<'a>|) {
+    fn emit_enum(&mut self, _: &str, f: |&mut Encoder<'a>|) {
         f(self)
     }
-    fn emit_enum_variant(&mut self, v_name: &str, v_id: uint, len: uint,
-                         f: |&mut Encoder<'a>|) {
+    fn emit_enum_variant(&mut self, v_name: &str, _: uint, _: uint,
+                         _: |&mut Encoder<'a>|) {
         enctry!(self.buf.write_str(v_name))
     }
-    fn emit_enum_variant_arg(&mut self, a_idx: uint, f: |&mut Encoder<'a>|) {
+    fn emit_enum_variant_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
         fail!("Cannot encode enum variants with arguments.")
     }
     fn emit_enum_struct_variant(&mut self, v_name: &str, v_id: uint, len: uint,
                                 f: |&mut Encoder<'a>|) {
         self.emit_enum_variant(v_name, v_id, len, f)
     }
-    fn emit_enum_struct_variant_field(&mut self, f_name: &str, f_idx: uint,
-                                      f: |&mut Encoder<'a>|) {
+    fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
+                                      _: |&mut Encoder<'a>|) {
         fail!("Cannot encode enum variants with arguments.")
     }
-    fn emit_struct(&mut self, name: &str, len: uint, f: |&mut Encoder<'a>|) {
+    fn emit_struct(&mut self, _: &str, len: uint, f: |&mut Encoder<'a>|) {
         self.emit_seq(len, f)
     }
-    fn emit_struct_field(&mut self, f_name: &str, f_idx: uint,
+    fn emit_struct_field(&mut self, _: &str, f_idx: uint,
                          f: |&mut Encoder<'a>|) {
         self.emit_seq_elt(f_idx, f)
     }
-    fn emit_tuple(&mut self, len: uint, f: |&mut Encoder<'a>|) {
+    fn emit_tuple(&mut self, _: uint, _: |&mut Encoder<'a>|) {
         unimplemented!()
     }
-    fn emit_tuple_arg(&mut self, idx: uint, f: |&mut Encoder<'a>|) {
+    fn emit_tuple_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
         unimplemented!()
     }
-    fn emit_tuple_struct(&mut self, name: &str, len: uint,
-                         f: |&mut Encoder<'a>|) {
+    fn emit_tuple_struct(&mut self, _: &str, _: uint,
+                         _: |&mut Encoder<'a>|) {
         unimplemented!()
     }
-    fn emit_tuple_struct_arg(&mut self, f_idx: uint, f: |&mut Encoder<'a>|) {
+    fn emit_tuple_struct_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
         unimplemented!()
     }
-    fn emit_option(&mut self, f: |&mut Encoder<'a>|) {
+    fn emit_option(&mut self, _: |&mut Encoder<'a>|) {
         unimplemented!()
     }
     fn emit_option_none(&mut self) { unimplemented!() }
-    fn emit_option_some(&mut self, f: |&mut Encoder<'a>|) { unimplemented!() }
+    fn emit_option_some(&mut self, _: |&mut Encoder<'a>|) { unimplemented!() }
     fn emit_seq(&mut self, len: uint, f: |this: &mut Encoder<'a>|) {
         if self.same_len {
             if self.first_len == 0 {
@@ -657,11 +654,11 @@ impl<'a> serialize::Encoder for Encoder<'a> {
         }
         f(self)
     }
-    fn emit_map(&mut self, len: uint, f: |&mut Encoder<'a>|) { unimplemented!() }
-    fn emit_map_elt_key(&mut self, idx: uint, f: |&mut Encoder<'a>|) {
+    fn emit_map(&mut self, _: uint, _: |&mut Encoder<'a>|) { unimplemented!() }
+    fn emit_map_elt_key(&mut self, _: uint, _: |&mut Encoder<'a>|) {
         unimplemented!()
     }
-    fn emit_map_elt_val(&mut self, idx: uint, f: |&mut Encoder<'a>|) {
+    fn emit_map_elt_val(&mut self, _: uint, _: |&mut Encoder<'a>|) {
         unimplemented!()
     }
 }
@@ -692,7 +689,7 @@ impl<'a> serialize::Decoder for Decoder<'a> {
     fn read_str(&mut self) -> ~str {
         self.pop_string()
     }
-    fn read_enum<T>(&mut self, name: &str, f: |&mut Decoder<'a>| -> T) -> T {
+    fn read_enum<T>(&mut self, _: &str, f: |&mut Decoder<'a>| -> T) -> T {
         f(self)
     }
     fn read_enum_variant<T>(&mut self, names: &[&str],
@@ -704,8 +701,8 @@ impl<'a> serialize::Decoder for Decoder<'a> {
                                       names, variant)),
         }
     }
-    fn read_enum_variant_arg<T>(&mut self, a_idx: uint,
-                                f: |&mut Decoder<'a>| -> T) -> T {
+    fn read_enum_variant_arg<T>(&mut self, _: uint,
+                                _: |&mut Decoder<'a>| -> T) -> T {
         self.fail("Cannot decode into enum variants with arguments.")
     }
     fn read_enum_struct_variant<T>(&mut self, names: &[&str],
@@ -732,22 +729,21 @@ impl<'a> serialize::Decoder for Decoder<'a> {
                             f: |&mut Decoder<'a>| -> T) -> T {
         f(self)
     }
-    fn read_tuple<T>(&mut self, f: |&mut Decoder<'a>, uint| -> T) -> T {
+    fn read_tuple<T>(&mut self, _: |&mut Decoder<'a>, uint| -> T) -> T {
         unimplemented!()
     }
-    fn read_tuple_arg<T>(&mut self, a_idx: uint,
-                         f: |&mut Decoder<'a>| -> T) -> T {
+    fn read_tuple_arg<T>(&mut self, _: uint, _: |&mut Decoder<'a>| -> T) -> T {
         unimplemented!()
     }
-    fn read_tuple_struct<T>(&mut self, s_name: &str,
-                            f: |&mut Decoder<'a>, uint| -> T) -> T {
+    fn read_tuple_struct<T>(&mut self, _: &str,
+                            _: |&mut Decoder<'a>, uint| -> T) -> T {
         unimplemented!()
     }
-    fn read_tuple_struct_arg<T>(&mut self, a_idx: uint,
-                                f: |&mut Decoder<'a>| -> T) -> T {
+    fn read_tuple_struct_arg<T>(&mut self, _: uint,
+                                _: |&mut Decoder<'a>| -> T) -> T {
         unimplemented!()
     }
-    fn read_option<T>(&mut self, f: |&mut Decoder<'a>, bool| -> T) -> T {
+    fn read_option<T>(&mut self, _: |&mut Decoder<'a>, bool| -> T) -> T {
         unimplemented!()
     }
     fn read_seq<T>(&mut self, f: |&mut Decoder<'a>, uint| -> T) -> T {
@@ -758,18 +754,18 @@ impl<'a> serialize::Decoder for Decoder<'a> {
         }
         f(self, len)
     }
-    fn read_seq_elt<T>(&mut self, idx: uint, f: |&mut Decoder<'a>| -> T) -> T {
+    fn read_seq_elt<T>(&mut self, _: uint, f: |&mut Decoder<'a>| -> T) -> T {
         f(self)
     }
-    fn read_map<T>(&mut self, f: |&mut Decoder<'a>, uint| -> T) -> T {
+    fn read_map<T>(&mut self, _: |&mut Decoder<'a>, uint| -> T) -> T {
         unimplemented!()
     }
-    fn read_map_elt_key<T>(&mut self, idx: uint,
-                           f: |&mut Decoder<'a>| -> T) -> T {
+    fn read_map_elt_key<T>(&mut self, _: uint,
+                           _: |&mut Decoder<'a>| -> T) -> T {
         unimplemented!()
     }
-    fn read_map_elt_val<T>(&mut self, idx: uint,
-                           f: |&mut Decoder<'a>| -> T) -> T {
+    fn read_map_elt_val<T>(&mut self, _: uint,
+                           _: |&mut Decoder<'a>| -> T) -> T {
         unimplemented!()
     }
 }
