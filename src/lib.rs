@@ -2,7 +2,6 @@
 #[crate_type = "lib"];
 #[license = "UNLICENSE"];
 #[doc(html_root_url = "http://burntsushi.net/rustdoc/rust-csv")];
-#[allow(deprecated_owned_vector)];
 
 #[allow(dead_code)];
 #[allow(unused_variable)];
@@ -48,7 +47,7 @@ macro_rules! enctry(
 /// Raw records (as strings) can also be accessed with the `record` method
 /// or with a standard iterator.
 pub struct Decoder<'a> {
-    priv stack: ~[Value],
+    priv stack: Vec<Value>,
     priv err: Option<Error>,
     priv p: Parser<'a>,
 }
@@ -90,7 +89,7 @@ struct Parser<'a> {
     same_len: bool, // whether to enforce all rows be of same length
     first_len: uint, // length of first row
     has_headers: bool, // interpret first record as headers when true
-    headers: ~[~str], // the first record in the CSV data
+    headers: Vec<~str>, // the first record in the CSV data
     buf: BufferedReader<&'a mut Reader>, // buffer to read CSV data from
     cur: Option<char>, // the current character
     look: Option<char>, // one character look-ahead
@@ -101,7 +100,7 @@ struct Parser<'a> {
 /// A representation of a value found in a CSV document.
 /// A CSV document's structure is simple (non-recursive).
 enum Value {
-    Record(~[~str]),
+    Record(Vec<~str>),
     String(~str),
 }
 
@@ -146,7 +145,7 @@ impl<'a> StrEncoder<'a> {
 
     /// This is just like `Encoder::encode_all`, except it calls `fail!` if 
     /// there was an error.
-    pub fn encode_all<E: Encodable<Encoder<'a>>>(&mut self, es: ~[E]) {
+    pub fn encode_all<E: Encodable<Encoder<'a>>>(&mut self, es: Vec<E>) {
         match self.encoder.encode_all(es) {
             Ok(_) => {},
             Err(err) => fail!("{}", err),
@@ -176,7 +175,7 @@ impl<'a> Encoder<'a> {
 
     /// Calls `encode` on each element in the vector given.
     pub fn encode_all<E: Encodable<Encoder<'a>>>
-                     (&mut self, es: ~[E]) -> IoResult<()> {
+                     (&mut self, es: Vec<E>) -> IoResult<()> {
         for e in es.move_iter() {
             try!(self.encode(e))
         }
@@ -226,14 +225,14 @@ impl<'a> Decoder<'a> {
     /// is decoded.
     pub fn from_reader(r: &mut Reader) -> Decoder<'a> {
         Decoder {
-            stack: ~[],
+            stack: vec!(),
             err: None,
             p: Parser {
                 sep: ',',
                 same_len: true,
                 first_len: 0,
                 has_headers: false,
-                headers: ~[],
+                headers: vec!(),
                 buf: BufferedReader::new(r),
                 cur: Some(0u8 as char),
                 look: None,
@@ -261,8 +260,8 @@ impl<'a> Decoder<'a> {
 
     /// Calls `decode` on every record in the CSV data until EOF and returns
     /// them as a vector. (Sorry, hopefully this will change at some point.)
-    pub fn decode_all<D: Decodable<Decoder<'a>>>(&mut self) -> ~[D] {
-        let mut records: ~[D] = ~[];
+    pub fn decode_all<D: Decodable<Decoder<'a>>>(&mut self) -> Vec<D> {
+        let mut records: Vec<D> = vec!();
         while !self.p.is_eof() {
             records.push(self.decode())
         }
@@ -272,7 +271,7 @@ impl<'a> Decoder<'a> {
     /// Cirumvents the decoding interface and forces the parsing of the next
     /// record and returns it. A record returned by this method will never be
     /// decoded.
-    pub fn record(&mut self) -> Result<~[~str], Error> {
+    pub fn record(&mut self) -> Result<Vec<~str>, Error> {
         self.p.parse_record()
     }
 
@@ -300,9 +299,9 @@ impl<'a> Decoder<'a> {
     ///
     /// If `has_headers` is `false` (which is the default), then this will
     /// always return an empty vector.
-    pub fn headers(&mut self) -> ~[~str] {
+    pub fn headers(&mut self) -> Vec<~str> {
         if !self.p.has_headers {
-            return ~[]
+            return vec!()
         }
         if self.p.headers.len() == 0 {
             self.read_to_stack();
@@ -312,10 +311,10 @@ impl<'a> Decoder<'a> {
     }
 }
 
-impl<'a> Iterator<~[~str]> for Decoder<'a> {
+impl<'a> Iterator<Vec<~str>> for Decoder<'a> {
     /// Iterates over each record in the CSV data. The iterator stops when
     /// EOF is reached.
-    fn next(&mut self) -> Option<~[~str]> {
+    fn next(&mut self) -> Option<Vec<~str>> {
         match self.record() {
             Ok(r) => Some(r),
             Err(err) => {
@@ -380,8 +379,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_record(&mut self) -> Result<~[~str], Error> {
-        let mut vals: ~[~str] = ~[];
+    fn parse_record(&mut self) -> Result<Vec<~str>, Error> {
+        let mut vals: Vec<~str> = vec!();
         while !self.is_eof() {
             let val = try!(self.parse_value());
             vals.push(val);
@@ -533,7 +532,7 @@ impl<'a> Decoder<'a> {
         }
     }
 
-    fn pop_record(&mut self) -> ~[~str] {
+    fn pop_record(&mut self) -> Vec<~str> {
         match self.pop() {
             Record(r) => r,
             String(s) =>
@@ -556,7 +555,7 @@ impl<'a> Decoder<'a> {
         }
     }
 
-    fn push_record(&mut self, r: ~[~str]) {
+    fn push_record(&mut self, r: Vec<~str>) {
         self.stack.push(Record(r))
     }
 
@@ -724,7 +723,7 @@ impl<'a> serialize::Decoder for Decoder<'a> {
             self.fail(format!("Struct '{}' has {} fields but current record \
                                has {} fields.", s_name, len, r.len()))
         }
-        for v in r.move_rev_iter() {
+        for v in r.move_iter().rev() {
             self.push_string(v)
         }
         f(self)
@@ -754,7 +753,7 @@ impl<'a> serialize::Decoder for Decoder<'a> {
     fn read_seq<T>(&mut self, f: |&mut Decoder<'a>, uint| -> T) -> T {
         let r = self.pop_record();
         let len = r.len();
-        for v in r.move_rev_iter() {
+        for v in r.move_iter().rev() {
             self.push_string(v)
         }
         f(self, len)
@@ -798,18 +797,18 @@ mod test {
 
     #[test]
     fn enc() {
-        // let r = ~[ 
+        // let r = vec!(
             // Record{color: Green, a: 0.14, b: ~"bbb", c: ~"c", }, 
             // Record{color: Red, a: 1f64, b: ~"y", c: ~"z", }, 
-        // ]; 
-        let r = ~[
+        // ); 
+        let r = vec!(
             (Green, 0.14, ~"b:bb", ~"c"),
-            (Red, 1f64, ~"y", ~"z"),
-        ];
-        // let r = ~[ 
-            // ~['a', 'b', 'c'], 
-            // ~['y', 'z'], 
-        // ]; 
+            (Red, 1f64, ~"y", ~"z")
+        );
+        // let r = vec!(
+            // vec!('a', 'b', 'c'), 
+            // vec!('y', 'z'), 
+        // ); 
         let mut senc = StrEncoder::new();
         senc.encode_all(r);
         debug!("{}", senc.to_str());
@@ -818,7 +817,7 @@ mod test {
     #[test]
     fn wat() {
         let mut dec = Decoder::from_str("green,-0.14, \"\",c\r\nred,1,y,z");
-        let all: ~[(Color, f64, ~str, ~str)] = dec.decode_all();
+        let all: Vec<(Color, f64, ~str, ~str)> = dec.decode_all();
         debug!("{}", all);
 
         debug!("-------------------");
