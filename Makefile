@@ -6,7 +6,7 @@ compile:
 install:
 	cargo-lite install
 
-tags:
+ctags:
 	ctags --recurse --options=ctags.rust --languages=Rust
 
 docs:
