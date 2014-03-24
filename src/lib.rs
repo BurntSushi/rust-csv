@@ -617,7 +617,7 @@ impl<'a> Decoder<'a> {
     }
 
     /// Returns the header record for the underlying CSV data. This method may
-    /// be called at any time.
+    /// be called repeatedly and at any time.
     ///
     /// If `has_headers` is `false` (which is the default), then this will
     /// always return an empty vector.
