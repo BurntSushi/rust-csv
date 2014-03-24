@@ -14,13 +14,16 @@
 extern crate quickcheck;
 extern crate rand;
 extern crate serialize;
+extern crate stdtest = "test";
 
 use std::fmt;
 use std::from_str::FromStr;
 use std::io::{BufferedReader};
 use std::io::{Reader, Writer};
-use std::io::{EndOfFile, IoResult, MemReader, MemWriter};
+use std::io::{File, IoResult, MemReader, MemWriter};
+use std::io::{EndOfFile, InvalidInput};
 use std::iter::Iterator;
+use std::path::Path;
 use std::str;
 use serialize::{Encodable, Decodable};
 
@@ -360,10 +363,15 @@ impl<'a> Parser<'a> {
             None => match self.buf.read_char() {
                 Ok(c) => Ok(Some(c)),
                 Err(err) => {
-                    if err.kind == EndOfFile {
-                        Ok(None)
-                    } else {
-                        Err(self.err(format!("Could not read char: {}", err)))
+                    match err.kind {
+                        EndOfFile => Ok(None),
+                        InvalidInput => {
+                            // Ignore invalid input.
+                            self.read_next_char()
+                        }
+                        _ => Err(self.err(format!(
+                                 "Could not read char [{}]: {} (detail: {})",
+                                 err.kind, err, err.detail))),
                     }
                 },
             },
@@ -537,6 +545,12 @@ enum Value {
 }
 
 impl<'a> Decoder<'a> {
+    /// Creates a new CSV decoder from a file using the file path given.
+    pub fn from_file(path: &Path) -> Decoder<'a> {
+        let file = File::open(path);
+        Decoder::from_reader(~file as ~Reader)
+    }
+
     /// Creates a new CSV decoder that reads CSV data from the `Reader` given.
     /// Note that the `Reader` given may be a stream. Data is only read as it
     /// is decoded.
@@ -550,6 +564,12 @@ impl<'a> Decoder<'a> {
     /// the capacity used in the underlying buffer.
     pub fn from_reader_capacity(r: &mut Reader, cap: uint) -> Decoder<'a> {
         Decoder::from_buffer(BufferedReader::with_capacity(cap, r))
+    }
+
+    /// Creates a new CSV decoder that reads CSV data from the string given.
+    pub fn from_str(s: &str) -> Decoder<'a> {
+        let r = MemReader::new(s.as_bytes().to_owned());
+        Decoder::from_reader(~r as ~Reader)
     }
 
     fn from_buffer(buf: BufferedReader<&'a mut Reader>) -> Decoder<'a> {
@@ -569,12 +589,6 @@ impl<'a> Decoder<'a> {
                 col: 0,
             },
         }
-    }
-
-    /// Creates a new CSV decoder that reads CSV data from the string given.
-    pub fn from_str(s: &str) -> Decoder<'a> {
-        let r = MemReader::new(s.as_bytes().to_owned());
-        Decoder::from_reader(~r as ~Reader)
     }
 
     /// Decodes the next record for some type. Note that since this decodes
@@ -847,6 +861,9 @@ fn to_lower(s: &str) -> ~str {
 }
 
 #[cfg(test)]
+mod bench;
+
+#[cfg(test)]
 mod test {
     use quickcheck::{TestResult, quickcheck};
     use super::{StrEncoder, Decoder};
@@ -1026,5 +1043,14 @@ mod test {
         let mut d = Decoder::from_str("");
         d.has_headers(false);
         let _ = d.headers();
+    }
+
+    #[test]
+    fn decoder_weird_input() {
+        let csv = "20120905_DAL@NYG,4,0,38,DAL,NYG,3,14,65,(:38) T.Romo kneels to DAL 34 for -1 yards.,24,17,2012\n20120905_DAL@NYG,4,0,38,DAL,NYG,,,65,                      ,24,17,2012";
+        let mut dec = Decoder::from_str(csv);
+        for r in dec {
+            debug!("{}", r)
+        }
     }
 }

@@ -26,6 +26,12 @@ test-build: src/lib.rs
 test-examples:
 	(cd ./examples && ./test)
 
+bench: bench-build
+	RUST_TEST_TASKS=1 RUST_LOG=quickcheck,csv ./bench --bench --save-metrics=bench.json
+
+bench-build: src/lib.rs src/bench.rs
+	rustc -O --test $(RUST_CFG) src/lib.rs -o bench
+
 test-clean:
 	rm -rf ./test
 
