@@ -5,5 +5,7 @@ before_install:
 install:
   - sudo apt-get install rust-nightly
 script:
-  - rustc --crate-type lib src/lib.rs
+  - git clone git://github.com/BurntSushi/quickcheck
+    && rustc --crate-type lib ./quickcheck/src/lib.rs
+    && rustc -L . --crate-type lib ./src/lib.rs
 
