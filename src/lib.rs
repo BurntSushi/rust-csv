@@ -1,7 +1,7 @@
 #[crate_id = "csv#0.1.0"];
 #[crate_type = "lib"];
 #[license = "UNLICENSE"];
-#[doc(html_root_url = "http://burntsushi.net/rustdoc/rust-csv")];
+#[doc(html_root_url = "http://burntsushi.net/rustdoc/csv")];
 
 //! This crate provides a CSV encoder and decoder that works with Rust's
 //! `serialize` crate.
@@ -23,16 +23,27 @@ use std::iter::Iterator;
 use std::str;
 use serialize::{Encodable, Decodable};
 
-macro_rules! opttry(
-    ($e:expr) => (match $e { Some(e) => return Err(e), None => {}, })
-)
-
 macro_rules! enctry(
     ($e:expr) => (
-        if self.err.is_ok() {
+        if self.err.is_err() {
+            return
+        } else {
             match $e {
                 Ok(e) => e,
-                Err(e) => { self.err = Err(e); return },
+                Err(e) => { self.err = Err(e.to_str()); return },
+            }
+        }
+    )
+)
+
+macro_rules! dectry(
+    ($e:expr, $d:expr) => (
+        if self.err.is_err() {
+            return $d
+        } else {
+            match $e {
+                Ok(e) => e,
+                Err(e) => { self.err = Err(e); return $d },
             }
         }
     )
@@ -45,8 +56,9 @@ pub struct StrEncoder<'a> {
     ///
     /// It is OK to call `encode` and `encode_all` methods on the underlying
     /// encoder, but the corresponding methods on `StrEncoder` will be more
-    /// convenient since they can't (theoretically) fail as a result of an
-    /// IO error.
+    /// convenient since they call `fail!` on error. (Encoding to a string
+    /// isn't going to cause an IO error, but an error could be caused by
+    /// writing records of varying length if same length records are enforced.)
     encoder: Encoder<'a>,
     priv w: MemWriter,
 }
@@ -90,7 +102,7 @@ impl<'a> StrEncoder<'a> {
 /// An encoder can encode Rust values into CSV records or documents.
 pub struct Encoder<'a> {
     priv buf: &'a mut Writer,
-    priv err: IoResult<()>,
+    priv err: Result<(), ~str>,
     priv sep: char,
     priv same_len: bool,
     priv first_len: uint,
@@ -112,14 +124,15 @@ impl<'a> Encoder<'a> {
 
     /// Encodes a record as CSV data. Only values with types that correspond
     /// to records can be given here (i.e., structs, tuples or vectors).
-    pub fn encode<E: Encodable<Encoder<'a>>>(&mut self, e: E) -> IoResult<()> {
+    pub fn encode<E: Encodable<Encoder<'a>>>
+                 (&mut self, e: E) -> Result<(), ~str> {
         e.encode(self);
         self.err.clone()
     }
 
     /// Calls `encode` on each element in the vector given.
     pub fn encode_all<E: Encodable<Encoder<'a>>>
-                     (&mut self, es: Vec<E>) -> IoResult<()> {
+                     (&mut self, es: Vec<E>) -> Result<(), ~str> {
         for e in es.move_iter() {
             try!(self.encode(e))
         }
@@ -143,8 +156,12 @@ impl<'a> Encoder<'a> {
         self.use_crlf = yes;
     }
 
+    fn w(&mut self, s: &str) -> IoResult<()> {
+        self.buf.write_str(s)
+    }
+
     fn write_to_str<T: fmt::Show>(&mut self, t: T) {
-        enctry!(self.buf.write_str(t.to_str()))
+        enctry!(self.w(t.to_str()))
     }
 
     fn quoted<'a>(&mut self, s: &'a str) -> str::MaybeOwned<'a> {
@@ -177,25 +194,25 @@ impl<'a> serialize::Encoder for Encoder<'a> {
     fn emit_i8(&mut self, v: i8) { self.write_to_str(v) }
     fn emit_bool(&mut self, v: bool) { self.write_to_str(v) }
     fn emit_f64(&mut self, v: f64) {
-        enctry!(self.buf.write_str(::std::f64::to_str_digits(v, 10)))
+        enctry!(self.w(::std::f64::to_str_digits(v, 10)))
     }
     fn emit_f32(&mut self, v: f32) {
-        enctry!(self.buf.write_str(::std::f32::to_str_digits(v, 10)))
+        enctry!(self.w(::std::f32::to_str_digits(v, 10)))
     }
     fn emit_char(&mut self, v: char) { self.write_to_str(v) }
     fn emit_str(&mut self, v: &str) {
         let s = self.quoted(v).to_str();
-        enctry!(self.buf.write_str(s))
+        enctry!(self.w(s))
     }
     fn emit_enum(&mut self, _: &str, f: |&mut Encoder<'a>|) {
         f(self)
     }
     fn emit_enum_variant(&mut self, v_name: &str, _: uint, _: uint,
                          _: |&mut Encoder<'a>|) {
-        enctry!(self.buf.write_str(v_name))
+        enctry!(self.w(v_name))
     }
     fn emit_enum_variant_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
-        fail!("Cannot encode enum variants with arguments.")
+        self.err = Err(~"Cannot encode enum variants with arguments.");
     }
     fn emit_enum_struct_variant(&mut self, v_name: &str, v_id: uint, len: uint,
                                 f: |&mut Encoder<'a>|) {
@@ -203,7 +220,7 @@ impl<'a> serialize::Encoder for Encoder<'a> {
     }
     fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
                                       _: |&mut Encoder<'a>|) {
-        fail!("Cannot encode enum variants with arguments.")
+        self.err = Err(~"Cannot encode enum variants with arguments.");
     }
     fn emit_struct(&mut self, _: &str, len: uint, f: |&mut Encoder<'a>|) {
         self.emit_seq(len, f)
@@ -231,19 +248,25 @@ impl<'a> serialize::Encoder for Encoder<'a> {
     fn emit_option_none(&mut self) { unimplemented!() }
     fn emit_option_some(&mut self, _: |&mut Encoder<'a>|) { unimplemented!() }
     fn emit_seq(&mut self, len: uint, f: |this: &mut Encoder<'a>|) {
+        if len == 0 {
+            self.err = Err(~"Records must have length bigger than 0.");
+            return
+        }
         if self.same_len {
             if self.first_len == 0 {
                 self.first_len = len
             } else if self.first_len != len {
-                fail!("Record has length {} but other records have length {}",
-                      len, self.first_len)
+                self.err = Err(format!(
+                    "Record has length {} but other records have length {}",
+                    len, self.first_len));
+                return
             }
         }
         f(self);
         if self.use_crlf {
-            enctry!(self.buf.write_str("\r\n"))
+            enctry!(self.w("\r\n"))
         } else {
-            enctry!(self.buf.write_str("\n"))
+            enctry!(self.w("\n"))
         }
     }
     fn emit_seq_elt(&mut self, idx: uint, f: |this: &mut Encoder<'a>|) {
@@ -262,6 +285,7 @@ impl<'a> serialize::Encoder for Encoder<'a> {
 }
 
 /// Information for a CSV decoding error.
+#[deriving(Clone)]
 pub struct Error {
     /// The line on which the error occurred.
     line: uint,
@@ -297,38 +321,6 @@ struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    fn next_char(&mut self) -> Option<Error> {
-        match self.read_next() {
-            Ok(c) => self.cur = c,
-            Err(err) => return Some(err),
-        }
-        if !self.is_eof() {
-            if self.cur_is('\n') {
-                self.line += 1;
-                self.col = 1;
-            } else {
-                self.col += 1;
-            }
-        }
-        None
-    }
-
-    fn read_next(&mut self) -> Result<Option<char>, Error> {
-        match self.look {
-            Some(c) => { self.look = None; Ok(Some(c)) },
-            None => match self.buf.read_char() {
-                Ok(c) => Ok(Some(c)),
-                Err(err) => {
-                    if err.kind == EndOfFile {
-                        Ok(None)
-                    } else {
-                        Err(self.err(format!("Could not read char: {}", err)))
-                    }
-                },
-            },
-        }
-    }
-
     fn err(&self, msg: &str) -> Error {
         Error {
             line: self.line,
@@ -347,6 +339,35 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn next_char(&mut self) -> Result<(), Error> {
+        self.cur = try!(self.read_next_char());
+        if !self.is_eof() {
+            if self.cur_is('\n') {
+                self.line += 1;
+                self.col = 1;
+            } else {
+                self.col += 1;
+            }
+        }
+        Ok(())
+    }
+
+    fn read_next_char(&mut self) -> Result<Option<char>, Error> {
+        match self.look {
+            Some(c) => { self.look = None; Ok(Some(c)) },
+            None => match self.buf.read_char() {
+                Ok(c) => Ok(Some(c)),
+                Err(err) => {
+                    if err.kind == EndOfFile {
+                        Ok(None)
+                    } else {
+                        Err(self.err(format!("Could not read char: {}", err)))
+                    }
+                },
+            },
+        }
+    }
+
     fn parse_record(&mut self) -> Result<Vec<~str>, Error> {
         let mut vals: Vec<~str> = vec!();
         while !self.is_eof() {
@@ -354,7 +375,7 @@ impl<'a> Parser<'a> {
             vals.push(val);
             if self.is_lineterm() {
                 // If it's a CRLF ending, consume the '\r'
-                if self.cur_is('\r') { opttry!(self.next_char()) }
+                if self.cur_is('\r') { try!(self.next_char()) }
                 break
             }
         }
@@ -370,6 +391,13 @@ impl<'a> Parser<'a> {
                     vals.len(), self.first_len)))
             }
         }
+        // If this assertion fails, then there is a bug in the above code.
+        // Namely, the only way `vals` should be empty is if we've hit EOF,
+        // which should be returned as en error.
+        //
+        // This assertion is important because most of the decoder relies on
+        // records having non-zero length. For example, if `headers` has zero
+        // length, then that indicates that it hasn't been filled yet.
         assert!(vals.len() > 0);
         if self.has_headers && self.headers.len() == 0 {
             self.headers = vals;
@@ -382,7 +410,7 @@ impl<'a> Parser<'a> {
         let mut only_whitespace = true;
         let mut res = ~"";
         loop {
-            opttry!(self.next_char());
+            try!(self.next_char());
             if self.is_eof() || self.is_lineterm() || self.is_sep() {
                 break
             } else if self.cur.unwrap().is_whitespace() {
@@ -402,12 +430,12 @@ impl<'a> Parser<'a> {
         // Assumes that " has already been read.
         let mut res = ~"";
         loop {
-            opttry!(self.next_char());
+            try!(self.next_char());
             if self.is_eof() {
                 return Err(self.err("EOF while parsing quoted value."))
             } else if self.cur_is('"') {
                 if self.is_escaped_quote() {
-                    opttry!(self.next_char()); // throw away second "
+                    try!(self.next_char()); // throw away second "
                     res.push_char('"');
                     continue
                 }
@@ -415,7 +443,7 @@ impl<'a> Parser<'a> {
                 // Eat and spit out everything up to next separator.
                 // If we see something that isn't whitespace, it's an error.
                 loop {
-                    opttry!(self.next_char());
+                    try!(self.next_char());
                     if self.is_eof() || self.is_lineterm() || self.is_sep() {
                         break
                     } else if !self.cur.unwrap().is_whitespace() {
@@ -430,7 +458,7 @@ impl<'a> Parser<'a> {
             } else if self.cur_is('\\') && self.peek_is('"') {
                 // We also try to support \ escaped quotes even though
                 // the spec says "" is used.
-                opttry!(self.next_char()); // throw away the "
+                try!(self.next_char()); // throw away the "
                 res.push_char('"');
                 continue
             }
@@ -452,7 +480,7 @@ impl<'a> Parser<'a> {
         match self.look {
             Some(c) => Ok(Some(c)),
             None => {
-                self.look = try!(self.read_next());
+                self.look = try!(self.read_next_char());
                 Ok(self.look)
             },
         }
@@ -492,7 +520,7 @@ impl<'a> Parser<'a> {
 /// or with a standard iterator.
 pub struct Decoder<'a> {
     priv stack: Vec<Value>,
-    priv err: Option<Error>,
+    priv err: Result<(), Error>,
     priv p: Parser<'a>,
 }
 
@@ -510,7 +538,7 @@ impl<'a> Decoder<'a> {
     pub fn from_reader(r: &mut Reader) -> Decoder<'a> {
         Decoder {
             stack: vec!(),
-            err: None,
+            err: Ok(()),
             p: Parser {
                 sep: ',',
                 same_len: true,
@@ -535,21 +563,23 @@ impl<'a> Decoder<'a> {
     /// Decodes the next record for some type. Note that since this decodes
     /// records, only types corresponding to a record (like structs, tuples or
     /// vectors) can be used.
-    ///
-    /// If there is an error decoding the CSV data, `fail!` is called. (Sorry,
-    /// hopefully this will change at some point.)
-    pub fn decode<D: Decodable<Decoder<'a>>>(&mut self) -> D {
-        Decodable::decode(self)
+    pub fn decode<D: Decodable<Decoder<'a>>>(&mut self) -> Result<D, Error> {
+        let d = Decodable::decode(self);
+        match self.err {
+            Ok(_) => Ok(d),
+            Err(ref err) => Err(err.clone()),
+        }
     }
 
     /// Calls `decode` on every record in the CSV data until EOF and returns
     /// them as a vector. (Sorry, hopefully this will change at some point.)
-    pub fn decode_all<D: Decodable<Decoder<'a>>>(&mut self) -> Vec<D> {
+    pub fn decode_all<D: Decodable<Decoder<'a>>>
+                     (&mut self) -> Result<Vec<D>, Error> {
         let mut records: Vec<D> = vec!();
         while !self.p.is_eof() {
-            records.push(self.decode())
+            records.push(try!(self.decode()))
         }
-        records
+        Ok(records)
     }
 
     /// Cirumvents the decoding interface and forces the parsing of the next
@@ -583,15 +613,15 @@ impl<'a> Decoder<'a> {
     ///
     /// If `has_headers` is `false` (which is the default), then this will
     /// always return an empty vector.
-    pub fn headers(&mut self) -> Vec<~str> {
+    pub fn headers(&mut self) -> Result<Vec<~str>, Error> {
         if !self.p.has_headers {
-            return vec!()
+            return Ok(vec!())
         }
         if self.p.headers.len() == 0 {
-            self.read_to_stack();
+            try!(self.read_to_stack());
             assert!(self.p.headers.len() > 0);
         }
-        self.p.headers.clone()
+        Ok(self.p.headers.clone())
     }
 }
 
@@ -613,40 +643,50 @@ impl<'a> Iterator<Vec<~str>> for Decoder<'a> {
 }
 
 impl<'a> Decoder<'a> {
-    fn pop(&mut self) -> Value {
+    fn pop(&mut self) -> Result<Value, Error> {
         if self.stack.len() == 0 {
-            self.read_to_stack()
+            try!(self.read_to_stack())
         }
-        self.stack.pop().unwrap()
+        // On successful return, read_to_stack guarantees a non-empty
+        // stack.
+        assert!(self.stack.len() > 0);
+        Ok(self.stack.pop().unwrap())
     }
 
-    fn read_to_stack(&mut self) {
-        match self.p.parse_record() {
-            Err(err) => fail!("{}", err),
-            Ok(r) => self.push_record(r),
-        }
+    fn read_to_stack(&mut self) -> Result<(), Error> {
+        let r = try!(self.p.parse_record());
+        self.push_record(r);
+        Ok(())
     }
 
-    fn pop_record(&mut self) -> Vec<~str> {
-        match self.pop() {
-            Record(r) => r,
-            String(s) =>
-                self.fail(format!("Expected record but got value '{}'.", s)),
-        }
-    }
-
-    fn pop_string(&mut self) -> ~str {
-        match self.pop() {
-            Record(_) => self.fail(format!("Expected value but got record.")),
-            String(s) => s,
+    fn pop_record(&mut self) -> Result<Vec<~str>, Error> {
+        match try!(self.pop()) {
+            Record(r) => Ok(r),
+            String(s) => {
+                let m = format!("Expected record but got value '{}'.", s);
+                Err(self.err(m))
+            },
         }
     }
 
-    fn pop_from_str<T: FromStr>(&mut self) -> T {
-        let s = self.pop_string();
+    fn pop_string(&mut self) -> Result<~str, Error> {
+        match try!(self.pop()) {
+            Record(_) => {
+                let m = format!("Expected value but got record.");
+                Err(self.err(m))
+            },
+            String(s) => Ok(s),
+        }
+    }
+
+    fn pop_from_str<T: FromStr>(&mut self) -> Result<T, Error> {
+        let s = try!(self.pop_string());
         match FromStr::from_str(s) {
-            None => self.fail(format!("Failed converting '{}' from str.", s)),
-            Some(t) => t,
+            Some(t) => Ok(t),
+            None => {
+                let m = format!("Failed converting '{}' from str.", s);
+                Err(self.err(m))
+            },
         }
     }
 
@@ -658,6 +698,10 @@ impl<'a> Decoder<'a> {
         self.stack.push(String(s))
     }
 
+    fn err(&self, msg: &str) -> Error {
+        self.p.err(msg)
+    }
+
     fn fail(&self, msg: &str) -> ! {
         fail!("{}", self.p.err(msg));
     }
@@ -665,21 +709,21 @@ impl<'a> Decoder<'a> {
 
 impl<'a> serialize::Decoder for Decoder<'a> {
     fn read_nil(&mut self) { unimplemented!() }
-    fn read_uint(&mut self) -> uint { self.pop_from_str() }
-    fn read_u64(&mut self) -> u64 { self.pop_from_str() }
-    fn read_u32(&mut self) -> u32 { self.pop_from_str() }
-    fn read_u16(&mut self) -> u16 { self.pop_from_str() }
-    fn read_u8(&mut self) -> u8 { self.pop_from_str() }
-    fn read_int(&mut self) -> int { self.pop_from_str() }
-    fn read_i64(&mut self) -> i64 { self.pop_from_str() }
-    fn read_i32(&mut self) -> i32 { self.pop_from_str() }
-    fn read_i16(&mut self) -> i16 { self.pop_from_str() }
-    fn read_i8(&mut self) -> i8 { self.pop_from_str() }
-    fn read_bool(&mut self) -> bool { self.pop_from_str() }
-    fn read_f64(&mut self) -> f64 { self.pop_from_str() }
-    fn read_f32(&mut self) -> f32 { self.pop_from_str() }
+    fn read_uint(&mut self) -> uint { dectry!(self.pop_from_str(), 0) }
+    fn read_u64(&mut self) -> u64 { dectry!(self.pop_from_str(), 0) }
+    fn read_u32(&mut self) -> u32 { dectry!(self.pop_from_str(), 0) }
+    fn read_u16(&mut self) -> u16 { dectry!(self.pop_from_str(), 0) }
+    fn read_u8(&mut self) -> u8 { dectry!(self.pop_from_str(), 0) }
+    fn read_int(&mut self) -> int { dectry!(self.pop_from_str(), 0) }
+    fn read_i64(&mut self) -> i64 { dectry!(self.pop_from_str(), 0) }
+    fn read_i32(&mut self) -> i32 { dectry!(self.pop_from_str(), 0) }
+    fn read_i16(&mut self) -> i16 { dectry!(self.pop_from_str(), 0) }
+    fn read_i8(&mut self) -> i8 { dectry!(self.pop_from_str(), 0) }
+    fn read_bool(&mut self) -> bool { dectry!(self.pop_from_str(), false) }
+    fn read_f64(&mut self) -> f64 { dectry!(self.pop_from_str(), 0.0) }
+    fn read_f32(&mut self) -> f32 { dectry!(self.pop_from_str(), 0.0) }
     fn read_char(&mut self) -> char {
-        let s = self.pop_string();
+        let s = dectry!(self.pop_string(), '\x00');
         let chars = s.chars().to_owned_vec();
         if chars.len() != 1 {
             self.fail(format!("Expected single character but got '{}'.", s))
@@ -687,23 +731,29 @@ impl<'a> serialize::Decoder for Decoder<'a> {
         chars[0]
     }
     fn read_str(&mut self) -> ~str {
-        self.pop_string()
+        dectry!(self.pop_string(), ~"")
     }
     fn read_enum<T>(&mut self, _: &str, f: |&mut Decoder<'a>| -> T) -> T {
         f(self)
     }
     fn read_enum_variant<T>(&mut self, names: &[&str],
                             f: |&mut Decoder<'a>, uint| -> T) -> T {
-        let variant = to_lower(self.pop_string());
+        let variant = to_lower(dectry!(self.pop_string(), f(self, 0)));
         match names.iter().position(|&name| to_lower(name) == variant) {
             Some(idx) => f(self, idx),
-            None => self.fail(format!("Expected one of {} but found '{}'.",
-                                      names, variant)),
+            None => {
+                let m = format!("Expected one of {} but found '{}'.",
+                                names, variant);
+                self.err = Err(self.err(m));
+                f(self, 0)
+            },
         }
     }
     fn read_enum_variant_arg<T>(&mut self, _: uint,
-                                _: |&mut Decoder<'a>| -> T) -> T {
-        self.fail("Cannot decode into enum variants with arguments.")
+                                f: |&mut Decoder<'a>| -> T) -> T {
+        let m = ~"Cannot decode into enum variants with arguments.";
+        self.err = Err(self.err(m));
+        f(self)
     }
     fn read_enum_struct_variant<T>(&mut self, names: &[&str],
                                    f: |&mut Decoder<'a>, uint| -> T) -> T {
@@ -715,10 +765,12 @@ impl<'a> serialize::Decoder for Decoder<'a> {
     }
     fn read_struct<T>(&mut self, s_name: &str, len: uint,
                       f: |&mut Decoder<'a>| -> T) -> T {
-        let r = self.pop_record();
+        let r = dectry!(self.pop_record(), f(self));
         if r.len() != len {
-            self.fail(format!("Struct '{}' has {} fields but current record \
-                               has {} fields.", s_name, len, r.len()))
+            let m = format!("Struct '{}' has {} fields but current record \
+                             has {} fields.", s_name, len, r.len());
+            self.err = Err(self.err(m));
+            return f(self)
         }
         for v in r.move_iter().rev() {
             self.push_string(v)
@@ -747,7 +799,7 @@ impl<'a> serialize::Decoder for Decoder<'a> {
         unimplemented!()
     }
     fn read_seq<T>(&mut self, f: |&mut Decoder<'a>, uint| -> T) -> T {
-        let r = self.pop_record();
+        let r = dectry!(self.pop_record(), f(self, 0));
         let len = r.len();
         for v in r.move_iter().rev() {
             self.push_string(v)
@@ -792,28 +844,96 @@ mod test {
     }
 
     #[test]
-    fn enc() {
-        // let r = vec!(
-            // Record{color: Green, a: 0.14, b: ~"bbb", c: ~"c", }, 
-            // Record{color: Red, a: 1f64, b: ~"y", c: ~"z", }, 
-        // ); 
-        let r = vec!(
-            (Green, 0.14, ~"b:bb", ~"c"),
-            (Red, 1f64, ~"y", ~"z")
-        );
-        // let r = vec!(
-            // vec!('a', 'b', 'c'), 
-            // vec!('y', 'z'), 
-        // ); 
+    fn encoder_simple() {
         let mut senc = StrEncoder::new();
-        senc.encode_all(r);
-        debug!("{}", senc.to_str());
+        senc.encode(("springsteen", 's', 1, 0.14, false));
+        assert_eq!(~"springsteen,s,1,0.14,false\n", senc.to_str());
+    }
+
+    #[test]
+    fn encoder_simple_crlf() {
+        let mut senc = StrEncoder::new();
+        senc.encoder.crlf(true);
+        senc.encode(("springsteen", 's', 1, 0.14, false));
+        assert_eq!(~"springsteen,s,1,0.14,false\r\n", senc.to_str());
+    }
+
+    #[test]
+    fn encoder_simple_tabbed() {
+        let mut senc = StrEncoder::new();
+        senc.encoder.separator('\t');
+        senc.encode(("springsteen", 's', 1, 0.14, false));
+        assert_eq!(~"springsteen\ts\t1\t0.14\tfalse\n", senc.to_str());
+    }
+
+    #[test]
+    fn encoder_same_length_records() {
+        let mut senc = StrEncoder::new();
+        senc.encoder.enforce_same_length(true);
+        senc.encode(vec!('a'));
+        match senc.encoder.encode(vec!('a', 'b')) {
+            Ok(_) => fail!("Encoder should report an error when records of \
+                            varying length are added and records of same \
+                            length is enabled."),
+            Err(_) => {},
+        }
+    }
+
+    #[test]
+    fn encoder_same_length_records_zero() {
+        let mut senc = StrEncoder::new();
+        match senc.encoder.encode({ let zero: Vec<int> = vec!(); zero }) {
+            Ok(_) => fail!("Encoder should report an error when trying to \
+                            encode records of length 0."),
+            Err(_) => {},
+        }
+    }
+
+    #[test]
+    fn decoder_simple_nonl() {
+        let mut d = Decoder::from_str("springsteen,s,1,0.14,false");
+        let r: (~str, char, int, f64, bool) = d.decode().unwrap();
+        assert_eq!(r, (~"springsteen", 's', 1, 0.14, false));
+    }
+
+    #[test]
+    fn decoder_simple() {
+        let mut d = Decoder::from_str("springsteen,s,1,0.14,false\n");
+        let r: (~str, char, int, f64, bool) = d.decode().unwrap();
+        assert_eq!(r, (~"springsteen", 's', 1, 0.14, false));
+    }
+
+    #[test]
+    fn decoder_simple_crlf() {
+        let mut d = Decoder::from_str("springsteen,s,1,0.14,false\r\n");
+        let r: (~str, char, int, f64, bool) = d.decode().unwrap();
+        assert_eq!(r, (~"springsteen", 's', 1, 0.14, false));
+    }
+
+    #[test]
+    fn decoder_simple_tabbed() {
+        let mut d = Decoder::from_str("springsteen\ts\t1\t0.14\tfalse\r\n");
+        d.separator('\t');
+        let r: (~str, char, int, f64, bool) = d.decode().unwrap();
+        assert_eq!(r, (~"springsteen", 's', 1, 0.14, false));
+    }
+
+    #[test]
+    fn decoder_same_length_records() {
+        let mut d = Decoder::from_str("a\na,b");
+        d.enforce_same_length(true);
+        match d.decode_all::<Vec<~str>>() {
+            Ok(_) => fail!("Decoder should report an error when records of \
+                            varying length are decoded and records of same \
+                            length if enabled."),
+            Err(_) => {},
+        }
     }
 
     #[test]
     fn wat() {
         let mut dec = Decoder::from_str("green,-0.14, \"\",c\r\nred,1,y,z");
-        let all: Vec<(Color, f64, ~str, ~str)> = dec.decode_all();
+        let all: Vec<(Color, f64, ~str, ~str)> = dec.decode_all().unwrap();
         debug!("{}", all);
 
         debug!("-------------------");
