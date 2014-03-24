@@ -231,11 +231,11 @@ impl<'a> serialize::Encoder for Encoder<'a> {
                          f: |&mut Encoder<'a>|) {
         self.emit_seq_elt(f_idx, f)
     }
-    fn emit_tuple(&mut self, _: uint, _: |&mut Encoder<'a>|) {
-        unimplemented!()
+    fn emit_tuple(&mut self, len: uint, f: |&mut Encoder<'a>|) {
+        self.emit_seq(len, f)
     }
-    fn emit_tuple_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
-        unimplemented!()
+    fn emit_tuple_arg(&mut self, idx: uint, f: |&mut Encoder<'a>|) {
+        self.emit_seq_elt(idx, f)
     }
     fn emit_tuple_struct(&mut self, _: &str, _: uint,
                          _: |&mut Encoder<'a>|) {
@@ -789,11 +789,11 @@ impl<'a> serialize::Decoder for Decoder<'a> {
                             f: |&mut Decoder<'a>| -> T) -> T {
         f(self)
     }
-    fn read_tuple<T>(&mut self, _: |&mut Decoder<'a>, uint| -> T) -> T {
-        unimplemented!()
+    fn read_tuple<T>(&mut self, f: |&mut Decoder<'a>, uint| -> T) -> T {
+        self.read_seq(f)
     }
-    fn read_tuple_arg<T>(&mut self, _: uint, _: |&mut Decoder<'a>| -> T) -> T {
-        unimplemented!()
+    fn read_tuple_arg<T>(&mut self, i: uint, f: |&mut Decoder<'a>| -> T) -> T {
+        self.read_seq_elt(i, f)
     }
     fn read_tuple_struct<T>(&mut self, _: &str,
                             _: |&mut Decoder<'a>, uint| -> T) -> T {
