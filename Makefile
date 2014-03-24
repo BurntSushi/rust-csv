@@ -21,7 +21,7 @@ test: test-build
 	RUST_TEST_TASKS=1 RUST_LOG=quickcheck,csv ./test
 
 test-build: src/lib.rs
-	rustc -O --test src/lib.rs -o test
+	rustc --test src/lib.rs -o test
 
 test-clean:
 	rm -rf ./test
