@@ -11,6 +11,7 @@
 #[feature(phase)];
 
 #[phase(syntax, link)] extern crate log;
+extern crate quickcheck;
 extern crate rand;
 extern crate serialize;
 
@@ -60,15 +61,15 @@ pub struct StrEncoder<'a> {
     /// isn't going to cause an IO error, but an error could be caused by
     /// writing records of varying length if same length records are enforced.)
     encoder: Encoder<'a>,
-    priv w: MemWriter,
+    priv w: ~MemWriter,
 }
 
 impl<'a> StrEncoder<'a> {
     /// Creates a new CSV string encoder. At any time, `to_str` can be called
     /// to retrieve the cumulative CSV data.
     pub fn new() -> StrEncoder<'a> {
-        let mut w = MemWriter::new();
-        let enc = Encoder::to_writer(&mut w as &mut Writer);
+        let mut w = ~MemWriter::new();
+        let enc = Encoder::to_writer(&mut *w as &mut Writer);
         StrEncoder {
             encoder: enc,
             w: w,
@@ -76,8 +77,8 @@ impl<'a> StrEncoder<'a> {
     }
 
     /// Returns the encoded CSV data as a string.
-    pub fn to_str(self) -> ~str {
-        str::from_utf8_owned(self.w.unwrap()).unwrap()
+    pub fn to_str<'r>(&'r self) -> &'r str {
+        str::from_utf8(self.w.get_ref()).unwrap()
     }
 
     /// This is just like `Encoder::encode`, except it calls `fail!` if there
@@ -91,7 +92,7 @@ impl<'a> StrEncoder<'a> {
 
     /// This is just like `Encoder::encode_all`, except it calls `fail!` if 
     /// there was an error.
-    pub fn encode_all<E: Encodable<Encoder<'a>>>(&mut self, es: Vec<E>) {
+    pub fn encode_all<E: Encodable<Encoder<'a>>>(&mut self, es: &[E]) {
         match self.encoder.encode_all(es) {
             Ok(_) => {},
             Err(err) => fail!("{}", err),
@@ -132,8 +133,9 @@ impl<'a> Encoder<'a> {
 
     /// Calls `encode` on each element in the vector given.
     pub fn encode_all<E: Encodable<Encoder<'a>>>
-                     (&mut self, es: Vec<E>) -> Result<(), ~str> {
-        for e in es.move_iter() {
+                     (&mut self, es: &[E]) -> Result<(), ~str> {
+        // for e in es.move_iter() { 
+        for e in es.iter() {
             try!(self.encode(e))
         }
         Ok(())
@@ -423,6 +425,9 @@ impl<'a> Parser<'a> {
             only_whitespace = false;
             res.push_char(self.cur.unwrap());
         }
+        if res.len() == 0 && self.is_eof() {
+            return Err(self.err_eof())
+        }
         Ok(res)
     }
 
@@ -576,8 +581,11 @@ impl<'a> Decoder<'a> {
     pub fn decode_all<D: Decodable<Decoder<'a>>>
                      (&mut self) -> Result<Vec<D>, Error> {
         let mut records: Vec<D> = vec!();
-        while !self.p.is_eof() {
-            records.push(try!(self.decode()))
+        loop {
+            match self.decode() {
+                Ok(r) => records.push(r),
+                Err(err) => if err.eof { break } else { return Err(err) },
+            }
         }
         Ok(records)
     }
@@ -828,6 +836,7 @@ fn to_lower(s: &str) -> ~str {
 
 #[cfg(test)]
 mod test {
+    use quickcheck::{TestResult, quickcheck};
     use super::{StrEncoder, Decoder};
 
     #[deriving(Show, Encodable, Decodable)]
@@ -844,10 +853,47 @@ mod test {
     }
 
     #[test]
+    fn same_record() {
+        fn prop(input: Vec<~str>) -> TestResult {
+            if input.len() == 0 {
+                return TestResult::discard()
+            }
+
+            let mut senc = StrEncoder::new();
+            senc.encode(input.as_slice());
+
+            let mut dec = Decoder::from_str(senc.to_str());
+            let output: Vec<~str> = dec.decode().unwrap();
+
+            TestResult::from_bool(input == output)
+        }
+        quickcheck(prop);
+    }
+
+    #[test]
+    fn same_records() {
+        fn prop(to_repeat: Vec<~str>, n: uint) -> TestResult {
+            if to_repeat.len() == 0 || n == 0 {
+                return TestResult::discard()
+            }
+
+            let input = Vec::from_fn(n, |_| to_repeat.clone());
+            let mut senc = StrEncoder::new();
+            senc.encode_all(input.as_slice());
+
+            let mut dec = Decoder::from_str(senc.to_str());
+            let output: Vec<Vec<~str>> = dec.decode_all().unwrap();
+
+            TestResult::from_bool(input == output)
+        }
+        quickcheck(prop);
+    }
+
+    #[test]
     fn encoder_simple() {
         let mut senc = StrEncoder::new();
         senc.encode(("springsteen", 's', 1, 0.14, false));
-        assert_eq!(~"springsteen,s,1,0.14,false\n", senc.to_str());
+        assert_eq!("springsteen,s,1,0.14,false\n", senc.to_str());
     }
 
     #[test]
@@ -855,7 +901,7 @@ mod test {
         let mut senc = StrEncoder::new();
         senc.encoder.crlf(true);
         senc.encode(("springsteen", 's', 1, 0.14, false));
-        assert_eq!(~"springsteen,s,1,0.14,false\r\n", senc.to_str());
+        assert_eq!("springsteen,s,1,0.14,false\r\n", senc.to_str());
     }
 
     #[test]
@@ -863,7 +909,7 @@ mod test {
         let mut senc = StrEncoder::new();
         senc.encoder.separator('\t');
         senc.encode(("springsteen", 's', 1, 0.14, false));
-        assert_eq!(~"springsteen\ts\t1\t0.14\tfalse\n", senc.to_str());
+        assert_eq!("springsteen\ts\t1\t0.14\tfalse\n", senc.to_str());
     }
 
     #[test]
@@ -880,9 +926,31 @@ mod test {
     }
 
     #[test]
-    fn encoder_same_length_records_zero() {
+    fn encoder_quoted_quotes() {
         let mut senc = StrEncoder::new();
-        match senc.encoder.encode({ let zero: Vec<int> = vec!(); zero }) {
+        senc.encode(vec!("sprin\"g\"steen"));
+        assert_eq!("\"sprin\"\"g\"\"steen\"\n", senc.to_str());
+    }
+
+    #[test]
+    fn encoder_quoted_sep() {
+        let mut senc = StrEncoder::new();
+        senc.encoder.separator(',');
+        senc.encode(vec!("spring,steen"));
+        assert_eq!("\"spring,steen\"\n", senc.to_str());
+    }
+
+    #[test]
+    fn encoder_quoted_newlines() {
+        let mut senc = StrEncoder::new();
+        senc.encode(vec!("spring\nsteen"));
+        assert_eq!("\"spring\nsteen\"\n", senc.to_str());
+    }
+
+    #[test]
+    fn encoder_zero() {
+        let mut senc = StrEncoder::new();
+        match senc.encoder.encode::<Vec<int>>(vec!()) {
             Ok(_) => fail!("Encoder should report an error when trying to \
                             encode records of length 0."),
             Err(_) => {},
@@ -930,32 +998,12 @@ mod test {
         }
     }
 
-    #[test]
-    fn wat() {
-        let mut dec = Decoder::from_str("green,-0.14, \"\",c\r\nred,1,y,z");
-        let all: Vec<(Color, f64, ~str, ~str)> = dec.decode_all().unwrap();
-        debug!("{}", all);
-
-        debug!("-------------------");
-
-        let mut dec = Decoder::from_str(
-                         "A:B:C:D\ngreen:-0.14: \"\":c\r\nred:1:y:z");
-        dec.separator(':');
-        dec.has_headers(true);
-        debug!("HEADERS: {}", dec.headers());
-        loop {
-            match dec.record() {
-                Err(err) => if err.eof { break } else { fail!("{}", err) },
-                Ok(r) => debug!("RECORD: {}", r),
-            }
-        }
-
-        debug!("-------------------");
-
-        let mut dec = Decoder::from_str("green:-0.14: \"\":c\r\nred:1:y:z");
-        dec.separator(':');
-        for r in dec {
-            debug!("RECORD: {}", r)
-        }
-    }
+    // #[test] 
+    // fn wat() { 
+        // let mut dec = Decoder::from_str("0\n"); 
+        // match dec.decode_all::<Vec<int>>() { 
+            // Ok(all) => debug!("====== WAT: {}", all), 
+            // Err(err) => fail!("eof? {} ======== {}", err.eof, err), 
+        // } 
+    // } 
 }
