@@ -620,10 +620,10 @@ impl<'a> Decoder<'a> {
     /// be called repeatedly and at any time.
     ///
     /// If `has_headers` is `false` (which is the default), then this will
-    /// always return an empty vector.
+    /// call `fail!`.
     pub fn headers(&mut self) -> Result<Vec<~str>, Error> {
         if !self.p.has_headers {
-            return Ok(vec!())
+            fail!("To get headers from CSV data, has_headers must be called.")
         }
         if self.p.headers.len() == 0 {
             try!(self.read_to_stack());
@@ -996,6 +996,14 @@ mod test {
                             length if enabled."),
             Err(_) => {},
         }
+    }
+
+    #[test]
+    #[should_fail]
+    fn decoder_bad_header_access() {
+        let mut d = Decoder::from_str("");
+        d.has_headers(false);
+        let _ = d.headers();
     }
 
     // #[test] 
