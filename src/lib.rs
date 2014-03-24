@@ -131,7 +131,7 @@ impl<'a> Encoder<'a> {
         self.err.clone()
     }
 
-    /// Calls `encode` on each element in the vector given.
+    /// Calls `encode` on each element in the slice given.
     pub fn encode_all<E: Encodable<Encoder<'a>>>
                      (&mut self, es: &[E]) -> Result<(), ~str> {
         // for e in es.move_iter() { 
