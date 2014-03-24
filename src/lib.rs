@@ -999,6 +999,16 @@ mod test {
     }
 
     #[test]
+    fn decoder_headers() {
+        let mut d = Decoder::from_str("a,b,c\n1,2,3");
+        d.has_headers(true);
+        assert_eq!(d.headers().unwrap(), vec!(~"a", ~"b", ~"c"));
+
+        let r: (uint, uint, uint) = d.decode().unwrap();
+        assert_eq!(r, (1, 2, 3));
+    }
+
+    #[test]
     #[should_fail]
     fn decoder_bad_header_access() {
         let mut d = Decoder::from_str("");
