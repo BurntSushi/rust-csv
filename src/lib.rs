@@ -577,7 +577,7 @@ impl<'a> Decoder<'a> {
     }
 
     /// Calls `decode` on every record in the CSV data until EOF and returns
-    /// them as a vector. (Sorry, hopefully this will change at some point.)
+    /// them as a vector.
     pub fn decode_all<D: Decodable<Decoder<'a>>>
                      (&mut self) -> Result<Vec<D>, Error> {
         let mut records: Vec<D> = vec!();
