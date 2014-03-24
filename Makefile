@@ -23,6 +23,9 @@ test: test-build
 test-build: src/lib.rs
 	rustc --test src/lib.rs -o test
 
+test-examples:
+	(cd ./examples && ./test)
+
 test-clean:
 	rm -rf ./test
 

@@ -540,7 +540,19 @@ impl<'a> Decoder<'a> {
     /// Creates a new CSV decoder that reads CSV data from the `Reader` given.
     /// Note that the `Reader` given may be a stream. Data is only read as it
     /// is decoded.
+    ///
+    /// The reader given is wrapped in a `BufferedReader` for you.
     pub fn from_reader(r: &mut Reader) -> Decoder<'a> {
+        Decoder::from_buffer(BufferedReader::new(r))
+    }
+
+    /// This is just like `from_reader`, except it allows you to specify
+    /// the capacity used in the underlying buffer.
+    pub fn from_reader_capacity(r: &mut Reader, cap: uint) -> Decoder<'a> {
+        Decoder::from_buffer(BufferedReader::with_capacity(cap, r))
+    }
+
+    fn from_buffer(buf: BufferedReader<&'a mut Reader>) -> Decoder<'a> {
         Decoder {
             stack: vec!(),
             err: Ok(()),
@@ -550,7 +562,7 @@ impl<'a> Decoder<'a> {
                 first_len: 0,
                 has_headers: false,
                 headers: vec!(),
-                buf: BufferedReader::new(r),
+                buf: buf,
                 cur: Some(0u8 as char),
                 look: None,
                 line: 1,
@@ -1015,13 +1027,4 @@ mod test {
         d.has_headers(false);
         let _ = d.headers();
     }
-
-    // #[test] 
-    // fn wat() { 
-        // let mut dec = Decoder::from_str("0\n"); 
-        // match dec.decode_all::<Vec<int>>() { 
-            // Ok(all) => debug!("====== WAT: {}", all), 
-            // Err(err) => fail!("eof? {} ======== {}", err.eof, err), 
-        // } 
-    // } 
 }
