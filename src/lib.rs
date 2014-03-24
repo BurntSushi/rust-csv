@@ -732,7 +732,7 @@ impl<'a> serialize::Decoder for Decoder<'a> {
     fn read_f32(&mut self) -> f32 { dectry!(self.pop_from_str(), 0.0) }
     fn read_char(&mut self) -> char {
         let s = dectry!(self.pop_string(), '\x00');
-        let chars = s.chars().to_owned_vec();
+        let chars = s.chars().collect::<~[_]>();
         if chars.len() != 1 {
             self.fail(format!("Expected single character but got '{}'.", s))
         }
