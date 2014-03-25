@@ -16,6 +16,7 @@ extern crate rand;
 extern crate serialize;
 extern crate stdtest = "test";
 
+use std::default::Default;
 use std::fmt;
 use std::from_str::FromStr;
 use std::io::{BufferedReader};
@@ -209,15 +210,21 @@ impl<'a> serialize::Encoder for Encoder<'a> {
         let s = self.quoted(v).to_str();
         enctry!(self.w(s))
     }
-    fn emit_enum(&mut self, _: &str, f: |&mut Encoder<'a>|) {
+    fn emit_enum(&mut self, s: &str, f: |&mut Encoder<'a>|) {
+        debug!("EMITTING ENUM: {}", s);
         f(self)
     }
-    fn emit_enum_variant(&mut self, v_name: &str, _: uint, _: uint,
-                         _: |&mut Encoder<'a>|) {
-        enctry!(self.w(v_name))
+    fn emit_enum_variant(&mut self, v_name: &str, _: uint, len: uint,
+                         f: |&mut Encoder<'a>|) {
+        match len {
+            0 => enctry!(self.w(v_name)),
+            1 => f(self),
+            _ => self.err = Err(~"Cannot encode enum variants with more \
+                                  than one argument."),
+        }
     }
-    fn emit_enum_variant_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
-        self.err = Err(~"Cannot encode enum variants with arguments.");
+    fn emit_enum_variant_arg(&mut self, _: uint, f: |&mut Encoder<'a>|) {
+        f(self)
     }
     fn emit_enum_struct_variant(&mut self, v_name: &str, v_id: uint, len: uint,
                                 f: |&mut Encoder<'a>|) {
@@ -247,11 +254,11 @@ impl<'a> serialize::Encoder for Encoder<'a> {
     fn emit_tuple_struct_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
         unimplemented!()
     }
-    fn emit_option(&mut self, _: |&mut Encoder<'a>|) {
-        unimplemented!()
+    fn emit_option(&mut self, f: |&mut Encoder<'a>|) {
+        f(self)
     }
-    fn emit_option_none(&mut self) { unimplemented!() }
-    fn emit_option_some(&mut self, _: |&mut Encoder<'a>|) { unimplemented!() }
+    fn emit_option_none(&mut self) { }
+    fn emit_option_some(&mut self, f: |&mut Encoder<'a>|) { f(self) }
     fn emit_seq(&mut self, len: uint, f: |this: &mut Encoder<'a>|) {
         if len == 0 {
             self.err = Err(~"Records must have length bigger than 0.");
@@ -713,7 +720,7 @@ impl<'a> Decoder<'a> {
         }
     }
 
-    fn pop_from_str<T: FromStr>(&mut self) -> Result<T, Error> {
+    fn pop_from_str<T: FromStr + Default>(&mut self) -> Result<T, Error> {
         let s = try!(self.pop_string());
         match FromStr::from_str(s) {
             Some(t) => Ok(t),
@@ -774,19 +781,40 @@ impl<'a> serialize::Decoder for Decoder<'a> {
                             f: |&mut Decoder<'a>, uint| -> T) -> T {
         let variant = to_lower(dectry!(self.pop_string(), f(self, 0)));
         match names.iter().position(|&name| to_lower(name) == variant) {
-            Some(idx) => f(self, idx),
-            None => {
-                let m = format!("Expected one of {} but found '{}'.",
-                                names, variant);
-                self.err = Err(self.err(m));
-                f(self, 0)
-            },
+            Some(idx) => return f(self, idx),
+            None => {}
         }
+
+        // At this point, we couldn't find a verbatim Enum variant, so let's
+        // assume we're trying to load enum variants of one argument.
+        // We don't know which one to pick, so we try each of them until we
+        // get a hit.
+        //
+        // If we fail, it's tough to know what error to report. Probably the
+        // right way to do this is to maintain a stack of errors. Ug.
+        self.push_string(variant); // push what we popped earlier
+        for i in range(0, names.len()) {
+            // Copy the top of the stack now. We'll push it back on if
+            // decoding into this variant fails.
+            let cur = dectry!(self.pop_string(), f(self, 0));
+            let copy = cur.clone();
+            self.push_string(cur);
+
+            let val = f(self, i);
+            match self.err {
+                Ok(_) => return val, // loaded a value successfully; bail!
+                Err(_) => {
+                    self.push_string(copy);
+                    self.err = Ok(()); // march on...
+                }
+            }
+        }
+        self.err = Err(self.err(format!(
+                       "Could not load value into any variant in {}", names)));
+        f(self, 0)
     }
     fn read_enum_variant_arg<T>(&mut self, _: uint,
                                 f: |&mut Decoder<'a>| -> T) -> T {
-        let m = ~"Cannot decode into enum variants with arguments.";
-        self.err = Err(self.err(m));
         f(self)
     }
     fn read_enum_struct_variant<T>(&mut self, names: &[&str],
@@ -829,8 +857,19 @@ impl<'a> serialize::Decoder for Decoder<'a> {
                                 _: |&mut Decoder<'a>| -> T) -> T {
         unimplemented!()
     }
-    fn read_option<T>(&mut self, _: |&mut Decoder<'a>, bool| -> T) -> T {
-        unimplemented!()
+    fn read_option<T>(&mut self, f: |&mut Decoder<'a>, bool| -> T) -> T {
+        let s = dectry!(self.pop_string(), f(self, false));
+        if s.len() == 0 {
+            f(self, false)
+        } else {
+            self.push_string(s);
+            let val = f(self, true);
+            if self.err.is_err() {
+                self.err = Ok(());
+                return f(self, false)
+            }
+            val
+        }
     }
     fn read_seq<T>(&mut self, f: |&mut Decoder<'a>, uint| -> T) -> T {
         let r = dectry!(self.pop_record(), f(self, 0));
@@ -879,6 +918,13 @@ mod test {
         a: f64,
         b: ~str,
         c: ~str,
+    }
+
+    fn ordie<T, E: ::std::fmt::Show>(res: Result<T, E>) -> T {
+        match res {
+            Ok(t) => t,
+            Err(err) => fail!("{}", err),
+        }
     }
 
     #[test]
@@ -1045,12 +1091,40 @@ mod test {
         let _ = d.headers();
     }
 
+    #[deriving(Decodable, Encodable, Show, Eq, TotalEq)]
+    enum Val {
+        Unsigned(uint),
+        Signed(int),
+        Bool(bool),
+    }
+
     #[test]
-    fn decoder_weird_input() {
-        let csv = "20120905_DAL@NYG,4,0,38,DAL,NYG,3,14,65,(:38) T.Romo kneels to DAL 34 for -1 yards.,24,17,2012\n20120905_DAL@NYG,4,0,38,DAL,NYG,,,65,                      ,24,17,2012";
-        let mut dec = Decoder::from_str(csv);
-        for r in dec {
-            debug!("{}", r)
-        }
+    fn decoder_enum() {
+        let mut d = Decoder::from_str("false,-5,5");
+        let r: (Val, Val, Val) = ordie(d.decode());
+        assert_eq!(r, (Bool(false), Signed(-5), Unsigned(5)));
+    }
+
+    #[test]
+    fn decoder_option() {
+        let mut d = Decoder::from_str(",1");
+        let r: (Option<bool>, uint) = ordie(d.decode());
+        assert_eq!(r, (None, 1));
+    }
+
+    #[test]
+    fn encoder_enum() {
+        let r = (Bool(false), Signed(-5), Unsigned(5));
+        let mut senc = StrEncoder::new();
+        senc.encode(r);
+        assert_eq!("false,-5,5\n", senc.to_str());
+    }
+
+    #[test]
+    fn encoder_option() {
+        let r: (Option<bool>, uint) = (None, 1);
+        let mut senc = StrEncoder::new();
+        senc.encode(r);
+        assert_eq!(",1\n", senc.to_str());
     }
 }
