@@ -1,6 +1,8 @@
 This crate provides a streaming CSV (comma separated values) encoder and 
 decoder that works with the `Encoder` and `Decoder` traits in Rust's 
-`serialize` crate.
+`serialize` crate. It conforms
+[conforms closely to RFC 
+4180](http://burntsushi.net/rustdoc/csv/#compliance-with-rfc-4180).
 
 [![Build status](https://api.travis-ci.org/BurntSushi/rust-csv.png)](https://travis-ci.org/BurntSushi/rust-csv)
 
