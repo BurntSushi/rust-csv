@@ -1,0 +1,4 @@
+To run all benchmarks, make sure Go is installed run this in ./golang
+
+  go test -bench '.*'
+
