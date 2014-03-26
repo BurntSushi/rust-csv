@@ -125,21 +125,28 @@ fn encoder_zero() {
 #[test]
 fn decoder_simple_nonl() {
     let mut d = Decoder::from_str("springsteen,s,1,0.14,false");
-    let r: (~str, char, int, f64, bool) = d.decode().unwrap();
+    let r: (~str, char, int, f64, bool) = ordie(d.decode());
     assert_eq!(r, (~"springsteen", 's', 1, 0.14, false));
+}
+
+#[test]
+fn decoder_simple_nonl_comma() {
+    let mut d = Decoder::from_str("springsteen,s,");
+    let r: (~str, char, Option<int>) = ordie(d.decode());
+    assert_eq!(r, (~"springsteen", 's', None));
 }
 
 #[test]
 fn decoder_simple() {
     let mut d = Decoder::from_str("springsteen,s,1,0.14,false\n");
-    let r: (~str, char, int, f64, bool) = d.decode().unwrap();
+    let r: (~str, char, int, f64, bool) = ordie(d.decode());
     assert_eq!(r, (~"springsteen", 's', 1, 0.14, false));
 }
 
 #[test]
 fn decoder_simple_crlf() {
     let mut d = Decoder::from_str("springsteen,s,1,0.14,false\r\n");
-    let r: (~str, char, int, f64, bool) = d.decode().unwrap();
+    let r: (~str, char, int, f64, bool) = ordie(d.decode());
     assert_eq!(r, (~"springsteen", 's', 1, 0.14, false));
 }
 
@@ -147,7 +154,7 @@ fn decoder_simple_crlf() {
 fn decoder_simple_tabbed() {
     let mut d = Decoder::from_str("springsteen\ts\t1\t0.14\tfalse\r\n");
     d.separator('\t');
-    let r: (~str, char, int, f64, bool) = d.decode().unwrap();
+    let r: (~str, char, int, f64, bool) = ordie(d.decode());
     assert_eq!(r, (~"springsteen", 's', 1, 0.14, false));
 }
 
@@ -192,19 +199,19 @@ fn decoder_empties_headers() {
     let mut d = Decoder::from_str("a,b,c\n\n\n\n");
     d.has_headers(true);
     assert_eq!(ordie(d.headers()), vec!(~"a", ~"b", ~"c"));
-    assert_eq!(d.next(), None);
+    assert_eq!(d.iter().next(), None);
 }
 
 #[test]
 fn decoder_all_empties() {
     let mut d = Decoder::from_str("\n\n\n\n");
-    assert_eq!(d.next(), None);
+    assert_eq!(d.iter().next(), None);
 }
 
 #[test]
 fn decoder_all_empties_crlf() {
     let mut d = Decoder::from_str("\r\n\r\n\r\n\r\n");
-    assert_eq!(d.next(), None);
+    assert_eq!(d.iter().next(), None);
 }
 
 #[test]
@@ -284,4 +291,25 @@ fn encoder_option() {
     let mut senc = StrEncoder::new();
     senc.encode(r);
     assert_eq!(",1\n", senc.to_str());
+}
+
+#[test]
+fn decoder_sample() {
+    let s = "1997,Ford,E350,\n\
+            \"1997\", \"Ford\", \"E350\", \"Super, luxurious truck\"\n\
+            1997,Ford,E350, \"Go get one now\n\
+            they are going fast\"";
+    let mut d = Decoder::from_str(s);
+    let r: Vec<(uint, ~str, ~str, ~str)> = ordie(d.decode_all());
+    assert_eq!(*r.get(1).ref0(), 1997);
+}
+
+#[test]
+fn decoder_iter() {
+    let mut d = Decoder::from_str("andrew,1\nkait,2\ncauchy,3\nplato,4");
+    let mut rs = vec!();
+    for (_, num) in d.decode_iter::<(~str, uint)>() {
+        rs.push(num);
+    }
+    assert_eq!(rs, vec!(1, 2, 3, 4));
 }

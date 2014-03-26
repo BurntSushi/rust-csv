@@ -11,6 +11,7 @@ ctags:
 
 docs:
 	rm -rf doc
+	rustdoc --test src/lib.rs
 	rustdoc src/lib.rs
 	# WTF is rustdoc doing?
 	chmod 755 doc

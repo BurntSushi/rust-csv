@@ -3,8 +3,196 @@
 #[license = "UNLICENSE"];
 #[doc(html_root_url = "http://burntsushi.net/rustdoc/csv")];
 
-//! This crate provides a CSV encoder and decoder that works with Rust's
-//! `serialize` crate.
+//! This crate provides a CSV (comma separated values) encoder and decoder that 
+//! works with the `Encoder` and `Decoder` traits in Rust's `serialize` crate.
+//!
+//! A CSV file is composed of a list of records where each record starts on
+//! a new line. A record is composed of 1 or more values delimited by a comma
+//! or some other character. The first record may optionally correspond to a
+//! record of labels corresponding to their respective positions.
+//!
+//! Example data:
+//!
+//! ```ignore
+//! 1997,Ford,,
+//! "1997", "Ford", "E350", "Super, luxurious truck"
+//! 1997,Ford,E350, "Go get one now
+//! they are going fast"
+//! ```
+//!
+//! Note that in the above data, there is a total of 3 records. Each record
+//! has length 4.
+//!
+//! If this data is in a file called `foo.csv`, then its records can be
+//! read as vectors of strings using an iterator:
+//!
+//! ```no_run
+//! let mut rdr = csv::Decoder::from_file(&Path::new("foo.csv"));
+//! for record in rdr.iter() {
+//!     println!("{}", record);
+//! }
+//! ```
+//!
+//!
+//! ## Decoding
+//!
+//! Like the `serialize::json` crate, this crate supports encoding and decoding
+//! into Rust values with types that satisfy the `Encodable` and/or
+//! `Decodable` traits. In this crate, encoding and decoding always works at
+//! the level of a CSV record. That is, only types corresponding to CSV
+//! records can be given to the encode/decode methods. (Includes, but is not
+//! limited to, structs, vectors and tuples.)
+//!
+//! Given the simple structure of a CSV file, this makes it
+//! very simple to retrieve records as tuples. For example:
+//!
+//! ```
+//! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
+//! let record: (~str, uint) = rdr.decode().unwrap();
+//! assert_eq!(record, (~"andrew", 1987));
+//! ```
+//!
+//! An iterator is provided to repeat this for all records in the CSV data:
+//!
+//! ```
+//! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
+//! for (name, birth) in rdr.decode_iter::<(~str, uint)>() {
+//!     println!("Name: {}, Born: {}", name, birth);
+//! }
+//! ```
+//!
+//! Note that the `decode_iter` is *explicitly* instantiated with the type
+//! of the record. Alternatively, you could create the iterator with a let
+//! binding and an explicit type annotation:
+//!
+//! ```
+//! # let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
+//! let mut it: csv::DecodedItems<(~str, uint)> = rdr.decode_iter();
+//! ```
+//!
+//! While this is convenient, CSV data in the real world can often be messy
+//! or incomplete. For example, maybe some records don't have a birth year:
+//!
+//! ```ignore
+//! andrew, ""
+//! kait,
+//! ```
+//!
+//! Using the above code, this would produce a decoding error since the empty
+//! value `""` cannot be decoded into a value with type `uint`. Thankfully this
+//! is easily fixed with an `Option` type. We only need to change the type
+//! in our previous example:
+//!
+//! ```
+//! let mut rdr = csv::Decoder::from_str("andrew, \"\"\nkait,");
+//! let record1: (~str, Option<uint>) = rdr.decode().unwrap();
+//! let record2: (~str, Option<uint>) = rdr.decode().unwrap();
+//!
+//! assert_eq!(record1, (~"andrew", None));
+//! assert_eq!(record2, (~"kait", None));
+//! ```
+//!
+//! The `None` value here basically represents the fact that the decoder could
+//! not decode the value to a `uint`. In particular, if the value were `"abc"`
+//! instead of `""`, then the output would be the same. Therefore, `None`
+//! represents a *conversion failure* rather than just an empty or NULL value.
+//!
+//! We can take this one step further with enumerations. For example, sometimes
+//! values are encoded with a variety of different types. As a contrived
+//! example, consider values that use any of `1`, `0`, `true` or `false`.
+//! None of these values are invalid, so we'd like to decode either. This can
+//! be expressed with an `enum` type:
+//!
+//! ```
+//! extern crate csv;
+//! extern crate serialize;
+//!
+//! #[deriving(Eq, Show, Decodable)]
+//! enum Truthy {
+//!     Uint(uint),
+//!     Bool(bool),
+//! }
+//!
+//! fn main() {
+//!     let mut rdr = csv::Decoder::from_str("andrew,false\nkait,1");
+//!     let record: (~str, Truthy) = rdr.decode().unwrap();
+//!     assert_eq!(record, (~"andrew", Bool(false)));
+//! }
+//! ```
+//!
+//! When the decoder sees an enum, it first tries to match CSV values with
+//! the names of the value constructors (case insensitive). If that fails, then
+//! it will try to match the CSV value against the first argument type. The
+//! first match with a successful conversion will be used.
+//!
+//! Currently, the decoder only supports enum types with any mix of value
+//! constructors that have 0 or 1 arguments. Using a value constructor with
+//! more than one argument will result in a decoding error.
+//!
+//! Finally, decoding also works with structs by matching values in a record
+//! to fields in a struct based on position. If a struct has a different
+//! number of fields than a CSV record, an error is returned.
+//!
+//!
+//! ## Encoding
+//!
+//! Using the encoder in this crate is almost exactly like using the
+//! decoder:
+//!
+//! ```
+//! let mut enc = csv::StrEncoder::new();
+//! enc.encode(("andrew", 1987));
+//! enc.encode(("kait", 1989));
+//! assert_eq!(enc.to_str(), "andrew,1987\nkait,1989\n");
+//! ```
+//!
+//! Note that `StrEncoder` is a convenience for encoding to strings. You can
+//! encode to any `Writer` (with `to_writer`) or to a file:
+//!
+//! ```no_run
+//! let mut enc = csv::Encoder::to_file(&Path::new("foo.csv"));
+//! let records = vec!(("andrew", 1987), ("kait", 1989));
+//! match enc.encode_all(records.as_slice()) {
+//!     Ok(_) => {},
+//!     Err(err) => fail!("Error encoding: {}", err),
+//! }
+//! ```
+//!
+//! The encoder in this crate supports all of the same things as the decoder,
+//! including writing enum and option types. The encoder will make sure that
+//! values containing special characters (like quotes, new lines or the
+//! delimiter) are appropriately quoted.
+//!
+//!
+//! ## Compliance with RFC 4180
+//!
+//! RFC 4180 seems to the closest thing to an official specification for CSV.
+//! This crate should conform to the specification with these exceptions:
+//! (which are mostly used for making the decoder more permissive)
+//!
+//!   * Both CRLF and LF line endings are supported. This is seamless in the
+//!     decoder. By default, the encoder uses LF line endings but can be
+//!     instructed to use CRLF with the `crlf` method.
+//!   * The first record is read as a "header" if and only if `has_headers`
+//!     has been called with `true`. This is off by default.
+//!     The encoder has no explicit support for headers. Simply encode a
+//!     vector of strings instead.
+//!   * By default, the delimiter is a comma, but it can be changed to any
+//!     unicode character with the `separator` method (for either encoding
+//!     or decoding).
+//!   * The decoder interprets `\"` as an escaped quote in addition to the
+//!     standard `""`.
+//!   * By default, both the encoder and decoder will enforce the invariant
+//!     that all records are the same length. (This is what RFC 4180 demands.)
+//!     If a record with a different length is found, an error is returned.
+//!     This behavior may be turned off by calling `enforce_same_length` with
+//!     `false`.
+//!   * Empty lines (that do not include other whitespace) are ignored 
+//!     by the decoder.
+//!   * Only UTF-8 is supported (and therefore ASCII). Bytes that cannot be
+//!     decoded into UTF-8 will be ignored by the decoder.
+//!
+//! Everything else should be supported, including new lines in quoted values.
 
 #[feature(macro_rules)];
 // Dunno what this is, but apparently it's required for the 'log' crate.
@@ -115,6 +303,14 @@ pub struct Encoder<'a> {
 }
 
 impl<'a> Encoder<'a> {
+    /// Creates an encoder that writes the file given. If the file doesn't
+    /// exist, then it is created. If it already exists, then it is truncated
+    /// before writing.
+    pub fn to_file(path: &Path) -> Encoder<'a> {
+        let file = File::create(path);
+        Encoder::to_writer(~file as ~Writer)
+    }
+
     /// Creates an encoder that encodes CSV data with the `Writer` given.
     pub fn to_writer(w: &mut Writer) -> Encoder<'a> {
         Encoder {
@@ -388,6 +584,9 @@ impl<'a> Parser<'a> {
 
     fn parse_record(&mut self) -> Result<Vec<~str>, Error> {
         try!(self.eat_lineterms());
+        if self.peek_is_eof() {
+            return Err(self.err_eof())
+        }
 
         let mut vals = Vec::with_capacity(self.first_len);
         while !self.is_eof() {
@@ -446,9 +645,6 @@ impl<'a> Parser<'a> {
             }
             only_whitespace = false;
             res.push_char(self.cur.unwrap());
-        }
-        if res.len() == 0 && self.is_eof() {
-            return Err(self.err_eof())
         }
         Ok(res)
     }
@@ -517,6 +713,13 @@ impl<'a> Parser<'a> {
     fn peek_is(&mut self, c: char) -> bool {
         match self.peek() {
             Ok(Some(p)) => p == c,
+            _ => false,
+        }
+    }
+
+    fn peek_is_eof(&mut self) -> bool {
+        match self.peek() {
+            Ok(None) => true,
             _ => false,
         }
     }
@@ -632,8 +835,29 @@ impl<'a> Decoder<'a> {
         }
     }
 
+    /// Provides an iterator to decode one record at a time. Note that this
+    /// usually needs to have its type parameter `D` instantiated explicitly
+    /// or with a type hint. For example, both of the following are equivalent:
+    ///
+    /// ```no_run
+    /// let mut dec = csv::Decoder::from_str("abc,1");
+    /// let mut iter = dec.decode_iter::<(~str, uint)>();
+    /// ```
+    ///
+    /// ```no_run
+    /// let mut dec = csv::Decoder::from_str("abc,1");
+    /// let mut iter: csv::DecodedItems<(~str, uint)> = dec.decode_iter();
+    /// ```
+    ///
+    /// If there is an error decoding the data then `fail!` is called.
+    pub fn decode_iter<D: Decodable<Decoder<'a>>>
+                      (&'a mut self) -> DecodedItems<'a, D> {
+        DecodedItems { dec: self }
+    }
+
     /// Calls `decode` on every record in the CSV data until EOF and returns
-    /// them as a vector.
+    /// them as a vector. If there was an error decoding a vector, parsing is
+    /// stopped and the error is returned.
     pub fn decode_all<D: Decodable<Decoder<'a>>>
                      (&mut self) -> Result<Vec<D>, Error> {
         let mut records: Vec<D> = vec!();
@@ -646,7 +870,14 @@ impl<'a> Decoder<'a> {
         Ok(records)
     }
 
-    /// Cirumvents the decoding interface and forces the parsing of the next
+    /// Circumvents the decoding interface and iterates over the records as
+    /// vectors of strings. A record returned by this method will never be
+    /// decoded.
+    pub fn iter(&'a mut self) -> Records<'a> {
+        Records { dec: self }
+    }
+
+    /// Circumvents the decoding interface and forces the parsing of the next
     /// record and returns it. A record returned by this method will never be
     /// decoded.
     pub fn record(&mut self) -> Result<Vec<~str>, Error> {
@@ -693,17 +924,43 @@ impl<'a> Decoder<'a> {
     }
 }
 
-impl<'a> Iterator<Vec<~str>> for Decoder<'a> {
+/// An iterator that yields records as plain vectors of strings. This
+/// completely avoids the decoding machinery.
+pub struct Records<'a> {
+    priv dec: &'a mut Decoder<'a>
+}
+
+impl<'a> Iterator<Vec<~str>> for Records<'a> {
     /// Iterates over each record in the CSV data. The iterator stops when
     /// EOF is reached.
     fn next(&mut self) -> Option<Vec<~str>> {
-        match self.record() {
+        match self.dec.record() {
             Ok(r) => Some(r),
             Err(err) => {
                 if err.eof {
                     None
                 } else {
                     fail!("{}", err)
+                }
+            }
+        }
+    }
+}
+
+/// An iterator that yields decoded items of type `D`.
+pub struct DecodedItems<'a, D> {
+    priv dec: &'a mut Decoder<'a>
+}
+
+impl<'a, D: Decodable<Decoder<'a>>> Iterator<D> for DecodedItems<'a, D> {
+    fn next(&mut self) -> Option<D> {
+        match self.dec.decode() {
+            Ok(r) => Some(r),
+            Err(err) => {
+                if err.eof {
+                    None
+                } else {
+                    fail!("Error decoding CSV data: {}", err)
                 }
             }
         }

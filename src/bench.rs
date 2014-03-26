@@ -3,13 +3,23 @@ use stdtest::BenchHarness;
 use super::Decoder;
 
 static CSV_SHORT: &'static str = "./examples/data/short.csv";
+static CSV_MEDIUM: &'static str = "./examples/data/medium.csv";
 
 #[bench]
 fn short_raw_records(b: &mut BenchHarness) {
     let fp = &Path::new(CSV_SHORT);
     b.iter(|| {
         let mut dec = Decoder::from_file(fp);
-        for _ in dec {}
+        for _ in dec.iter() {}
+    })
+}
+
+#[bench]
+fn medium_raw_records(b: &mut BenchHarness) {
+    let fp = &Path::new(CSV_MEDIUM);
+    b.iter(|| {
+        let mut dec = Decoder::from_file(fp);
+        for _ in dec.iter() {}
     })
 }
 

@@ -25,7 +25,7 @@ fn main() {
     // We create a CSV reader with a small buffer so that we can see streaming
     // in action on small inputs.
     let mut dec = Decoder::from_reader_capacity(&mut r as &mut Reader, 1);
-    for r in dec {
+    for r in dec.iter() {
         println!("Record: {}", r);
     }
 }
