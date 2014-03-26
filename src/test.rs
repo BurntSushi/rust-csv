@@ -1,4 +1,4 @@
-use quickcheck::{TestResult, quickcheck};
+// use quickcheck::{TestResult, quickcheck}; 
 use super::{StrEncoder, Decoder};
 
 fn ordie<T, E: ::std::fmt::Show>(res: Result<T, E>) -> T {
@@ -8,51 +8,51 @@ fn ordie<T, E: ::std::fmt::Show>(res: Result<T, E>) -> T {
     }
 }
 
-#[test]
-fn same_record() {
-    fn prop(input: Vec<~str>) -> TestResult {
-        if input.len() == 0 {
-            return TestResult::discard()
-        }
-        if input.iter().any(|s| s.len() == 0) {
-            return TestResult::discard()
-        }
-
-        let mut senc = StrEncoder::new();
-        senc.encode(input.as_slice());
-
-        let mut dec = Decoder::from_str(senc.to_str());
-        let output: Vec<~str> = ordie(dec.decode());
-
-        TestResult::from_bool(input == output)
-    }
-    quickcheck(prop);
-}
-
-#[test]
-fn same_records() {
-    fn prop(to_repeat: Vec<~str>, n: uint) -> TestResult {
-        // Discard empty vectors or zero repetitions of that vector.
-        // Also discard vectors with empty strings since they are written
-        // just as empty lines, which are ignored by the decoder.
-        if to_repeat.len() == 0 || n == 0 {
-            return TestResult::discard()
-        }
-        // if to_repeat.iter().any(|s| s.len() == 0) { 
+// #[test] 
+// fn same_record() { 
+    // fn prop(input: Vec<~str>) -> TestResult { 
+        // if input.len() == 0 { 
             // return TestResult::discard() 
         // } 
-
-        let input = Vec::from_fn(n, |_| to_repeat.clone());
-        let mut senc = StrEncoder::new();
-        senc.encode_all(input.as_slice());
-
-        let mut dec = Decoder::from_str(senc.to_str());
-        let output: Vec<Vec<~str>> = ordie(dec.decode_all());
-
-        TestResult::from_bool(input == output)
-    }
-    quickcheck(prop);
-}
+        // if input.iter().any(|s| s.len() == 0) { 
+            // return TestResult::discard() 
+        // } 
+//  
+        // let mut senc = StrEncoder::new(); 
+        // senc.encode(input.as_slice()); 
+//  
+        // let mut dec = Decoder::from_str(senc.to_str()); 
+        // let output: Vec<~str> = ordie(dec.decode()); 
+//  
+        // TestResult::from_bool(input == output) 
+    // } 
+    // quickcheck(prop); 
+// } 
+//  
+// #[test] 
+// fn same_records() { 
+    // fn prop(to_repeat: Vec<~str>, n: uint) -> TestResult { 
+        // // Discard empty vectors or zero repetitions of that vector. 
+        // // Also discard vectors with empty strings since they are written 
+        // // just as empty lines, which are ignored by the decoder. 
+        // if to_repeat.len() == 0 || n == 0 { 
+            // return TestResult::discard() 
+        // } 
+        // // if to_repeat.iter().any(|s| s.len() == 0) {  
+            // // return TestResult::discard()  
+        // // }  
+//  
+        // let input = Vec::from_fn(n, |_| to_repeat.clone()); 
+        // let mut senc = StrEncoder::new(); 
+        // senc.encode_all(input.as_slice()); 
+//  
+        // let mut dec = Decoder::from_str(senc.to_str()); 
+        // let output: Vec<Vec<~str>> = ordie(dec.decode_all()); 
+//  
+        // TestResult::from_bool(input == output) 
+    // } 
+    // quickcheck(prop); 
+// } 
 
 #[test]
 fn encoder_simple() {

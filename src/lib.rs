@@ -3,7 +3,7 @@
 #[license = "UNLICENSE"];
 #[doc(html_root_url = "http://burntsushi.net/rustdoc/csv")];
 
-//! This crate provides a *streaming* CSV (comma separated values) encoder and 
+//! This crate provides a streaming CSV (comma separated values) encoder and 
 //! decoder that works with the `Encoder` and `Decoder` traits in Rust's 
 //! `serialize` crate.
 //!
@@ -272,7 +272,7 @@
 #[feature(phase)];
 
 #[phase(syntax, link)] extern crate log;
-extern crate quickcheck;
+// extern crate quickcheck; 
 extern crate rand;
 extern crate serialize;
 extern crate stdtest = "test";
