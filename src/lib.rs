@@ -3,8 +3,9 @@
 #[license = "UNLICENSE"];
 #[doc(html_root_url = "http://burntsushi.net/rustdoc/csv")];
 
-//! This crate provides a CSV (comma separated values) encoder and decoder that 
-//! works with the `Encoder` and `Decoder` traits in Rust's `serialize` crate.
+//! This crate provides a *streaming* CSV (comma separated values) encoder and 
+//! decoder that works with the `Encoder` and `Decoder` traits in Rust's 
+//! `serialize` crate.
 //!
 //! A CSV file is composed of a list of records where each record starts on
 //! a new line. A record is composed of 1 or more values delimited by a comma
@@ -31,6 +32,35 @@
 //! for record in rdr.iter() {
 //!     println!("{}", record);
 //! }
+//! ```
+//!
+//!
+//! ## Headers and delimiters
+//!
+//! By default, the decoder in this crate assumes that the CSV data contains
+//! no header record. Therefore, we must tell the decoder that there is a
+//! header record before we start parsing with the `has_headers` method.
+//! Then we can access the header record at any time with the `headers` method:
+//!
+//! ```
+//! let mut rdr = csv::Decoder::from_str("abc,xyz\n1,2");
+//! rdr.has_headers(true);
+//! 
+//! assert_eq!(rdr.headers().unwrap(), vec!(~"abc", ~"xyz"));
+//! assert_eq!(rdr.iter().next().unwrap(), vec!(~"1", ~"2"));
+//! assert_eq!(rdr.headers().unwrap(), vec!(~"abc", ~"xyz"));
+//! ```
+//!
+//! The decoder also assumes that a comma (`,`) is the delimiter used to
+//! separate values in a record. This can be changed with the `separator`
+//! method. For example, to read tab separated values:
+//!
+//! ```
+//! let mut rdr = csv::Decoder::from_str("a\tb\ny\tz");
+//! rdr.separator('\t');
+//! 
+//! assert_eq!(rdr.iter().next().unwrap(), vec!(~"a", ~"b"));
+//! assert_eq!(rdr.iter().next().unwrap(), vec!(~"y", ~"z"));
 //! ```
 //!
 //!
@@ -100,8 +130,8 @@
 //! We can take this one step further with enumerations. For example, sometimes
 //! values are encoded with a variety of different types. As a contrived
 //! example, consider values that use any of `1`, `0`, `true` or `false`.
-//! None of these values are invalid, so we'd like to decode either. This can
-//! be expressed with an `enum` type:
+//! None of these values are invalid, so we'd like to decode any of them. This 
+//! can be expressed with an `enum` type:
 //!
 //! ```
 //! extern crate csv;
@@ -162,6 +192,49 @@
 //! including writing enum and option types. The encoder will make sure that
 //! values containing special characters (like quotes, new lines or the
 //! delimiter) are appropriately quoted.
+//!
+//!
+//! ## Streaming
+//!
+//! All decoding and encoding in this crate is done on demand. That is, you
+//! can safely pass a reader to a decoder and expect that it won't be
+//! completely consumed immediately.
+//!
+//! Here's an example that demonstrates streaming with channels:
+//!
+//! ```no_run
+//! extern crate csv;
+//! 
+//! use std::comm::channel;
+//! use std::io::{ChanReader, ChanWriter, Reader, Writer};
+//! use std::io::timer::sleep;
+//! use std::task::spawn;
+//! 
+//! use csv::{Decoder, Encoder};
+//! 
+//! fn main() {
+//!     let (send, recv) = channel();
+//!     spawn(proc() {
+//!         let mut w = ChanWriter::new(send);
+//!         let mut enc = Encoder::to_writer(&mut w as &mut Writer);
+//!         for x in range(1, 6) {
+//!             match enc.encode((x, x * x)) {
+//!                 Ok(_) => {},
+//!                 Err(err) => fail!("Failed encoding: {}", err),
+//!             }
+//!             sleep(1000);
+//!         }
+//!     });
+//! 
+//!     let mut r = ChanReader::new(recv);
+//!     // We create a CSV reader with a small buffer so that we can see streaming
+//!     // in action on small inputs.
+//!     let mut dec = Decoder::from_reader_capacity(&mut r as &mut Reader, 1);
+//!     for r in dec.iter() {
+//!         println!("Record: {}", r);
+//!     }
+//! }
+//! ```
 //!
 //!
 //! ## Compliance with RFC 4180
@@ -582,7 +655,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_record(&mut self) -> Result<Vec<~str>, Error> {
+    fn parse_record(&mut self, as_header: bool) -> Result<Vec<~str>, Error> {
         try!(self.eat_lineterms());
         if self.peek_is_eof() {
             return Err(self.err_eof())
@@ -624,7 +697,10 @@ impl<'a> Parser<'a> {
         assert!(vals.len() > 0);
         if self.has_headers && self.headers.len() == 0 {
             self.headers = vals;
-            return self.parse_record()
+            if as_header {
+                return Ok(self.headers.clone())
+            }
+            return self.parse_record(false)
         }
         Ok(vals)
     }
@@ -881,7 +957,7 @@ impl<'a> Decoder<'a> {
     /// record and returns it. A record returned by this method will never be
     /// decoded.
     pub fn record(&mut self) -> Result<Vec<~str>, Error> {
-        self.p.parse_record()
+        self.p.parse_record(false)
     }
 
     /// Sets the separator character that delimits values in a record.
@@ -914,7 +990,7 @@ impl<'a> Decoder<'a> {
         }
         if self.p.headers.len() == 0 {
             // Don't return an EOF error here.
-            match self.read_to_stack() {
+            match self.p.parse_record(true) {
                 Ok(_) => {}
                 Err(err) => if !err.eof { return Err(err) }
             }
@@ -979,7 +1055,7 @@ impl<'a> Decoder<'a> {
     }
 
     fn read_to_stack(&mut self) -> Result<(), Error> {
-        let r = try!(self.p.parse_record());
+        let r = try!(self.p.parse_record(false));
         self.push_record(r);
         Ok(())
     }
