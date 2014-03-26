@@ -85,9 +85,9 @@ From source:
 ```bash
 git clone git://github.com/BurntSushi/rust-csv
 cd rust-csv
-rustc --crate-type lib ./src/lib.rs # makes libcsv-{version}.rlib in CWD
+rustc -O --crate-type lib ./src/lib.rs # makes libcsv-{version}.rlib in CWD
 cd ./examples
-rustc -L .. ./nfl_plays.rs
+rustc -O -L .. ./nfl_plays.rs
 ./nfl_plays
 ```
 
@@ -96,8 +96,15 @@ For `cargo-lite`:
 ```bash
 pip2 install cargo-lite
 cargo-lite install git://github.com/BurntSushi/rust-csv # installs to ~/.rust
-cd ~/.rust/src/csv/examples
-rustc ./nfl_plays.rs
+cd ~/.rust/src/rust-csv/examples
+rustc -O ./nfl_plays.rs
 ./nfl_plays
 ```
+
+
+### Related work
+
+The only other CSV parser I know of that builds is
+[Geal/rust-csv](https://github.com/Geal/rust-csv), but it doesn't support the
+`Encoder` or `Decoder` API.
 
