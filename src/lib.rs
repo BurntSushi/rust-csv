@@ -1109,6 +1109,11 @@ impl<'a> Decoder<'a> {
     }
 }
 
+// The Decoder trait doesn't support error handling at all, yet it is important
+// not to crash the program when decoding bad CSV data.
+// Therefore, we attempt to do error handling using a huge hack: when there's
+// an error, we continue decoding but use some sort of default value. This is
+// particularly gruesome when decoding polymorphic types.
 impl<'a> serialize::Decoder for Decoder<'a> {
     fn read_nil(&mut self) { unimplemented!() }
     fn read_uint(&mut self) -> uint { dectry!(self.pop_from_str(), 0) }
