@@ -35,7 +35,7 @@ macro_rules! enctry(
         } else {
             match $e {
                 Ok(e) => e,
-                Err(e) => { self.err = Err(e.to_str()); return },
+                Err(e) => { self.err = Err(e.to_str()); return }
             }
         }
     )
@@ -48,7 +48,7 @@ macro_rules! dectry(
         } else {
             match $e {
                 Ok(e) => e,
-                Err(e) => { self.err = Err(e); return $d },
+                Err(e) => { self.err = Err(e); return $d }
             }
         }
     )
@@ -89,7 +89,7 @@ impl<'a> StrEncoder<'a> {
     /// was an error.
     pub fn encode<E: Encodable<Encoder<'a>>>(&mut self, e: E) {
         match self.encoder.encode(e) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(err) => fail!("{}", err),
         }
     }
@@ -98,7 +98,7 @@ impl<'a> StrEncoder<'a> {
     /// there was an error.
     pub fn encode_all<E: Encodable<Encoder<'a>>>(&mut self, es: &[E]) {
         match self.encoder.encode_all(es) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(err) => fail!("{}", err),
         }
      }
@@ -171,7 +171,9 @@ impl<'a> Encoder<'a> {
     }
 
     fn quoted<'a>(&mut self, s: &'a str) -> str::MaybeOwned<'a> {
-        if s.find(|c: char| c == self.sep || c == '\n' || c == '"').is_some() {
+        let sep = self.sep;
+        let quotable = |c: char| c == sep || c == '\n' || c == '"';
+        if s.len() == 0 || s.find(quotable).is_some() {
             str::Owned(self.quote(s))
         } else {
             str::Slice(s)
@@ -210,8 +212,7 @@ impl<'a> serialize::Encoder for Encoder<'a> {
         let s = self.quoted(v).to_str();
         enctry!(self.w(s))
     }
-    fn emit_enum(&mut self, s: &str, f: |&mut Encoder<'a>|) {
-        debug!("EMITTING ENUM: {}", s);
+    fn emit_enum(&mut self, _: &str, f: |&mut Encoder<'a>|) {
         f(self)
     }
     fn emit_enum_variant(&mut self, v_name: &str, _: uint, len: uint,
@@ -366,7 +367,7 @@ impl<'a> Parser<'a> {
 
     fn read_next_char(&mut self) -> Result<Option<char>, Error> {
         match self.look {
-            Some(c) => { self.look = None; Ok(Some(c)) },
+            Some(c) => { self.look = None; Ok(Some(c)) }
             None => match self.buf.read_char() {
                 Ok(c) => Ok(Some(c)),
                 Err(err) => {
@@ -380,19 +381,21 @@ impl<'a> Parser<'a> {
                                  "Could not read char [{}]: {} (detail: {})",
                                  err.kind, err, err.detail))),
                     }
-                },
-            },
+                }
+            }
         }
     }
 
     fn parse_record(&mut self) -> Result<Vec<~str>, Error> {
-        let mut vals: Vec<~str> = vec!();
+        try!(self.eat_lineterms());
+
+        let mut vals = Vec::with_capacity(self.first_len);
         while !self.is_eof() {
             let val = try!(self.parse_value());
             vals.push(val);
             if self.is_lineterm() {
-                // If it's a CRLF ending, consume the '\r'
-                if self.cur_is('\r') { try!(self.next_char()) }
+                try!(self.eat_lineterm());
+                try!(self.eat_lineterms());
                 break
             }
         }
@@ -407,6 +410,10 @@ impl<'a> Parser<'a> {
                     "Record has length {} but other records have length {}",
                     vals.len(), self.first_len)))
             }
+        } else if self.first_len == 0 {
+            // This isn't used to enforce same length records, but as a hint
+            // for how big to make a vector holding the record.
+            self.first_len = vals.len()
         }
         // If this assertion fails, then there is a bug in the above code.
         // Namely, the only way `vals` should be empty is if we've hit EOF,
@@ -425,10 +432,10 @@ impl<'a> Parser<'a> {
 
     fn parse_value(&mut self) -> Result<~str, Error> {
         let mut only_whitespace = true;
-        let mut res = ~"";
+        let mut res = str::with_capacity(4);
         loop {
             try!(self.next_char());
-            if self.is_eof() || self.is_lineterm() || self.is_sep() {
+            if self.is_lineterm() || self.is_eof() || self.is_sep() {
                 break
             } else if self.cur.unwrap().is_whitespace() {
                 res.push_char(self.cur.unwrap());
@@ -448,7 +455,7 @@ impl<'a> Parser<'a> {
 
     fn parse_quoted_value(&mut self) -> Result<~str, Error> {
         // Assumes that " has already been read.
-        let mut res = ~"";
+        let mut res = str::with_capacity(4);
         loop {
             try!(self.next_char());
             if self.is_eof() {
@@ -462,9 +469,9 @@ impl<'a> Parser<'a> {
 
                 // Eat and spit out everything up to next separator.
                 // If we see something that isn't whitespace, it's an error.
+                try!(self.next_char());
                 loop {
-                    try!(self.next_char());
-                    if self.is_eof() || self.is_lineterm() || self.is_sep() {
+                    if self.is_lineterm() || self.is_eof() || self.is_sep() {
                         break
                     } else if !self.cur.unwrap().is_whitespace() {
                         let msg = format!(
@@ -473,6 +480,7 @@ impl<'a> Parser<'a> {
                             '{}' instead.", self.cur.unwrap());
                         return Err(self.err(msg));
                     }
+                    try!(self.next_char());
                 }
                 break
             } else if self.cur_is('\\') && self.peek_is('"') {
@@ -502,7 +510,7 @@ impl<'a> Parser<'a> {
             None => {
                 self.look = try!(self.read_next_char());
                 Ok(self.look)
-            },
+            }
         }
     }
 
@@ -521,6 +529,21 @@ impl<'a> Parser<'a> {
             return self.peek_is('\n')
         }
         false
+    }
+
+    fn eat_lineterms(&mut self) -> Result<(), Error> {
+        while self.peek_is('\n') || self.peek_is('\r') {
+            try!(self.next_char()); // read a '\r' or a '\n'
+            try!(self.eat_lineterm()); // read a '\n' if read '\r' ^^
+        }
+        Ok(())
+    }
+
+    fn eat_lineterm(&mut self) -> Result<(), Error> {
+        if self.cur_is('\r') {
+            try!(self.next_char());
+        }
+        Ok(())
     }
 
     fn is_sep(&mut self) -> bool {
@@ -617,7 +640,7 @@ impl<'a> Decoder<'a> {
         loop {
             match self.decode() {
                 Ok(r) => records.push(r),
-                Err(err) => if err.eof { break } else { return Err(err) },
+                Err(err) => if err.eof { break } else { return Err(err) }
             }
         }
         Ok(records)
@@ -659,7 +682,11 @@ impl<'a> Decoder<'a> {
             fail!("To get headers from CSV data, has_headers must be called.")
         }
         if self.p.headers.len() == 0 {
-            try!(self.read_to_stack());
+            // Don't return an EOF error here.
+            match self.read_to_stack() {
+                Ok(_) => {}
+                Err(err) => if !err.eof { return Err(err) }
+            }
             assert!(self.p.headers.len() > 0);
         }
         Ok(self.p.headers.clone())
@@ -706,7 +733,7 @@ impl<'a> Decoder<'a> {
             String(s) => {
                 let m = format!("Expected record but got value '{}'.", s);
                 Err(self.err(m))
-            },
+            }
         }
     }
 
@@ -715,19 +742,20 @@ impl<'a> Decoder<'a> {
             Record(_) => {
                 let m = format!("Expected value but got record.");
                 Err(self.err(m))
-            },
+            }
             String(s) => Ok(s),
         }
     }
 
     fn pop_from_str<T: FromStr + Default>(&mut self) -> Result<T, Error> {
         let s = try!(self.pop_string());
+        let s = s.trim();
         match FromStr::from_str(s) {
             Some(t) => Ok(t),
             None => {
                 let m = format!("Failed converting '{}' from str.", s);
                 Err(self.err(m))
-            },
+            }
         }
     }
 
@@ -844,10 +872,22 @@ impl<'a> serialize::Decoder for Decoder<'a> {
         f(self)
     }
     fn read_tuple<T>(&mut self, f: |&mut Decoder<'a>, uint| -> T) -> T {
-        self.read_seq(f)
+        // Using `f(self, self.p.first_len)` is a terrible hack that will
+        // only work reliably on CSV files with records that all have the
+        // same length.
+        // The issue here is that we need to create some tuple, even if there
+        // is an error preventing us from getting at data needed to build such
+        // a tuple. Therefore, we fake it by assuming this record's length is
+        // the same as every other record's length. Ug.
+        let r = dectry!(self.pop_record(), f(self, self.p.first_len));
+        let len = r.len();
+        for v in r.move_iter().rev() {
+            self.push_string(v)
+        }
+        f(self, len)
     }
-    fn read_tuple_arg<T>(&mut self, i: uint, f: |&mut Decoder<'a>| -> T) -> T {
-        self.read_seq_elt(i, f)
+    fn read_tuple_arg<T>(&mut self, _: uint, f: |&mut Decoder<'a>| -> T) -> T {
+        f(self)
     }
     fn read_tuple_struct<T>(&mut self, _: &str,
                             _: |&mut Decoder<'a>, uint| -> T) -> T {
