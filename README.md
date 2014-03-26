@@ -109,3 +109,8 @@ The only other CSV parser I know of that builds is
 [Geal/rust-csv](https://github.com/Geal/rust-csv), but it doesn't support the
 `Encoder` or `Decoder` API.
 
+Another one popped up at
+[arjantop/rust-tabular](https://github.com/arjantop/rust-tabular) just 
+recently, which also does not support the `Encoder` or `Decoder` API.
+However, it does support parsing fixed-width tables.
+
