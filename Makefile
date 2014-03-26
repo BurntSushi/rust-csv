@@ -27,7 +27,7 @@ test-examples:
 	(cd ./examples && ./test)
 
 bench: bench-runner
-	RUST_TEST_TASKS=1 RUST_LOG=quickcheck,csv ./bench-runner --bench --save-metrics=bench.json
+	RUST_TEST_TASKS=1 RUST_LOG=quickcheck,csv ./bench-runner --bench
 
 bench-runner: src/lib.rs src/test.rs src/bench.rs
 	rustc -O --test $(RUST_CFG) src/lib.rs -o bench-runner

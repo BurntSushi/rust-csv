@@ -23,6 +23,7 @@ struct Play {
 
 fn main() {
     let fp = &Path::new("./data/2012_nfl_pbp_data.csv");
+
     let mut dec = Decoder::from_file(fp);
     dec.has_headers(true);
     match dec.decode_all::<Play>() {
@@ -31,7 +32,7 @@ fn main() {
             println!("Found {} plays.", plays.len());
 
             let tfb = plays.iter().find(|&p| {
-                "NE" == p.team_off
+                "NE" == p.team_off && "DEN" == p.team_def
                 && p.description.contains("TOUCHDOWN")
                 && p.description.contains("T.Brady")
             }).unwrap();

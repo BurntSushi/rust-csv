@@ -2,9 +2,11 @@ use std::path::Path;
 use stdtest::BenchHarness;
 use super::Decoder;
 
+static CSV_SHORT: &'static str = "./examples/data/short.csv";
+
 #[bench]
 fn short_raw_records(b: &mut BenchHarness) {
-    let fp = &Path::new("./data/short.csv");
+    let fp = &Path::new(CSV_SHORT);
     b.iter(|| {
         let mut dec = Decoder::from_file(fp);
         for _ in dec {}
@@ -30,7 +32,7 @@ struct Play {
 
 #[bench]
 fn short_decoded_records(b: &mut BenchHarness) {
-    let fp = &Path::new("./data/short.csv");
+    let fp = &Path::new(CSV_SHORT);
     b.iter(|| {
         let mut dec = Decoder::from_file(fp);
         dec.has_headers(true);
