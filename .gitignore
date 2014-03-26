@@ -1,4 +1,5 @@
 .*.swp
-test
+test-runner
+bench-runner
 doc
 tags

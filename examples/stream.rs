@@ -17,7 +17,7 @@ fn main() {
                 Ok(_) => {},
                 Err(err) => fail!("Failed encoding: {}", err),
             }
-            sleep(1000);
+            sleep(500);
         }
     });
 
