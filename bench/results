@@ -17,7 +17,8 @@ large benchmark isn't exactly definitive, but I think we can use it as a
 ballpark estimate.
 
 The huge benchmark for both Rust and Go use buffering. The times are wall 
-clock times.
+clock times. The benchmark was run on an SSD. Both use a negligible and 
+constant amount of memory (~1KB).
 
 Rust  huge    141 seconds
 Go    huge    157 seconds
