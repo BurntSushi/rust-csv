@@ -15,7 +15,7 @@ Then compile and run:
     go build -o huge-go
     time ./huge-go
 
-To run the huge benchmark for Rust, make sure ss10pusa.csv is in the same 
+To run the huge benchmark for Rust, make sure `ss10pusa.csv` is in the same 
 location as above and run:
 
     rustc -O huge.rs -o huge-rust
