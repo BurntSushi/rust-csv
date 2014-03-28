@@ -18,6 +18,6 @@ Then compile and run:
 To run the huge benchmark for Rust, make sure `ss10pusa.csv` is in the same 
 location as above and run:
 
-    rustc -O huge.rs -o huge-rust
+    rustc --opt-level=3 huge.rs -o huge-rust
     time ./huge-rust
 

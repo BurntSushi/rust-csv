@@ -1,7 +1,7 @@
 RUST_CFG=
 
 compile:
-	rustc -O ./src/lib.rs
+	rustc --opt-level=3 ./src/lib.rs
 
 install:
 	cargo-lite install
@@ -31,7 +31,7 @@ bench: bench-runner
 	RUST_TEST_TASKS=1 RUST_LOG=quickcheck,csv ./bench-runner --bench
 
 bench-runner: src/lib.rs src/test.rs src/bench.rs
-	rustc -O --test $(RUST_CFG) src/lib.rs -o bench-runner
+	rustc --opt-level=3 --test $(RUST_CFG) src/lib.rs -o bench-runner
 
 test-clean:
 	rm -rf ./test-runner ./bench-runner
