@@ -1,7 +1,7 @@
-#[crate_id = "csv#0.1.0"];
-#[crate_type = "lib"];
-#[license = "UNLICENSE"];
-#[doc(html_root_url = "http://burntsushi.net/rustdoc/csv")];
+#![crate_id = "csv#0.1.0"]
+#![crate_type = "lib"]
+#![license = "UNLICENSE"]
+#![doc(html_root_url = "http://burntsushi.net/rustdoc/csv")]
 
 //! This crate provides a streaming CSV (comma separated values) encoder and 
 //! decoder that works with the `Encoder` and `Decoder` traits in Rust's 
@@ -267,9 +267,9 @@
 //!
 //! Everything else should be supported, including new lines in quoted values.
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 // Dunno what this is, but apparently it's required for the 'log' crate.
-#[feature(phase)];
+#![feature(phase)]
 
 #[phase(syntax, link)] extern crate log;
 // extern crate quickcheck; 
@@ -282,38 +282,12 @@ use std::fmt;
 use std::from_str::FromStr;
 use std::io::{BufferedReader};
 use std::io::{Reader, Writer};
-use std::io::{File, IoResult, MemReader, MemWriter};
+use std::io::{File, MemReader, MemWriter};
 use std::io::{EndOfFile, InvalidInput};
 use std::iter::Iterator;
 use std::path::Path;
 use std::str;
 use serialize::{Encodable, Decodable};
-
-macro_rules! enctry(
-    ($e:expr) => (
-        if self.err.is_err() {
-            return
-        } else {
-            match $e {
-                Ok(e) => e,
-                Err(e) => { self.err = Err(e.to_str()); return }
-            }
-        }
-    )
-)
-
-macro_rules! dectry(
-    ($e:expr, $d:expr) => (
-        if self.err.is_err() {
-            return $d
-        } else {
-            match $e {
-                Ok(e) => e,
-                Err(e) => { self.err = Err(e); return $d }
-            }
-        }
-    )
-)
 
 /// A convenience encoder for encoding CSV data to strings.
 pub struct StrEncoder<'a> {
@@ -348,7 +322,7 @@ impl<'a> StrEncoder<'a> {
 
     /// This is just like `Encoder::encode`, except it calls `fail!` if there
     /// was an error.
-    pub fn encode<E: Encodable<Encoder<'a>>>(&mut self, e: E) {
+    pub fn encode<E: Encodable<Encoder<'a>, ~str>>(&mut self, e: E) {
         match self.encoder.encode(e) {
             Ok(_) => {}
             Err(err) => fail!("{}", err),
@@ -357,7 +331,7 @@ impl<'a> StrEncoder<'a> {
 
     /// This is just like `Encoder::encode_all`, except it calls `fail!` if 
     /// there was an error.
-    pub fn encode_all<E: Encodable<Encoder<'a>>>(&mut self, es: &[E]) {
+    pub fn encode_all<E: Encodable<Encoder<'a>, ~str>>(&mut self, es: &[E]) {
         match self.encoder.encode_all(es) {
             Ok(_) => {}
             Err(err) => fail!("{}", err),
@@ -368,7 +342,6 @@ impl<'a> StrEncoder<'a> {
 /// An encoder can encode Rust values into CSV records or documents.
 pub struct Encoder<'a> {
     priv buf: &'a mut Writer,
-    priv err: Result<(), ~str>,
     priv sep: char,
     priv same_len: bool,
     priv first_len: uint,
@@ -388,7 +361,6 @@ impl<'a> Encoder<'a> {
     pub fn to_writer(w: &mut Writer) -> Encoder<'a> {
         Encoder {
             buf: w,
-            err: Ok(()),
             sep: ',',
             same_len: true,
             first_len: 0,
@@ -398,14 +370,13 @@ impl<'a> Encoder<'a> {
 
     /// Encodes a record as CSV data. Only values with types that correspond
     /// to records can be given here (i.e., structs, tuples or vectors).
-    pub fn encode<E: Encodable<Encoder<'a>>>
+    pub fn encode<E: Encodable<Encoder<'a>, ~str>>
                  (&mut self, e: E) -> Result<(), ~str> {
-        e.encode(self);
-        self.err.clone()
+        e.encode(self)
     }
 
     /// Calls `encode` on each element in the slice given.
-    pub fn encode_all<E: Encodable<Encoder<'a>>>
+    pub fn encode_all<E: Encodable<Encoder<'a>, ~str>>
                      (&mut self, es: &[E]) -> Result<(), ~str> {
         // for e in es.move_iter() { 
         for e in es.iter() {
@@ -431,12 +402,15 @@ impl<'a> Encoder<'a> {
         self.use_crlf = yes;
     }
 
-    fn w(&mut self, s: &str) -> IoResult<()> {
-        self.buf.write_str(s)
+    fn w(&mut self, s: &str) -> Result<(), ~str> {
+        match self.buf.write_str(s) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.to_str()),
+        }
     }
 
-    fn write_to_str<T: fmt::Show>(&mut self, t: T) {
-        enctry!(self.w(t.to_str()))
+    fn write_to_str<T: fmt::Show>(&mut self, t: T) -> Result<(), ~str> {
+        self.w(t.to_str())
     }
 
     fn quoted<'a>(&mut self, s: &'a str) -> str::MaybeOwned<'a> {
@@ -457,111 +431,146 @@ impl<'a> Encoder<'a> {
     }
 }
 
-impl<'a> serialize::Encoder for Encoder<'a> {
-    fn emit_nil(&mut self) { unimplemented!() }
-    fn emit_uint(&mut self, v: uint) { self.write_to_str(v) }
-    fn emit_u64(&mut self, v: u64) { self.write_to_str(v) }
-    fn emit_u32(&mut self, v: u32) { self.write_to_str(v) }
-    fn emit_u16(&mut self, v: u16) { self.write_to_str(v) }
-    fn emit_u8(&mut self, v: u8) { self.write_to_str(v) }
-    fn emit_int(&mut self, v: int) { self.write_to_str(v) }
-    fn emit_i64(&mut self, v: i64) { self.write_to_str(v) }
-    fn emit_i32(&mut self, v: i32) { self.write_to_str(v) }
-    fn emit_i16(&mut self, v: i16) { self.write_to_str(v) }
-    fn emit_i8(&mut self, v: i8) { self.write_to_str(v) }
-    fn emit_bool(&mut self, v: bool) { self.write_to_str(v) }
-    fn emit_f64(&mut self, v: f64) {
-        enctry!(self.w(::std::f64::to_str_digits(v, 10)))
+impl<'a> serialize::Encoder<~str> for Encoder<'a> {
+    fn emit_nil(&mut self) -> Result<(), ~str> { unimplemented!() }
+    fn emit_uint(&mut self, v: uint) -> Result<(), ~str> {
+        self.write_to_str(v)
     }
-    fn emit_f32(&mut self, v: f32) {
-        enctry!(self.w(::std::f32::to_str_digits(v, 10)))
+    fn emit_u64(&mut self, v: u64) -> Result<(), ~str> { self.write_to_str(v) }
+    fn emit_u32(&mut self, v: u32) -> Result<(), ~str> { self.write_to_str(v) }
+    fn emit_u16(&mut self, v: u16) -> Result<(), ~str> { self.write_to_str(v) }
+    fn emit_u8(&mut self, v: u8) -> Result<(), ~str> { self.write_to_str(v) }
+    fn emit_int(&mut self, v: int) -> Result<(), ~str> { self.write_to_str(v) }
+    fn emit_i64(&mut self, v: i64) -> Result<(), ~str> { self.write_to_str(v) }
+    fn emit_i32(&mut self, v: i32) -> Result<(), ~str> { self.write_to_str(v) }
+    fn emit_i16(&mut self, v: i16) -> Result<(), ~str> { self.write_to_str(v) }
+    fn emit_i8(&mut self, v: i8) -> Result<(), ~str> { self.write_to_str(v) }
+    fn emit_bool(&mut self, v: bool) -> Result<(), ~str> { self.write_to_str(v) }
+    fn emit_f64(&mut self, v: f64) -> Result<(), ~str> {
+        self.w(::std::f64::to_str_digits(v, 10))
     }
-    fn emit_char(&mut self, v: char) { self.write_to_str(v) }
-    fn emit_str(&mut self, v: &str) {
+    fn emit_f32(&mut self, v: f32) -> Result<(), ~str> {
+        self.w(::std::f32::to_str_digits(v, 10))
+    }
+    fn emit_char(&mut self, v: char) -> Result<(), ~str> {
+        self.write_to_str(v)
+    }
+    fn emit_str(&mut self, v: &str) -> Result<(), ~str> {
         let s = self.quoted(v).to_str();
-        enctry!(self.w(s))
+        self.w(s)
     }
-    fn emit_enum(&mut self, _: &str, f: |&mut Encoder<'a>|) {
+    fn emit_enum(&mut self, _: &str, f: |&mut Encoder<'a>| -> Result<(), ~str>)
+                -> Result<(), ~str> {
         f(self)
     }
     fn emit_enum_variant(&mut self, v_name: &str, _: uint, len: uint,
-                         f: |&mut Encoder<'a>|) {
+                         f: |&mut Encoder<'a>| -> Result<(), ~str>)
+                        -> Result<(), ~str> {
         match len {
-            0 => enctry!(self.w(v_name)),
+            0 => self.w(v_name),
             1 => f(self),
-            _ => self.err = Err(~"Cannot encode enum variants with more \
-                                  than one argument."),
+            _ => Err(~"Cannot encode enum variants with more \
+                       than one argument."),
         }
     }
-    fn emit_enum_variant_arg(&mut self, _: uint, f: |&mut Encoder<'a>|) {
+    fn emit_enum_variant_arg(&mut self, _: uint,
+                             f: |&mut Encoder<'a>| -> Result<(), ~str>)
+                            -> Result<(), ~str> {
         f(self)
     }
     fn emit_enum_struct_variant(&mut self, v_name: &str, v_id: uint, len: uint,
-                                f: |&mut Encoder<'a>|) {
+                                f: |&mut Encoder<'a>| -> Result<(), ~str>)
+                               -> Result<(), ~str> {
         self.emit_enum_variant(v_name, v_id, len, f)
     }
     fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
-                                      _: |&mut Encoder<'a>|) {
-        self.err = Err(~"Cannot encode enum variants with arguments.");
+                                      _: |&mut Encoder<'a>| -> Result<(), ~str>)
+                                     -> Result<(), ~str> {
+        Err(~"Cannot encode enum variants with arguments.")
     }
-    fn emit_struct(&mut self, _: &str, len: uint, f: |&mut Encoder<'a>|) {
+    fn emit_struct(&mut self, _: &str, len: uint,
+                   f: |&mut Encoder<'a>| -> Result<(), ~str>)
+                  -> Result<(), ~str> {
         self.emit_seq(len, f)
     }
     fn emit_struct_field(&mut self, _: &str, f_idx: uint,
-                         f: |&mut Encoder<'a>|) {
+                         f: |&mut Encoder<'a>| -> Result<(), ~str>)
+                        -> Result<(), ~str> {
         self.emit_seq_elt(f_idx, f)
     }
-    fn emit_tuple(&mut self, len: uint, f: |&mut Encoder<'a>|) {
+    fn emit_tuple(&mut self, len: uint,
+                  f: |&mut Encoder<'a>| -> Result<(), ~str>)
+                 -> Result<(), ~str> {
         self.emit_seq(len, f)
     }
-    fn emit_tuple_arg(&mut self, idx: uint, f: |&mut Encoder<'a>|) {
+    fn emit_tuple_arg(&mut self, idx: uint,
+                      f: |&mut Encoder<'a>| -> Result<(), ~str>)
+                     -> Result<(), ~str> {
         self.emit_seq_elt(idx, f)
     }
     fn emit_tuple_struct(&mut self, _: &str, _: uint,
-                         _: |&mut Encoder<'a>|) {
+                         _: |&mut Encoder<'a>| -> Result<(), ~str>)
+                        -> Result<(), ~str> {
         unimplemented!()
     }
-    fn emit_tuple_struct_arg(&mut self, _: uint, _: |&mut Encoder<'a>|) {
+    fn emit_tuple_struct_arg(&mut self, _: uint,
+                             _: |&mut Encoder<'a>| -> Result<(), ~str>)
+                            -> Result<(), ~str> {
         unimplemented!()
     }
-    fn emit_option(&mut self, f: |&mut Encoder<'a>|) {
+    fn emit_option(&mut self, f: |&mut Encoder<'a>| -> Result<(), ~str>)
+                  -> Result<(), ~str> {
         f(self)
     }
-    fn emit_option_none(&mut self) { }
-    fn emit_option_some(&mut self, f: |&mut Encoder<'a>|) { f(self) }
-    fn emit_seq(&mut self, len: uint, f: |this: &mut Encoder<'a>|) {
+    fn emit_option_none(&mut self) -> Result<(), ~str> { Ok(()) }
+    fn emit_option_some(&mut self, f: |&mut Encoder<'a>| -> Result<(), ~str>)
+                       -> Result<(), ~str> {
+        f(self)
+    }
+    fn emit_seq(&mut self, len: uint,
+                f: |this: &mut Encoder<'a>| -> Result<(), ~str>)
+               -> Result<(), ~str> {
         if len == 0 {
-            self.err = Err(~"Records must have length bigger than 0.");
-            return
+            return Err(~"Records must have length bigger than 0.")
         }
         if self.same_len {
             if self.first_len == 0 {
                 self.first_len = len
             } else if self.first_len != len {
-                self.err = Err(format!(
+                return Err(format!(
                     "Record has length {} but other records have length {}",
-                    len, self.first_len));
-                return
+                    len, self.first_len))
             }
         }
-        f(self);
+        try!(f(self));
         if self.use_crlf {
-            enctry!(self.w("\r\n"))
+            self.w("\r\n")
         } else {
-            enctry!(self.w("\n"))
+            self.w("\n")
         }
     }
-    fn emit_seq_elt(&mut self, idx: uint, f: |this: &mut Encoder<'a>|) {
+    fn emit_seq_elt(&mut self, idx: uint,
+                    f: |this: &mut Encoder<'a>| -> Result<(), ~str>)
+                   -> Result<(), ~str> {
         if idx > 0 {
-            enctry!(self.buf.write_char(self.sep))
+            let s = self.sep.to_str();
+            try!(self.w(s))
         }
         f(self)
     }
-    fn emit_map(&mut self, _: uint, _: |&mut Encoder<'a>|) { unimplemented!() }
-    fn emit_map_elt_key(&mut self, _: uint, _: |&mut Encoder<'a>|) {
+    fn emit_map(&mut self, _: uint,
+                _: |&mut Encoder<'a>| -> Result<(), ~str>)
+               -> Result<(), ~str> {
         unimplemented!()
     }
-    fn emit_map_elt_val(&mut self, _: uint, _: |&mut Encoder<'a>|) {
+    fn emit_map_elt_key(&mut self, _: uint,
+                        _: |&mut Encoder<'a>| -> Result<(), ~str>)
+                       -> Result<(), ~str> {
+        unimplemented!()
+    }
+    fn emit_map_elt_val(&mut self, _: uint,
+                        _: |&mut Encoder<'a>| -> Result<(), ~str>)
+                       -> Result<(), ~str> {
         unimplemented!()
     }
 }
@@ -842,7 +851,6 @@ impl<'a> Parser<'a> {
 /// or with a standard iterator.
 pub struct Decoder<'a> {
     priv stack: Vec<Value>,
-    priv err: Result<(), Error>,
     priv p: Parser<'a>,
 }
 
@@ -884,7 +892,6 @@ impl<'a> Decoder<'a> {
     fn from_buffer(buf: BufferedReader<&'a mut Reader>) -> Decoder<'a> {
         Decoder {
             stack: vec!(),
-            err: Ok(()),
             p: Parser {
                 sep: ',',
                 same_len: true,
@@ -903,12 +910,9 @@ impl<'a> Decoder<'a> {
     /// Decodes the next record for some type. Note that since this decodes
     /// records, only types corresponding to a record (like structs, tuples or
     /// vectors) can be used.
-    pub fn decode<D: Decodable<Decoder<'a>>>(&mut self) -> Result<D, Error> {
-        let d = Decodable::decode(self);
-        match self.err {
-            Ok(_) => Ok(d),
-            Err(ref err) => Err(err.clone()),
-        }
+    pub fn decode<D: Decodable<Decoder<'a>, Error>>
+                 (&mut self) -> Result<D, Error> {
+        Decodable::decode(self)
     }
 
     /// Provides an iterator to decode one record at a time. Note that this
@@ -926,7 +930,7 @@ impl<'a> Decoder<'a> {
     /// ```
     ///
     /// If there is an error decoding the data then `fail!` is called.
-    pub fn decode_iter<D: Decodable<Decoder<'a>>>
+    pub fn decode_iter<D: Decodable<Decoder<'a>, Error>>
                       (&'a mut self) -> DecodedItems<'a, D> {
         DecodedItems { dec: self }
     }
@@ -934,7 +938,7 @@ impl<'a> Decoder<'a> {
     /// Calls `decode` on every record in the CSV data until EOF and returns
     /// them as a vector. If there was an error decoding a vector, parsing is
     /// stopped and the error is returned.
-    pub fn decode_all<D: Decodable<Decoder<'a>>>
+    pub fn decode_all<D: Decodable<Decoder<'a>, Error>>
                      (&mut self) -> Result<Vec<D>, Error> {
         let mut records: Vec<D> = vec!();
         loop {
@@ -1028,7 +1032,7 @@ pub struct DecodedItems<'a, D> {
     priv dec: &'a mut Decoder<'a>
 }
 
-impl<'a, D: Decodable<Decoder<'a>>> Iterator<D> for DecodedItems<'a, D> {
+impl<'a, D: Decodable<Decoder<'a>, Error>> Iterator<D> for DecodedItems<'a, D> {
     fn next(&mut self) -> Option<D> {
         match self.dec.decode() {
             Ok(r) => Some(r),
@@ -1104,7 +1108,7 @@ impl<'a> Decoder<'a> {
         self.p.err(msg)
     }
 
-    fn fail(&self, msg: &str) -> ! {
+    fn fail<T>(&self, msg: &str) -> Result<T, Error> {
         fail!("{}", self.p.err(msg));
     }
 }
@@ -1114,38 +1118,42 @@ impl<'a> Decoder<'a> {
 // Therefore, we attempt to do error handling using a huge hack: when there's
 // an error, we continue decoding but use some sort of default value. This is
 // particularly gruesome when decoding polymorphic types.
-impl<'a> serialize::Decoder for Decoder<'a> {
-    fn read_nil(&mut self) { unimplemented!() }
-    fn read_uint(&mut self) -> uint { dectry!(self.pop_from_str(), 0) }
-    fn read_u64(&mut self) -> u64 { dectry!(self.pop_from_str(), 0) }
-    fn read_u32(&mut self) -> u32 { dectry!(self.pop_from_str(), 0) }
-    fn read_u16(&mut self) -> u16 { dectry!(self.pop_from_str(), 0) }
-    fn read_u8(&mut self) -> u8 { dectry!(self.pop_from_str(), 0) }
-    fn read_int(&mut self) -> int { dectry!(self.pop_from_str(), 0) }
-    fn read_i64(&mut self) -> i64 { dectry!(self.pop_from_str(), 0) }
-    fn read_i32(&mut self) -> i32 { dectry!(self.pop_from_str(), 0) }
-    fn read_i16(&mut self) -> i16 { dectry!(self.pop_from_str(), 0) }
-    fn read_i8(&mut self) -> i8 { dectry!(self.pop_from_str(), 0) }
-    fn read_bool(&mut self) -> bool { dectry!(self.pop_from_str(), false) }
-    fn read_f64(&mut self) -> f64 { dectry!(self.pop_from_str(), 0.0) }
-    fn read_f32(&mut self) -> f32 { dectry!(self.pop_from_str(), 0.0) }
-    fn read_char(&mut self) -> char {
-        let s = dectry!(self.pop_string(), '\x00');
-        let chars = s.chars().collect::<~[_]>();
+impl<'a> serialize::Decoder<Error> for Decoder<'a> {
+    fn read_nil(&mut self) -> Result<(), Error> { unimplemented!() }
+    fn read_uint(&mut self) -> Result<uint, Error> { self.pop_from_str() }
+    fn read_u64(&mut self) -> Result<u64, Error> { self.pop_from_str() }
+    fn read_u32(&mut self) -> Result<u32, Error> { self.pop_from_str() }
+    fn read_u16(&mut self) -> Result<u16, Error> { self.pop_from_str() }
+    fn read_u8(&mut self) -> Result<u8, Error> { self.pop_from_str() }
+    fn read_int(&mut self) -> Result<int, Error> { self.pop_from_str() }
+    fn read_i64(&mut self) -> Result<i64, Error> { self.pop_from_str() }
+    fn read_i32(&mut self) -> Result<i32, Error> { self.pop_from_str() }
+    fn read_i16(&mut self) -> Result<i16, Error> { self.pop_from_str() }
+    fn read_i8(&mut self) -> Result<i8, Error> { self.pop_from_str() }
+    fn read_bool(&mut self) -> Result<bool, Error> { self.pop_from_str() }
+    fn read_f64(&mut self) -> Result<f64, Error> { self.pop_from_str() }
+    fn read_f32(&mut self) -> Result<f32, Error> { self.pop_from_str() }
+    fn read_char(&mut self) -> Result<char, Error> {
+        let s = try!(self.pop_string());
+        let chars: Vec<char> = s.chars().collect();
         if chars.len() != 1 {
-            self.fail(format!("Expected single character but got '{}'.", s))
+            return self.fail(format!(
+                "Expected single character but got '{}'.", s))
         }
-        chars[0]
+        Ok(*chars.get(0))
     }
-    fn read_str(&mut self) -> ~str {
-        dectry!(self.pop_string(), ~"")
+    fn read_str(&mut self) -> Result<~str, Error> {
+        self.pop_string()
     }
-    fn read_enum<T>(&mut self, _: &str, f: |&mut Decoder<'a>| -> T) -> T {
+    fn read_enum<T>(&mut self, _: &str,
+                    f: |&mut Decoder<'a>| -> Result<T, Error>)
+                   -> Result<T, Error> {
         f(self)
     }
     fn read_enum_variant<T>(&mut self, names: &[&str],
-                            f: |&mut Decoder<'a>, uint| -> T) -> T {
-        let variant = to_lower(dectry!(self.pop_string(), f(self, 0)));
+                            f: |&mut Decoder<'a>, uint| -> Result<T, Error>)
+                           -> Result<T, Error> {
+        let variant = to_lower(try!(self.pop_string()));
         match names.iter().position(|&name| to_lower(name) == variant) {
             Some(idx) => return f(self, idx),
             None => {}
@@ -1162,43 +1170,46 @@ impl<'a> serialize::Decoder for Decoder<'a> {
         for i in range(0, names.len()) {
             // Copy the top of the stack now. We'll push it back on if
             // decoding into this variant fails.
-            let cur = dectry!(self.pop_string(), f(self, 0));
+            let cur = try!(self.pop_string());
             let copy = cur.clone();
             self.push_string(cur);
 
-            let val = f(self, i);
-            match self.err {
-                Ok(_) => return val, // loaded a value successfully; bail!
+            match f(self, i) {
+                Ok(v) => return Ok(v), // loaded a value successfully; bail!
                 Err(_) => {
+                    // Put what we popped back on the stack so we can retry.
                     self.push_string(copy);
-                    self.err = Ok(()); // march on...
                 }
             }
         }
-        self.err = Err(self.err(format!(
-                       "Could not load value into any variant in {}", names)));
-        f(self, 0)
+        return self.fail(format!(
+            "Could not load value into any variant in {}", names))
     }
     fn read_enum_variant_arg<T>(&mut self, _: uint,
-                                f: |&mut Decoder<'a>| -> T) -> T {
+                                f: |&mut Decoder<'a>| -> Result<T, Error>)
+                               -> Result<T, Error> {
         f(self)
     }
     fn read_enum_struct_variant<T>(&mut self, names: &[&str],
-                                   f: |&mut Decoder<'a>, uint| -> T) -> T {
+                                   f: |&mut Decoder<'a>, uint|
+                                      -> Result<T, Error>)
+                                  -> Result<T, Error> {
         self.read_enum_variant(names, f)
     }
     fn read_enum_struct_variant_field<T>(&mut self, _: &str, f_idx: uint,
-                                         f: |&mut Decoder<'a>| -> T) -> T {
+                                         f: |&mut Decoder<'a>|
+                                            -> Result<T, Error>)
+                                        -> Result<T, Error> {
         self.read_enum_variant_arg(f_idx, f)
     }
     fn read_struct<T>(&mut self, s_name: &str, len: uint,
-                      f: |&mut Decoder<'a>| -> T) -> T {
-        let r = dectry!(self.pop_record(), f(self));
+                      f: |&mut Decoder<'a>| -> Result<T, Error>)
+                     -> Result<T, Error> {
+        let r = try!(self.pop_record());
         if r.len() != len {
             let m = format!("Struct '{}' has {} fields but current record \
                              has {} fields.", s_name, len, r.len());
-            self.err = Err(self.err(m));
-            return f(self)
+            return self.fail(m)
         }
         for v in r.move_iter().rev() {
             self.push_string(v)
@@ -1206,69 +1217,74 @@ impl<'a> serialize::Decoder for Decoder<'a> {
         f(self)
     }
     fn read_struct_field<T>(&mut self, _: &str, _: uint,
-                            f: |&mut Decoder<'a>| -> T) -> T {
+                            f: |&mut Decoder<'a>| -> Result<T, Error>)
+                           -> Result<T, Error> {
         f(self)
     }
-    fn read_tuple<T>(&mut self, f: |&mut Decoder<'a>, uint| -> T) -> T {
-        // Using `f(self, self.p.first_len)` is a terrible hack that will
-        // only work reliably on CSV files with records that all have the
-        // same length.
-        // The issue here is that we need to create some tuple, even if there
-        // is an error preventing us from getting at data needed to build such
-        // a tuple. Therefore, we fake it by assuming this record's length is
-        // the same as every other record's length. Ug.
-        let r = dectry!(self.pop_record(), f(self, self.p.first_len));
+    fn read_tuple<T>(&mut self, f: |&mut Decoder<'a>, uint| -> Result<T, Error>)
+                    -> Result<T, Error> {
+        let r = try!(self.pop_record());
         let len = r.len();
         for v in r.move_iter().rev() {
             self.push_string(v)
         }
         f(self, len)
     }
-    fn read_tuple_arg<T>(&mut self, _: uint, f: |&mut Decoder<'a>| -> T) -> T {
+    fn read_tuple_arg<T>(&mut self, _: uint,
+                         f: |&mut Decoder<'a>| -> Result<T, Error>)
+                        -> Result<T, Error> {
         f(self)
     }
     fn read_tuple_struct<T>(&mut self, _: &str,
-                            _: |&mut Decoder<'a>, uint| -> T) -> T {
+                            _: |&mut Decoder<'a>, uint| -> Result<T, Error>)
+                           -> Result<T, Error> {
         unimplemented!()
     }
     fn read_tuple_struct_arg<T>(&mut self, _: uint,
-                                _: |&mut Decoder<'a>| -> T) -> T {
+                                _: |&mut Decoder<'a>| -> Result<T, Error>)
+                               -> Result<T, Error> {
         unimplemented!()
     }
-    fn read_option<T>(&mut self, f: |&mut Decoder<'a>, bool| -> T) -> T {
-        let s = dectry!(self.pop_string(), f(self, false));
-        if s.len() == 0 {
+    fn read_option<T>(&mut self,
+                      f: |&mut Decoder<'a>, bool| -> Result<T, Error>)
+                     -> Result<T, Error> {
+        let s = try!(self.pop_string());
+        if s.is_empty() {
             f(self, false)
         } else {
             self.push_string(s);
-            let val = f(self, true);
-            if self.err.is_err() {
-                self.err = Ok(());
-                return f(self, false)
+            match f(self, true) {
+                Ok(v) => Ok(v),
+                Err(_) => f(self, false),
             }
-            val
         }
     }
-    fn read_seq<T>(&mut self, f: |&mut Decoder<'a>, uint| -> T) -> T {
-        let r = dectry!(self.pop_record(), f(self, 0));
+    fn read_seq<T>(&mut self, f: |&mut Decoder<'a>, uint| -> Result<T, Error>)
+                  -> Result<T, Error> {
+        let r = try!(self.pop_record());
         let len = r.len();
         for v in r.move_iter().rev() {
             self.push_string(v)
         }
         f(self, len)
     }
-    fn read_seq_elt<T>(&mut self, _: uint, f: |&mut Decoder<'a>| -> T) -> T {
+    fn read_seq_elt<T>(&mut self, _: uint,
+                       f: |&mut Decoder<'a>| -> Result<T, Error>)
+                      -> Result<T, Error> {
         f(self)
     }
-    fn read_map<T>(&mut self, _: |&mut Decoder<'a>, uint| -> T) -> T {
+    fn read_map<T>(&mut self, _: |&mut Decoder<'a>, uint| -> Result<T, Error>)
+                  -> Result<T, Error> {
         unimplemented!()
     }
     fn read_map_elt_key<T>(&mut self, _: uint,
-                           _: |&mut Decoder<'a>| -> T) -> T {
+                           _: |&mut Decoder<'a>| -> Result<T, Error>)
+                          -> Result<T, Error> {
         unimplemented!()
     }
     fn read_map_elt_val<T>(&mut self, _: uint,
-                           _: |&mut Decoder<'a>| -> T) -> T {
+                           _: |&mut Decoder<'a>| -> Result<T, Error>)
+                          -> Result<T, Error> {
         unimplemented!()
     }
 }
