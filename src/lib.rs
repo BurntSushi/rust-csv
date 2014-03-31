@@ -267,7 +267,6 @@
 //!
 //! Everything else should be supported, including new lines in quoted values.
 
-#![feature(macro_rules)]
 // Dunno what this is, but apparently it's required for the 'log' crate.
 #![feature(phase)]
 
