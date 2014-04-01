@@ -298,8 +298,8 @@ pub struct StrEncoder<'a> {
     /// convenient since they call `fail!` on error. (Encoding to a string
     /// isn't going to cause an IO error, but an error could be caused by
     /// writing records of varying length if same length records are enforced.)
-    encoder: Encoder<'a>,
-    priv w: ~MemWriter,
+    pub encoder: Encoder<'a>,
+    w: ~MemWriter,
 }
 
 impl<'a> StrEncoder<'a> {
@@ -340,11 +340,11 @@ impl<'a> StrEncoder<'a> {
 
 /// An encoder can encode Rust values into CSV records or documents.
 pub struct Encoder<'a> {
-    priv buf: &'a mut Writer,
-    priv sep: char,
-    priv same_len: bool,
-    priv first_len: uint,
-    priv use_crlf: bool,
+    buf: &'a mut Writer,
+    sep: char,
+    same_len: bool,
+    first_len: uint,
+    use_crlf: bool,
 }
 
 impl<'a> Encoder<'a> {
@@ -849,8 +849,8 @@ impl<'a> Parser<'a> {
 /// Raw records (as strings) can also be accessed with the `record` method
 /// or with a standard iterator.
 pub struct Decoder<'a> {
-    priv stack: Vec<Value>,
-    priv p: Parser<'a>,
+    stack: Vec<Value>,
+    p: Parser<'a>,
 }
 
 /// A representation of a value found in a CSV document.
@@ -1006,7 +1006,7 @@ impl<'a> Decoder<'a> {
 /// An iterator that yields records as plain vectors of strings. This
 /// completely avoids the decoding machinery.
 pub struct Records<'a> {
-    priv dec: &'a mut Decoder<'a>
+    dec: &'a mut Decoder<'a>
 }
 
 impl<'a> Iterator<Vec<~str>> for Records<'a> {
@@ -1028,7 +1028,7 @@ impl<'a> Iterator<Vec<~str>> for Records<'a> {
 
 /// An iterator that yields decoded items of type `D`.
 pub struct DecodedItems<'a, D> {
-    priv dec: &'a mut Decoder<'a>
+    dec: &'a mut Decoder<'a>
 }
 
 impl<'a, D: Decodable<Decoder<'a>, Error>> Iterator<D> for DecodedItems<'a, D> {
