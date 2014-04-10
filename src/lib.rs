@@ -884,7 +884,7 @@ impl<'a> Decoder<'a> {
 
     /// Creates a new CSV decoder that reads CSV data from the string given.
     pub fn from_str(s: &str) -> Decoder<'a> {
-        let r = MemReader::new(s.as_bytes().to_owned());
+        let r = MemReader::new(Vec::from_slice(s.as_bytes()));
         Decoder::from_reader(~r as ~Reader)
     }
 
