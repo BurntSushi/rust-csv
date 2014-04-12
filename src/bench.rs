@@ -1,6 +1,6 @@
 use std::fmt::Show;
 use std::io;
-use stdtest::BenchHarness;
+use stdtest::Bencher;
 use super::Decoder;
 
 static CSV_SHORT: &'static str = "./examples/data/short.csv";
@@ -20,7 +20,7 @@ fn file_to_mem(fp: &str) -> io::MemReader {
 }
 
 #[bench]
-fn short_raw_records(b: &mut BenchHarness) {
+fn short_raw_records(b: &mut Bencher) {
     let mut data = file_to_mem(CSV_SHORT);
     b.iter(|| {
         let _ = ordie(data.seek(0, io::SeekSet));
@@ -30,7 +30,7 @@ fn short_raw_records(b: &mut BenchHarness) {
 }
 
 #[bench]
-fn medium_raw_records(b: &mut BenchHarness) {
+fn medium_raw_records(b: &mut Bencher) {
     let mut data = file_to_mem(CSV_MEDIUM);
     b.iter(|| {
         let _ = ordie(data.seek(0, io::SeekSet));
@@ -40,7 +40,7 @@ fn medium_raw_records(b: &mut BenchHarness) {
 }
 
 #[bench]
-fn large_raw_records(b: &mut BenchHarness) {
+fn large_raw_records(b: &mut Bencher) {
     let mut data = file_to_mem(CSV_LARGE);
     b.iter(|| {
         let _ = ordie(data.seek(0, io::SeekSet));
@@ -67,7 +67,7 @@ struct Play {
 }
 
 #[bench]
-fn short_decoded_records(b: &mut BenchHarness) {
+fn short_decoded_records(b: &mut Bencher) {
     let mut data = file_to_mem(CSV_SHORT);
     b.iter(|| {
         let _ = ordie(data.seek(0, io::SeekSet));

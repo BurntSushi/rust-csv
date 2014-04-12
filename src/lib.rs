@@ -423,10 +423,8 @@ impl<'a> Encoder<'a> {
     }
 
     fn quote(&mut self, s: &str) -> ~str {
-        let mut s = s.replace("\"", "\"\"");
-        s.unshift_char('"');
-        s.push_char('"');
-        s
+        let s = s.replace("\"", "\"\"");
+        "\"" + s + "\""
     }
 }
 
@@ -715,7 +713,7 @@ impl<'a> Parser<'a> {
 
     fn parse_value(&mut self) -> Result<~str, Error> {
         let mut only_whitespace = true;
-        let mut res = str::with_capacity(4);
+        let mut res = StrBuf::with_capacity(4);
         loop {
             try!(self.next_char());
             if self.is_lineterm() || self.is_eof() || self.is_sep() {
@@ -730,12 +728,12 @@ impl<'a> Parser<'a> {
             only_whitespace = false;
             res.push_char(self.cur.unwrap());
         }
-        Ok(res)
+        Ok(res.into_owned())
     }
 
     fn parse_quoted_value(&mut self) -> Result<~str, Error> {
         // Assumes that " has already been read.
-        let mut res = str::with_capacity(4);
+        let mut res = StrBuf::with_capacity(4);
         loop {
             try!(self.next_char());
             if self.is_eof() {
@@ -773,7 +771,7 @@ impl<'a> Parser<'a> {
 
             res.push_char(self.cur.unwrap());
         }
-        Ok(res)
+        Ok(res.into_owned())
     }
 
     fn is_eof(&self) -> bool {
