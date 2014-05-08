@@ -126,28 +126,28 @@ fn encoder_zero() {
 fn decoder_simple_nonl() {
     let mut d = Decoder::from_str("springsteen,s,1,0.14,false");
     let r: (~str, char, int, f64, bool) = ordie(d.decode());
-    assert_eq!(r, (~"springsteen", 's', 1, 0.14, false));
+    assert_eq!(r, ("springsteen".to_owned(), 's', 1, 0.14, false));
 }
 
 #[test]
 fn decoder_simple_nonl_comma() {
     let mut d = Decoder::from_str("springsteen,s,");
     let r: (~str, char, Option<int>) = ordie(d.decode());
-    assert_eq!(r, (~"springsteen", 's', None));
+    assert_eq!(r, ("springsteen".to_owned(), 's', None));
 }
 
 #[test]
 fn decoder_simple() {
     let mut d = Decoder::from_str("springsteen,s,1,0.14,false\n");
     let r: (~str, char, int, f64, bool) = ordie(d.decode());
-    assert_eq!(r, (~"springsteen", 's', 1, 0.14, false));
+    assert_eq!(r, ("springsteen".to_owned(), 's', 1, 0.14, false));
 }
 
 #[test]
 fn decoder_simple_crlf() {
     let mut d = Decoder::from_str("springsteen,s,1,0.14,false\r\n");
     let r: (~str, char, int, f64, bool) = ordie(d.decode());
-    assert_eq!(r, (~"springsteen", 's', 1, 0.14, false));
+    assert_eq!(r, ("springsteen".to_owned(), 's', 1, 0.14, false));
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn decoder_simple_tabbed() {
     let mut d = Decoder::from_str("springsteen\ts\t1\t0.14\tfalse\r\n");
     d.separator('\t');
     let r: (~str, char, int, f64, bool) = ordie(d.decode());
-    assert_eq!(r, (~"springsteen", 's', 1, 0.14, false));
+    assert_eq!(r, ("springsteen".to_owned(), 's', 1, 0.14, false));
 }
 
 #[test]
@@ -174,7 +174,8 @@ fn decoder_same_length_records() {
 fn decoder_headers() {
     let mut d = Decoder::from_str("a,b,c\n1,2,3");
     d.has_headers(true);
-    assert_eq!(ordie(d.headers()), vec!(~"a", ~"b", ~"c"));
+    assert_eq!(ordie(d.headers()),
+               vec!("a".to_owned(), "b".to_owned(), "c".to_owned()));
 
     let r: (uint, uint, uint) = ordie(d.decode());
     assert_eq!(r, (1, 2, 3));
@@ -198,7 +199,8 @@ fn decoder_empty_lines_crlf() {
 fn decoder_empties_headers() {
     let mut d = Decoder::from_str("a,b,c\n\n\n\n");
     d.has_headers(true);
-    assert_eq!(ordie(d.headers()), vec!(~"a", ~"b", ~"c"));
+    assert_eq!(ordie(d.headers()),
+               vec!("a".to_owned(), "b".to_owned(), "c".to_owned()));
     assert_eq!(d.iter().next(), None);
 }
 
@@ -218,14 +220,14 @@ fn decoder_all_empties_crlf() {
 fn decoder_empty_strings() {
     let mut d = Decoder::from_str("\"\"");
     let r: (~str,) = ordie(d.decode());
-    assert_eq!(r, (~"",));
+    assert_eq!(r, ("".to_owned(),));
 }
 
 #[test]
 fn decoder_quotes() {
     let mut d = Decoder::from_str("\" a \",   \"1\"   ,\"1\",  1  ");
     let r: (~str, ~str, uint, uint) = ordie(d.decode());
-    assert_eq!(r, (~" a ", ~"1", 1, 1));
+    assert_eq!(r, (" a ".to_owned(), "1".to_owned(), 1, 1));
 }
 
 #[test]

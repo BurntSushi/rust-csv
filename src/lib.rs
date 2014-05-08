@@ -466,8 +466,8 @@ impl<'a> serialize::Encoder<~str> for Encoder<'a> {
         match len {
             0 => self.w(v_name),
             1 => f(self),
-            _ => Err(~"Cannot encode enum variants with more \
-                       than one argument."),
+            _ => Err("Cannot encode enum variants with more \
+                      than one argument.".to_owned()),
         }
     }
     fn emit_enum_variant_arg(&mut self, _: uint,
@@ -483,7 +483,7 @@ impl<'a> serialize::Encoder<~str> for Encoder<'a> {
     fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
                                       _: |&mut Encoder<'a>| -> Result<(), ~str>)
                                      -> Result<(), ~str> {
-        Err(~"Cannot encode enum variants with arguments.")
+        Err("Cannot encode enum variants with arguments.".to_owned())
     }
     fn emit_struct(&mut self, _: &str, len: uint,
                    f: |&mut Encoder<'a>| -> Result<(), ~str>)
@@ -528,7 +528,7 @@ impl<'a> serialize::Encoder<~str> for Encoder<'a> {
                 f: |this: &mut Encoder<'a>| -> Result<(), ~str>)
                -> Result<(), ~str> {
         if len == 0 {
-            return Err(~"Records must have length bigger than 0.")
+            return Err("Records must have length bigger than 0.".to_owned())
         }
         if self.same_len {
             if self.first_len == 0 {
@@ -622,7 +622,7 @@ impl<'a> Parser<'a> {
         Error {
             line: self.line,
             col: self.col,
-            msg: ~"EOF",
+            msg: "EOF".to_owned(),
             eof: true,
         }
     }
