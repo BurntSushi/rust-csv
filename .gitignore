@@ -4,3 +4,5 @@ bench-runner
 doc
 tags
 examples/data/ss10pusa.csv
+*.rlib
+*.so

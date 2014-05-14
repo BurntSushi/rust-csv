@@ -22,7 +22,7 @@ test: test-runner
 	RUST_TEST_TASKS=1 RUST_LOG=quickcheck,csv ./test-runner
 
 test-runner: src/lib.rs src/test.rs src/bench.rs
-	rustc --test src/lib.rs -o test-runner
+	rustc -L . --test src/lib.rs -o test-runner
 
 test-examples:
 	(cd ./examples && ./test)

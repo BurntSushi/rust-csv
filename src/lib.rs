@@ -1,5 +1,6 @@
 #![crate_id = "csv#0.1.0"]
-#![crate_type = "lib"]
+#![crate_type = "rlib"]
+#![crate_type = "dylib"]
 #![license = "UNLICENSE"]
 #![doc(html_root_url = "http://burntsushi.net/rustdoc/csv")]
 
@@ -267,14 +268,15 @@
 //!
 //! Everything else should be supported, including new lines in quoted values.
 
-// Dunno what this is, but apparently it's required for the 'log' crate.
 #![feature(phase)]
 
 #[phase(syntax, link)] extern crate log;
-// extern crate quickcheck; 
 extern crate rand;
 extern crate serialize;
 extern crate stdtest = "test";
+
+#[cfg(test)]
+extern crate quickcheck;
 
 use std::default::Default;
 use std::fmt;
@@ -288,6 +290,12 @@ use std::path::Path;
 use std::str;
 use serialize::{Encodable, Decodable};
 
+#[cfg(test)]
+mod bench;
+
+#[cfg(test)]
+mod test;
+
 /// A convenience encoder for encoding CSV data to strings.
 pub struct StrEncoder<'a> {
     /// The underlying Encoder. Options like the separator, line endings and
@@ -299,14 +307,14 @@ pub struct StrEncoder<'a> {
     /// isn't going to cause an IO error, but an error could be caused by
     /// writing records of varying length if same length records are enforced.)
     pub encoder: Encoder<'a>,
-    w: ~MemWriter,
+    w: Box<MemWriter>,
 }
 
 impl<'a> StrEncoder<'a> {
     /// Creates a new CSV string encoder. At any time, `to_str` can be called
     /// to retrieve the cumulative CSV data.
     pub fn new() -> StrEncoder<'a> {
-        let mut w = ~MemWriter::new();
+        let mut w = box MemWriter::new();
         let enc = Encoder::to_writer(&mut *w as &mut Writer);
         StrEncoder {
             encoder: enc,
@@ -353,7 +361,7 @@ impl<'a> Encoder<'a> {
     /// before writing.
     pub fn to_file(path: &Path) -> Encoder<'a> {
         let file = File::create(path);
-        Encoder::to_writer(~file as ~Writer)
+        Encoder::to_writer(box file as Box<Writer>)
     }
 
     /// Creates an encoder that encodes CSV data with the `Writer` given.
@@ -862,7 +870,7 @@ impl<'a> Decoder<'a> {
     /// Creates a new CSV decoder from a file using the file path given.
     pub fn from_file(path: &Path) -> Decoder<'a> {
         let file = File::open(path);
-        Decoder::from_reader(~file as ~Reader)
+        Decoder::from_reader(box file as Box<Reader>)
     }
 
     /// Creates a new CSV decoder that reads CSV data from the `Reader` given.
@@ -883,7 +891,7 @@ impl<'a> Decoder<'a> {
     /// Creates a new CSV decoder that reads CSV data from the string given.
     pub fn from_str(s: &str) -> Decoder<'a> {
         let r = MemReader::new(Vec::from_slice(s.as_bytes()));
-        Decoder::from_reader(~r as ~Reader)
+        Decoder::from_reader(box r as Box<Reader>)
     }
 
     fn from_buffer(buf: BufferedReader<&'a mut Reader>) -> Decoder<'a> {
@@ -1289,9 +1297,3 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
 fn to_lower(s: &str) -> ~str {
     s.chars().map(|c| c.to_lowercase()).collect()
 }
-
-#[cfg(test)]
-mod bench;
-
-#[cfg(test)]
-mod test;
