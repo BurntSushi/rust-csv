@@ -1147,8 +1147,8 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
         }
         Ok(*chars.get(0))
     }
-    fn read_str(&mut self) -> Result<~str, Error> {
-        self.pop_string()
+    fn read_str(&mut self) -> Result<StrBuf, Error> {
+        self.pop_string().map(StrBuf::from_owned_str)
     }
     fn read_enum<T>(&mut self, _: &str,
                     f: |&mut Decoder<'a>| -> Result<T, Error>)
