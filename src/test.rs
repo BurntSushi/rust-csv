@@ -10,7 +10,7 @@ fn ordie<T, E: ::std::fmt::Show>(res: Result<T, E>) -> T {
 
 #[test]
 fn same_record() {
-    fn prop(input: Vec<~str>) -> TestResult {
+    fn prop(input: Vec<StrBuf>) -> TestResult {
         if input.len() == 0 {
             return TestResult::discard()
         }
@@ -22,7 +22,7 @@ fn same_record() {
         senc.encode(input.as_slice());
 
         let mut dec = Decoder::from_str(senc.to_str());
-        let output: Vec<~str> = ordie(dec.decode());
+        let output: Vec<StrBuf> = ordie(dec.decode());
 
         TestResult::from_bool(input == output)
     }
@@ -100,44 +100,44 @@ fn encoder_zero() {
 #[test]
 fn decoder_simple_nonl() {
     let mut d = Decoder::from_str("springsteen,s,1,0.14,false");
-    let r: (~str, char, int, f64, bool) = ordie(d.decode());
-    assert_eq!(r, ("springsteen".to_owned(), 's', 1, 0.14, false));
+    let r: (StrBuf, char, int, f64, bool) = ordie(d.decode());
+    assert_eq!(r, ("springsteen".to_strbuf(), 's', 1, 0.14, false));
 }
 
 #[test]
 fn decoder_simple_nonl_comma() {
     let mut d = Decoder::from_str("springsteen,s,");
-    let r: (~str, char, Option<int>) = ordie(d.decode());
-    assert_eq!(r, ("springsteen".to_owned(), 's', None));
+    let r: (StrBuf, char, Option<int>) = ordie(d.decode());
+    assert_eq!(r, ("springsteen".to_strbuf(), 's', None));
 }
 
 #[test]
 fn decoder_simple() {
     let mut d = Decoder::from_str("springsteen,s,1,0.14,false\n");
-    let r: (~str, char, int, f64, bool) = ordie(d.decode());
-    assert_eq!(r, ("springsteen".to_owned(), 's', 1, 0.14, false));
+    let r: (StrBuf, char, int, f64, bool) = ordie(d.decode());
+    assert_eq!(r, ("springsteen".to_strbuf(), 's', 1, 0.14, false));
 }
 
 #[test]
 fn decoder_simple_crlf() {
     let mut d = Decoder::from_str("springsteen,s,1,0.14,false\r\n");
-    let r: (~str, char, int, f64, bool) = ordie(d.decode());
-    assert_eq!(r, ("springsteen".to_owned(), 's', 1, 0.14, false));
+    let r: (StrBuf, char, int, f64, bool) = ordie(d.decode());
+    assert_eq!(r, ("springsteen".to_strbuf(), 's', 1, 0.14, false));
 }
 
 #[test]
 fn decoder_simple_tabbed() {
     let mut d = Decoder::from_str("springsteen\ts\t1\t0.14\tfalse\r\n");
     d.separator('\t');
-    let r: (~str, char, int, f64, bool) = ordie(d.decode());
-    assert_eq!(r, ("springsteen".to_owned(), 's', 1, 0.14, false));
+    let r: (StrBuf, char, int, f64, bool) = ordie(d.decode());
+    assert_eq!(r, ("springsteen".to_strbuf(), 's', 1, 0.14, false));
 }
 
 #[test]
 fn decoder_same_length_records() {
     let mut d = Decoder::from_str("a\na,b");
     d.enforce_same_length(true);
-    match d.decode_all::<Vec<~str>>() {
+    match d.decode_all::<Vec<StrBuf>>() {
         Ok(_) => fail!("Decoder should report an error when records of \
                         varying length are decoded and records of same \
                         length if enabled."),
@@ -194,15 +194,15 @@ fn decoder_all_empties_crlf() {
 #[test]
 fn decoder_empty_strings() {
     let mut d = Decoder::from_str("\"\"");
-    let r: (~str,) = ordie(d.decode());
-    assert_eq!(r, ("".to_owned(),));
+    let r: (StrBuf,) = ordie(d.decode());
+    assert_eq!(r, ("".to_strbuf(),));
 }
 
 #[test]
 fn decoder_quotes() {
     let mut d = Decoder::from_str("\" a \",   \"1\"   ,\"1\",  1  ");
-    let r: (~str, ~str, uint, uint) = ordie(d.decode());
-    assert_eq!(r, (" a ".to_owned(), "1".to_owned(), 1, 1));
+    let r: (StrBuf, StrBuf, uint, uint) = ordie(d.decode());
+    assert_eq!(r, (" a ".to_strbuf(), "1".to_strbuf(), 1, 1));
 }
 
 #[test]
@@ -277,7 +277,7 @@ fn decoder_sample() {
             1997,Ford,E350, \"Go get one now\n\
             they are going fast\"";
     let mut d = Decoder::from_str(s);
-    let r: Vec<(uint, ~str, ~str, ~str)> = ordie(d.decode_all());
+    let r: Vec<(uint, StrBuf, StrBuf, StrBuf)> = ordie(d.decode_all());
     assert_eq!(*r.get(1).ref0(), 1997);
 }
 
@@ -285,7 +285,7 @@ fn decoder_sample() {
 fn decoder_iter() {
     let mut d = Decoder::from_str("andrew,1\nkait,2\ncauchy,3\nplato,4");
     let mut rs = vec!();
-    for (_, num) in d.decode_iter::<(~str, uint)>() {
+    for (_, num) in d.decode_iter::<(StrBuf, uint)>() {
         rs.push(num);
     }
     assert_eq!(rs, vec!(1, 2, 3, 4));
