@@ -598,7 +598,7 @@ pub struct Error {
 
 impl fmt::Show for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f.buf, "Parse error:{}:{}: {}", self.line, self.col, self.msg)
+        write!(f, "Parse error:{}:{}: {}", self.line, self.col, self.msg)
     }
 }
 
