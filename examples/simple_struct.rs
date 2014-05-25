@@ -5,8 +5,8 @@ use std::path::Path;
 
 #[deriving(Decodable)]
 struct Record {
-    s1: ~str,
-    s2: ~str,
+    s1: StrBuf,
+    s2: StrBuf,
     dist: uint,
 }
 

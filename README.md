@@ -23,7 +23,7 @@ fn main() {
     let fp = &Path::new("./data/simple.csv");
     let mut rdr = csv::Decoder::from_file(fp);
 
-    for (s1, s2, dist) in rdr.decode_iter::<(~str, ~str, uint)>() {
+    for (s1, s2, dist) in rdr.decode_iter::<(StrBuf, StrBuf, uint)>() {
         println!("({}, {}): {}", s1, s2, dist);
     }
 }
@@ -39,8 +39,8 @@ use std::path::Path;
 
 #[deriving(Decodable)]
 struct Record {
-    s1: ~str,
-    s2: ~str,
+    s1: StrBuf,
+    s2: StrBuf,
     dist: uint,
 }
 
@@ -59,8 +59,8 @@ Do some records not have a distance for some reason? Use an `Option` type!
 ```rust
 #[deriving(Decodable)]
 struct Record {
-    s1: ~str,
-    s2: ~str,
+    s1: StrBuf,
+    s2: StrBuf,
     dist: Option<uint>,
 }
 ```

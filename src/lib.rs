@@ -47,9 +47,9 @@
 //! let mut rdr = csv::Decoder::from_str("abc,xyz\n1,2");
 //! rdr.has_headers(true);
 //! 
-//! assert_eq!(rdr.headers().unwrap(), vec!(~"abc", ~"xyz"));
-//! assert_eq!(rdr.iter().next().unwrap(), vec!(~"1", ~"2"));
-//! assert_eq!(rdr.headers().unwrap(), vec!(~"abc", ~"xyz"));
+//! assert_eq!(rdr.headers().unwrap(), vec!("abc".to_strbuf(), "xyz".to_strbuf()));
+//! assert_eq!(rdr.iter().next().unwrap(), vec!("1".to_strbuf(), "2".to_strbuf()));
+//! assert_eq!(rdr.headers().unwrap(), vec!("abc".to_strbuf(), "xyz".to_strbuf()));
 //! ```
 //!
 //! The decoder also assumes that a comma (`,`) is the delimiter used to
@@ -60,8 +60,8 @@
 //! let mut rdr = csv::Decoder::from_str("a\tb\ny\tz");
 //! rdr.separator('\t');
 //! 
-//! assert_eq!(rdr.iter().next().unwrap(), vec!(~"a", ~"b"));
-//! assert_eq!(rdr.iter().next().unwrap(), vec!(~"y", ~"z"));
+//! assert_eq!(rdr.iter().next().unwrap(), vec!("a".to_strbuf(), "b".to_strbuf()));
+//! assert_eq!(rdr.iter().next().unwrap(), vec!("y".to_strbuf(), "z".to_strbuf()));
 //! ```
 //!
 //!
@@ -79,15 +79,15 @@
 //!
 //! ```
 //! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
-//! let record: (~str, uint) = rdr.decode().unwrap();
-//! assert_eq!(record, (~"andrew", 1987));
+//! let record: (StrBuf, uint) = rdr.decode().unwrap();
+//! assert_eq!(record, ("andrew".to_strbuf(), 1987));
 //! ```
 //!
 //! An iterator is provided to repeat this for all records in the CSV data:
 //!
 //! ```
 //! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
-//! for (name, birth) in rdr.decode_iter::<(~str, uint)>() {
+//! for (name, birth) in rdr.decode_iter::<(StrBuf, uint)>() {
 //!     println!("Name: {}, Born: {}", name, birth);
 //! }
 //! ```
@@ -98,7 +98,7 @@
 //!
 //! ```
 //! # let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
-//! let mut it: csv::DecodedItems<(~str, uint)> = rdr.decode_iter();
+//! let mut it: csv::DecodedItems<(StrBuf, uint)> = rdr.decode_iter();
 //! ```
 //!
 //! While this is convenient, CSV data in the real world can often be messy
@@ -116,11 +116,11 @@
 //!
 //! ```
 //! let mut rdr = csv::Decoder::from_str("andrew, \"\"\nkait,");
-//! let record1: (~str, Option<uint>) = rdr.decode().unwrap();
-//! let record2: (~str, Option<uint>) = rdr.decode().unwrap();
+//! let record1: (StrBuf, Option<uint>) = rdr.decode().unwrap();
+//! let record2: (StrBuf, Option<uint>) = rdr.decode().unwrap();
 //!
-//! assert_eq!(record1, (~"andrew", None));
-//! assert_eq!(record2, (~"kait", None));
+//! assert_eq!(record1, ("andrew".to_strbuf(), None));
+//! assert_eq!(record2, ("kait".to_strbuf(), None));
 //! ```
 //!
 //! The `None` value here basically represents the fact that the decoder could
@@ -146,8 +146,8 @@
 //!
 //! fn main() {
 //!     let mut rdr = csv::Decoder::from_str("andrew,false\nkait,1");
-//!     let record: (~str, Truthy) = rdr.decode().unwrap();
-//!     assert_eq!(record, (~"andrew", Bool(false)));
+//!     let record: (StrBuf, Truthy) = rdr.decode().unwrap();
+//!     assert_eq!(record, ("andrew".to_strbuf(), Bool(false)));
 //! }
 //! ```
 //!
@@ -329,7 +329,7 @@ impl<'a> StrEncoder<'a> {
 
     /// This is just like `Encoder::encode`, except it calls `fail!` if there
     /// was an error.
-    pub fn encode<E: Encodable<Encoder<'a>, ~str>>(&mut self, e: E) {
+    pub fn encode<E: Encodable<Encoder<'a>, StrBuf>>(&mut self, e: E) {
         match self.encoder.encode(e) {
             Ok(_) => {}
             Err(err) => fail!("{}", err),
@@ -338,7 +338,7 @@ impl<'a> StrEncoder<'a> {
 
     /// This is just like `Encoder::encode_all`, except it calls `fail!` if 
     /// there was an error.
-    pub fn encode_all<E: Encodable<Encoder<'a>, ~str>>(&mut self, es: &[E]) {
+    pub fn encode_all<E: Encodable<Encoder<'a>, StrBuf>>(&mut self, es: &[E]) {
         match self.encoder.encode_all(es) {
             Ok(_) => {}
             Err(err) => fail!("{}", err),
@@ -377,14 +377,14 @@ impl<'a> Encoder<'a> {
 
     /// Encodes a record as CSV data. Only values with types that correspond
     /// to records can be given here (i.e., structs, tuples or vectors).
-    pub fn encode<E: Encodable<Encoder<'a>, ~str>>
-                 (&mut self, e: E) -> Result<(), ~str> {
+    pub fn encode<E: Encodable<Encoder<'a>, StrBuf>>
+                 (&mut self, e: E) -> Result<(), StrBuf> {
         e.encode(self)
     }
 
     /// Calls `encode` on each element in the slice given.
-    pub fn encode_all<E: Encodable<Encoder<'a>, ~str>>
-                     (&mut self, es: &[E]) -> Result<(), ~str> {
+    pub fn encode_all<E: Encodable<Encoder<'a>, StrBuf>>
+                     (&mut self, es: &[E]) -> Result<(), StrBuf> {
         // for e in es.move_iter() { 
         for e in es.iter() {
             try!(self.encode(e))
@@ -409,15 +409,15 @@ impl<'a> Encoder<'a> {
         self.use_crlf = yes;
     }
 
-    fn w(&mut self, s: &str) -> Result<(), ~str> {
+    fn w(&mut self, s: &str) -> Result<(), StrBuf> {
         match self.buf.write_str(s) {
             Ok(_) => Ok(()),
             Err(e) => Err(e.to_str()),
         }
     }
 
-    fn write_to_str<T: fmt::Show>(&mut self, t: T) -> Result<(), ~str> {
-        self.w(t.to_str())
+    fn write_to_str<T: fmt::Show>(&mut self, t: T) -> Result<(), StrBuf> {
+        self.w(t.to_str().as_slice())
     }
 
     fn quoted<'a>(&mut self, s: &'a str) -> str::MaybeOwned<'a> {
@@ -430,47 +430,50 @@ impl<'a> Encoder<'a> {
         }
     }
 
-    fn quote(&mut self, s: &str) -> ~str {
-        let s = s.replace("\"", "\"\"");
-        "\"" + s + "\""
+    fn quote(&mut self, s: &str) -> StrBuf {
+        let mut buf = StrBuf::with_capacity(s.len() + 2);
+        buf.push_char('"');
+        buf.push_str(s.replace("\"", "\"\"").as_slice());
+        buf.push_char('"');
+        buf
     }
 }
 
-impl<'a> serialize::Encoder<~str> for Encoder<'a> {
-    fn emit_nil(&mut self) -> Result<(), ~str> { unimplemented!() }
-    fn emit_uint(&mut self, v: uint) -> Result<(), ~str> {
+impl<'a> serialize::Encoder<StrBuf> for Encoder<'a> {
+    fn emit_nil(&mut self) -> Result<(), StrBuf> { unimplemented!() }
+    fn emit_uint(&mut self, v: uint) -> Result<(), StrBuf> {
         self.write_to_str(v)
     }
-    fn emit_u64(&mut self, v: u64) -> Result<(), ~str> { self.write_to_str(v) }
-    fn emit_u32(&mut self, v: u32) -> Result<(), ~str> { self.write_to_str(v) }
-    fn emit_u16(&mut self, v: u16) -> Result<(), ~str> { self.write_to_str(v) }
-    fn emit_u8(&mut self, v: u8) -> Result<(), ~str> { self.write_to_str(v) }
-    fn emit_int(&mut self, v: int) -> Result<(), ~str> { self.write_to_str(v) }
-    fn emit_i64(&mut self, v: i64) -> Result<(), ~str> { self.write_to_str(v) }
-    fn emit_i32(&mut self, v: i32) -> Result<(), ~str> { self.write_to_str(v) }
-    fn emit_i16(&mut self, v: i16) -> Result<(), ~str> { self.write_to_str(v) }
-    fn emit_i8(&mut self, v: i8) -> Result<(), ~str> { self.write_to_str(v) }
-    fn emit_bool(&mut self, v: bool) -> Result<(), ~str> { self.write_to_str(v) }
-    fn emit_f64(&mut self, v: f64) -> Result<(), ~str> {
-        self.w(::std::f64::to_str_digits(v, 10))
+    fn emit_u64(&mut self, v: u64) -> Result<(), StrBuf> { self.write_to_str(v) }
+    fn emit_u32(&mut self, v: u32) -> Result<(), StrBuf> { self.write_to_str(v) }
+    fn emit_u16(&mut self, v: u16) -> Result<(), StrBuf> { self.write_to_str(v) }
+    fn emit_u8(&mut self, v: u8) -> Result<(), StrBuf> { self.write_to_str(v) }
+    fn emit_int(&mut self, v: int) -> Result<(), StrBuf> { self.write_to_str(v) }
+    fn emit_i64(&mut self, v: i64) -> Result<(), StrBuf> { self.write_to_str(v) }
+    fn emit_i32(&mut self, v: i32) -> Result<(), StrBuf> { self.write_to_str(v) }
+    fn emit_i16(&mut self, v: i16) -> Result<(), StrBuf> { self.write_to_str(v) }
+    fn emit_i8(&mut self, v: i8) -> Result<(), StrBuf> { self.write_to_str(v) }
+    fn emit_bool(&mut self, v: bool) -> Result<(), StrBuf> { self.write_to_str(v) }
+    fn emit_f64(&mut self, v: f64) -> Result<(), StrBuf> {
+        self.w(::std::f64::to_str_digits(v, 10).as_slice())
     }
-    fn emit_f32(&mut self, v: f32) -> Result<(), ~str> {
-        self.w(::std::f32::to_str_digits(v, 10))
+    fn emit_f32(&mut self, v: f32) -> Result<(), StrBuf> {
+        self.w(::std::f32::to_str_digits(v, 10).as_slice())
     }
-    fn emit_char(&mut self, v: char) -> Result<(), ~str> {
+    fn emit_char(&mut self, v: char) -> Result<(), StrBuf> {
         self.write_to_str(v)
     }
-    fn emit_str(&mut self, v: &str) -> Result<(), ~str> {
-        let s = self.quoted(v).to_str();
-        self.w(s)
+    fn emit_str(&mut self, v: &str) -> Result<(), StrBuf> {
+        let s = self.quoted(v);
+        self.w(s.as_slice())
     }
-    fn emit_enum(&mut self, _: &str, f: |&mut Encoder<'a>| -> Result<(), ~str>)
-                -> Result<(), ~str> {
+    fn emit_enum(&mut self, _: &str, f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                -> Result<(), StrBuf> {
         f(self)
     }
     fn emit_enum_variant(&mut self, v_name: &str, _: uint, len: uint,
-                         f: |&mut Encoder<'a>| -> Result<(), ~str>)
-                        -> Result<(), ~str> {
+                         f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                        -> Result<(), StrBuf> {
         match len {
             0 => self.w(v_name),
             1 => f(self),
@@ -479,62 +482,62 @@ impl<'a> serialize::Encoder<~str> for Encoder<'a> {
         }
     }
     fn emit_enum_variant_arg(&mut self, _: uint,
-                             f: |&mut Encoder<'a>| -> Result<(), ~str>)
-                            -> Result<(), ~str> {
+                             f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                            -> Result<(), StrBuf> {
         f(self)
     }
     fn emit_enum_struct_variant(&mut self, v_name: &str, v_id: uint, len: uint,
-                                f: |&mut Encoder<'a>| -> Result<(), ~str>)
-                               -> Result<(), ~str> {
+                                f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                               -> Result<(), StrBuf> {
         self.emit_enum_variant(v_name, v_id, len, f)
     }
     fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
-                                      _: |&mut Encoder<'a>| -> Result<(), ~str>)
-                                     -> Result<(), ~str> {
+                                      _: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                                     -> Result<(), StrBuf> {
         Err("Cannot encode enum variants with arguments.".to_owned())
     }
     fn emit_struct(&mut self, _: &str, len: uint,
-                   f: |&mut Encoder<'a>| -> Result<(), ~str>)
-                  -> Result<(), ~str> {
+                   f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                  -> Result<(), StrBuf> {
         self.emit_seq(len, f)
     }
     fn emit_struct_field(&mut self, _: &str, f_idx: uint,
-                         f: |&mut Encoder<'a>| -> Result<(), ~str>)
-                        -> Result<(), ~str> {
+                         f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                        -> Result<(), StrBuf> {
         self.emit_seq_elt(f_idx, f)
     }
     fn emit_tuple(&mut self, len: uint,
-                  f: |&mut Encoder<'a>| -> Result<(), ~str>)
-                 -> Result<(), ~str> {
+                  f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                 -> Result<(), StrBuf> {
         self.emit_seq(len, f)
     }
     fn emit_tuple_arg(&mut self, idx: uint,
-                      f: |&mut Encoder<'a>| -> Result<(), ~str>)
-                     -> Result<(), ~str> {
+                      f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                     -> Result<(), StrBuf> {
         self.emit_seq_elt(idx, f)
     }
     fn emit_tuple_struct(&mut self, _: &str, _: uint,
-                         _: |&mut Encoder<'a>| -> Result<(), ~str>)
-                        -> Result<(), ~str> {
+                         _: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                        -> Result<(), StrBuf> {
         unimplemented!()
     }
     fn emit_tuple_struct_arg(&mut self, _: uint,
-                             _: |&mut Encoder<'a>| -> Result<(), ~str>)
-                            -> Result<(), ~str> {
+                             _: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                            -> Result<(), StrBuf> {
         unimplemented!()
     }
-    fn emit_option(&mut self, f: |&mut Encoder<'a>| -> Result<(), ~str>)
-                  -> Result<(), ~str> {
+    fn emit_option(&mut self, f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                  -> Result<(), StrBuf> {
         f(self)
     }
-    fn emit_option_none(&mut self) -> Result<(), ~str> { Ok(()) }
-    fn emit_option_some(&mut self, f: |&mut Encoder<'a>| -> Result<(), ~str>)
-                       -> Result<(), ~str> {
+    fn emit_option_none(&mut self) -> Result<(), StrBuf> { Ok(()) }
+    fn emit_option_some(&mut self, f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                       -> Result<(), StrBuf> {
         f(self)
     }
     fn emit_seq(&mut self, len: uint,
-                f: |this: &mut Encoder<'a>| -> Result<(), ~str>)
-               -> Result<(), ~str> {
+                f: |this: &mut Encoder<'a>| -> Result<(), StrBuf>)
+               -> Result<(), StrBuf> {
         if len == 0 {
             return Err("Records must have length bigger than 0.".to_owned())
         }
@@ -555,27 +558,26 @@ impl<'a> serialize::Encoder<~str> for Encoder<'a> {
         }
     }
     fn emit_seq_elt(&mut self, idx: uint,
-                    f: |this: &mut Encoder<'a>| -> Result<(), ~str>)
-                   -> Result<(), ~str> {
+                    f: |this: &mut Encoder<'a>| -> Result<(), StrBuf>)
+                   -> Result<(), StrBuf> {
         if idx > 0 {
-            let s = self.sep.to_str();
-            try!(self.w(s))
+            try!(from_ioresult(self.buf.write_char(self.sep)));
         }
         f(self)
     }
     fn emit_map(&mut self, _: uint,
-                _: |&mut Encoder<'a>| -> Result<(), ~str>)
-               -> Result<(), ~str> {
+                _: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+               -> Result<(), StrBuf> {
         unimplemented!()
     }
     fn emit_map_elt_key(&mut self, _: uint,
-                        _: |&mut Encoder<'a>| -> Result<(), ~str>)
-                       -> Result<(), ~str> {
+                        _: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                       -> Result<(), StrBuf> {
         unimplemented!()
     }
     fn emit_map_elt_val(&mut self, _: uint,
-                        _: |&mut Encoder<'a>| -> Result<(), ~str>)
-                       -> Result<(), ~str> {
+                        _: |&mut Encoder<'a>| -> Result<(), StrBuf>)
+                       -> Result<(), StrBuf> {
         unimplemented!()
     }
 }
@@ -590,7 +592,7 @@ pub struct Error {
     col: uint,
 
     /// A message describing the error.
-    msg: ~str,
+    msg: StrBuf,
 
     /// Whether this error corresponds to EOF or not.
     eof: bool,
@@ -608,7 +610,7 @@ struct Parser<'a> {
     same_len: bool, // whether to enforce all rows be of same length
     first_len: uint, // length of first row
     has_headers: bool, // interpret first record as headers when true
-    headers: Vec<~str>, // the first record in the CSV data
+    headers: Vec<StrBuf>, // the first record in the CSV data
     buf: BufferedReader<&'a mut Reader>, // buffer to read CSV data from
     cur: Option<char>, // the current character
     look: Option<char>, // one character look-ahead
@@ -621,7 +623,7 @@ impl<'a> Parser<'a> {
         Error {
             line: self.line,
             col: self.col,
-            msg: msg.to_owned(),
+            msg: msg.to_strbuf(),
             eof: false,
         }
     }
@@ -630,7 +632,7 @@ impl<'a> Parser<'a> {
         Error {
             line: self.line,
             col: self.col,
-            msg: "EOF".to_owned(),
+            msg: "EOF".to_strbuf(),
             eof: true,
         }
     }
@@ -662,14 +664,14 @@ impl<'a> Parser<'a> {
                         }
                         _ => Err(self.err(format!(
                                  "Could not read char [{}]: {} (detail: {})",
-                                 err.kind, err, err.detail))),
+                                 err.kind, err, err.detail).as_slice())),
                     }
                 }
             }
         }
     }
 
-    fn parse_record(&mut self, as_header: bool) -> Result<Vec<~str>, Error> {
+    fn parse_record(&mut self, as_header: bool) -> Result<Vec<StrBuf>, Error> {
         try!(self.eat_lineterms());
         if self.peek_is_eof() {
             return Err(self.err_eof())
@@ -694,7 +696,7 @@ impl<'a> Parser<'a> {
             } else if self.first_len != vals.len() {
                 return Err(self.err(format!(
                     "Record has length {} but other records have length {}",
-                    vals.len(), self.first_len)))
+                    vals.len(), self.first_len).as_slice()))
             }
         } else if self.first_len == 0 {
             // This isn't used to enforce same length records, but as a hint
@@ -719,7 +721,7 @@ impl<'a> Parser<'a> {
         Ok(vals)
     }
 
-    fn parse_value(&mut self) -> Result<~str, Error> {
+    fn parse_value(&mut self) -> Result<StrBuf, Error> {
         let mut only_whitespace = true;
         let mut res = StrBuf::with_capacity(4);
         loop {
@@ -739,7 +741,7 @@ impl<'a> Parser<'a> {
         Ok(res.into_owned())
     }
 
-    fn parse_quoted_value(&mut self) -> Result<~str, Error> {
+    fn parse_quoted_value(&mut self) -> Result<StrBuf, Error> {
         // Assumes that " has already been read.
         let mut res = StrBuf::with_capacity(4);
         loop {
@@ -764,7 +766,7 @@ impl<'a> Parser<'a> {
                             "Expected EOF, line terminator, separator or \
                             whitespace following quoted value but found \
                             '{}' instead.", self.cur.unwrap());
-                        return Err(self.err(msg));
+                        return Err(self.err(msg.as_slice()));
                     }
                     try!(self.next_char());
                 }
@@ -862,8 +864,8 @@ pub struct Decoder<'a> {
 /// A representation of a value found in a CSV document.
 /// A CSV document's structure is simple (non-recursive).
 enum Value {
-    Record(Vec<~str>),
-    String(~str),
+    Record(Vec<StrBuf>),
+    String(StrBuf),
 }
 
 impl<'a> Decoder<'a> {
@@ -926,12 +928,12 @@ impl<'a> Decoder<'a> {
     ///
     /// ```no_run
     /// let mut dec = csv::Decoder::from_str("abc,1");
-    /// let mut iter = dec.decode_iter::<(~str, uint)>();
+    /// let mut iter = dec.decode_iter::<(StrBuf, uint)>();
     /// ```
     ///
     /// ```no_run
     /// let mut dec = csv::Decoder::from_str("abc,1");
-    /// let mut iter: csv::DecodedItems<(~str, uint)> = dec.decode_iter();
+    /// let mut iter: csv::DecodedItems<(StrBuf, uint)> = dec.decode_iter();
     /// ```
     ///
     /// If there is an error decoding the data then `fail!` is called.
@@ -965,7 +967,7 @@ impl<'a> Decoder<'a> {
     /// Circumvents the decoding interface and forces the parsing of the next
     /// record and returns it. A record returned by this method will never be
     /// decoded.
-    pub fn record(&mut self) -> Result<Vec<~str>, Error> {
+    pub fn record(&mut self) -> Result<Vec<StrBuf>, Error> {
         self.p.parse_record(false)
     }
 
@@ -993,7 +995,7 @@ impl<'a> Decoder<'a> {
     ///
     /// If `has_headers` is `false` (which is the default), then this will
     /// call `fail!`.
-    pub fn headers(&mut self) -> Result<Vec<~str>, Error> {
+    pub fn headers(&mut self) -> Result<Vec<StrBuf>, Error> {
         if !self.p.has_headers {
             fail!("To get headers from CSV data, has_headers must be called.")
         }
@@ -1015,10 +1017,10 @@ pub struct Records<'a> {
     dec: &'a mut Decoder<'a>
 }
 
-impl<'a> Iterator<Vec<~str>> for Records<'a> {
+impl<'a> Iterator<Vec<StrBuf>> for Records<'a> {
     /// Iterates over each record in the CSV data. The iterator stops when
     /// EOF is reached.
-    fn next(&mut self) -> Option<Vec<~str>> {
+    fn next(&mut self) -> Option<Vec<StrBuf>> {
         match self.dec.record() {
             Ok(r) => Some(r),
             Err(err) => {
@@ -1069,21 +1071,21 @@ impl<'a> Decoder<'a> {
         Ok(())
     }
 
-    fn pop_record(&mut self) -> Result<Vec<~str>, Error> {
+    fn pop_record(&mut self) -> Result<Vec<StrBuf>, Error> {
         match try!(self.pop()) {
             Record(r) => Ok(r),
             String(s) => {
                 let m = format!("Expected record but got value '{}'.", s);
-                Err(self.err(m))
+                Err(self.err(m.as_slice()))
             }
         }
     }
 
-    fn pop_string(&mut self) -> Result<~str, Error> {
+    fn pop_string(&mut self) -> Result<StrBuf, Error> {
         match try!(self.pop()) {
             Record(_) => {
                 let m = format!("Expected value but got record.");
-                Err(self.err(m))
+                Err(self.err(m.as_slice()))
             }
             String(s) => Ok(s),
         }
@@ -1091,38 +1093,29 @@ impl<'a> Decoder<'a> {
 
     fn pop_from_str<T: FromStr + Default>(&mut self) -> Result<T, Error> {
         let s = try!(self.pop_string());
-        let s = s.trim();
+        let s = s.as_slice().trim();
         match FromStr::from_str(s) {
             Some(t) => Ok(t),
             None => {
                 let m = format!("Failed converting '{}' from str.", s);
-                Err(self.err(m))
+                Err(self.err(m.as_slice()))
             }
         }
     }
 
-    fn push_record(&mut self, r: Vec<~str>) {
+    fn push_record(&mut self, r: Vec<StrBuf>) {
         self.stack.push(Record(r))
     }
 
-    fn push_string(&mut self, s: ~str) {
+    fn push_string(&mut self, s: StrBuf) {
         self.stack.push(String(s))
     }
 
     fn err(&self, msg: &str) -> Error {
         self.p.err(msg)
     }
-
-    fn fail<T>(&self, msg: &str) -> Result<T, Error> {
-        fail!("{}", self.p.err(msg));
-    }
 }
 
-// The Decoder trait doesn't support error handling at all, yet it is important
-// not to crash the program when decoding bad CSV data.
-// Therefore, we attempt to do error handling using a huge hack: when there's
-// an error, we continue decoding but use some sort of default value. This is
-// particularly gruesome when decoding polymorphic types.
 impl<'a> serialize::Decoder<Error> for Decoder<'a> {
     fn read_nil(&mut self) -> Result<(), Error> { unimplemented!() }
     fn read_uint(&mut self) -> Result<uint, Error> { self.pop_from_str() }
@@ -1140,10 +1133,10 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
     fn read_f32(&mut self) -> Result<f32, Error> { self.pop_from_str() }
     fn read_char(&mut self) -> Result<char, Error> {
         let s = try!(self.pop_string());
-        let chars: Vec<char> = s.chars().collect();
+        let chars: Vec<char> = s.as_slice().chars().collect();
         if chars.len() != 1 {
-            return self.fail(format!(
-                "Expected single character but got '{}'.", s))
+            return Err(self.err(format!(
+                "Expected single character but got '{}'.", s).as_slice()))
         }
         Ok(*chars.get(0))
     }
@@ -1158,7 +1151,7 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
     fn read_enum_variant<T>(&mut self, names: &[&str],
                             f: |&mut Decoder<'a>, uint| -> Result<T, Error>)
                            -> Result<T, Error> {
-        let variant = to_lower(try!(self.pop_string()));
+        let variant = to_lower(try!(self.pop_string()).as_slice());
         match names.iter().position(|&name| to_lower(name) == variant) {
             Some(idx) => return f(self, idx),
             None => {}
@@ -1187,8 +1180,8 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
                 }
             }
         }
-        return self.fail(format!(
-            "Could not load value into any variant in {}", names))
+        return Err(self.err(format!(
+            "Could not load value into any variant in {}", names).as_slice()))
     }
     fn read_enum_variant_arg<T>(&mut self, _: uint,
                                 f: |&mut Decoder<'a>| -> Result<T, Error>)
@@ -1214,7 +1207,7 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
         if r.len() != len {
             let m = format!("Struct '{}' has {} fields but current record \
                              has {} fields.", s_name, len, r.len());
-            return self.fail(m)
+            return Err(self.err(m.as_slice()))
         }
         for v in r.move_iter().rev() {
             self.push_string(v)
@@ -1294,6 +1287,13 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
     }
 }
 
-fn to_lower(s: &str) -> ~str {
+fn to_lower(s: &str) -> StrBuf {
     s.chars().map(|c| c.to_lowercase()).collect()
+}
+
+fn from_ioresult(err: std::io::IoResult<()>) -> Result<(), StrBuf> {
+    match err {
+        Ok(()) => Ok(()),
+        Err(err) => Err(err.to_str()),
+    }
 }

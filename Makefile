@@ -11,7 +11,7 @@ ctags:
 
 docs:
 	rm -rf doc
-	rustdoc --test src/lib.rs
+	rustdoc -L . --test src/lib.rs
 	rustdoc src/lib.rs
 	# WTF is rustdoc doing?
 	chmod 755 doc
@@ -37,7 +37,7 @@ test-clean:
 	rm -rf ./test-runner ./bench-runner
 
 clean: test-clean
-	rm -f *.rlib
+	rm -f *.rlib *.so
 
 push:
 	git push origin master

@@ -3,7 +3,7 @@
 set -e
 
 for f in *.rs; do
-  rustc "$f"
+  rustc -L.. "$f"
   ./${f%%.rs}
   rm -f ${f%%.rs}
 done

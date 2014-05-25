@@ -6,16 +6,16 @@ use csv::Decoder;
 
 #[deriving(Decodable)]
 struct Play {
-    gameid: ~str,
+    gameid: StrBuf,
     qtr: uint,
     min: Option<uint>,
     sec: Option<uint>,
-    team_off: ~str,
-    team_def: ~str,
+    team_off: StrBuf,
+    team_def: StrBuf,
     down: Option<uint>,
     togo: Option<uint>,
     ydline: Option<uint>,
-    description: ~str,
+    description: StrBuf,
     offscore: uint,
     defscore: uint,
     season: uint,
@@ -32,9 +32,9 @@ fn main() {
             println!("Found {} plays.", plays.len());
 
             let tfb = plays.iter().find(|&p| {
-                "NE" == p.team_off && "DEN" == p.team_def
-                && p.description.contains("TOUCHDOWN")
-                && p.description.contains("T.Brady")
+                "NE" == p.team_off.as_slice() && "DEN" == p.team_def.as_slice()
+                && p.description.as_slice().contains("TOUCHDOWN")
+                && p.description.as_slice().contains("T.Brady")
             }).unwrap();
             println!("Tom Brady touchdown: {}", tfb.description);
         }
