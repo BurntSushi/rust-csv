@@ -726,19 +726,21 @@ impl<'a> Parser<'a> {
         let mut res = StrBuf::with_capacity(4);
         loop {
             try!(self.next_char());
-            if self.is_lineterm() || self.is_eof() || self.is_sep() {
+            if self.is_sep() || self.is_lineterm() || self.is_eof() {
                 break
-            } else if self.cur.unwrap().is_whitespace() {
-                res.push_char(self.cur.unwrap());
-                continue
-            } else if only_whitespace && self.cur_is('"') {
-                // Throw away any leading whitespace.
-                return self.parse_quoted_value()
+            } else if only_whitespace {
+                if self.cur_is('"') {
+                    // Throw away any leading whitespace.
+                    return self.parse_quoted_value()
+                } else if self.cur.unwrap().is_whitespace() {
+                    res.push_char(self.cur.unwrap());
+                    continue
+                }
             }
             only_whitespace = false;
             res.push_char(self.cur.unwrap());
         }
-        Ok(res.into_owned())
+        Ok(res)
     }
 
     fn parse_quoted_value(&mut self) -> Result<StrBuf, Error> {
@@ -759,7 +761,7 @@ impl<'a> Parser<'a> {
                 // If we see something that isn't whitespace, it's an error.
                 try!(self.next_char());
                 loop {
-                    if self.is_lineterm() || self.is_eof() || self.is_sep() {
+                    if self.is_sep() || self.is_lineterm() || self.is_eof() {
                         break
                     } else if !self.cur.unwrap().is_whitespace() {
                         let msg = format!(
@@ -778,10 +780,9 @@ impl<'a> Parser<'a> {
                 res.push_char('"');
                 continue
             }
-
             res.push_char(self.cur.unwrap());
         }
-        Ok(res.into_owned())
+        Ok(res)
     }
 
     fn is_eof(&self) -> bool {
