@@ -1,6 +1,6 @@
-This crate provides a streaming CSV (comma separated values) encoder and 
-decoder that works with the `Encoder` and `Decoder` traits in Rust's 
-`serialize` crate. It [conforms closely to RFC 
+This crate provides a streaming CSV (comma separated values) encoder and
+decoder that works with the `Encoder` and `Decoder` traits in Rust's
+`serialize` crate. It [conforms closely to RFC
 4180](http://burntsushi.net/rustdoc/csv/#compliance-with-rfc-4180).
 
 [![Build status](https://api.travis-ci.org/BurntSushi/rust-csv.png)](https://travis-ci.org/BurntSushi/rust-csv)
@@ -10,7 +10,7 @@ Licensed under the [UNLICENSE](http://unlicense.org).
 
 ### Simple examples
 
-Here is a full working Rust program that decodes records from a CSV file. Each 
+Here is a full working Rust program that decodes records from a CSV file. Each
 record consists of two strings and an integer (the edit distance between the
 strings):
 
@@ -23,7 +23,7 @@ fn main() {
     let fp = &Path::new("./data/simple.csv");
     let mut rdr = csv::Decoder::from_file(fp);
 
-    for (s1, s2, dist) in rdr.decode_iter::<(StrBuf, StrBuf, uint)>() {
+    for (s1, s2, dist) in rdr.decode_iter::<(String, String, uint)>() {
         println!("({}, {}): {}", s1, s2, dist);
     }
 }
@@ -39,8 +39,8 @@ use std::path::Path;
 
 #[deriving(Decodable)]
 struct Record {
-    s1: StrBuf,
-    s2: StrBuf,
+    s1: String,
+    s2: String,
     dist: uint,
 }
 
@@ -59,14 +59,14 @@ Do some records not have a distance for some reason? Use an `Option` type!
 ```rust
 #[deriving(Decodable)]
 struct Record {
-    s1: StrBuf,
-    s2: StrBuf,
+    s1: String,
+    s2: String,
     dist: Option<uint>,
 }
 ```
 
-You can also read CSV headers, change the separator, use `enum` types or just 
-get plain access to records as vectors of strings. There are examples with more 
+You can also read CSV headers, change the separator, use `enum` types or just
+get plain access to records as vectors of strings. There are examples with more
 details in the documentation.
 
 ### Documentation
@@ -77,7 +77,7 @@ The API is fully documented with lots of examples:
 
 ### Installation
 
-This will hopefully get easier when the new `cargo` package manager lands, but 
+This will hopefully get easier when the new `cargo` package manager lands, but
 for right now, you can either clone the repo and build manually or install with
 `cargo-lite`.
 
@@ -110,7 +110,7 @@ The only other CSV parser I know of that builds is
 `Encoder` or `Decoder` API.
 
 Another one popped up at
-[arjantop/rust-tabular](https://github.com/arjantop/rust-tabular) just 
+[arjantop/rust-tabular](https://github.com/arjantop/rust-tabular) just
 recently, which also does not support the `Encoder` or `Decoder` API.
 However, it does support parsing fixed-width tables.
 

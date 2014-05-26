@@ -51,16 +51,16 @@ fn large_raw_records(b: &mut Bencher) {
 
 #[deriving(Decodable)]
 struct Play {
-    gameid: StrBuf,
+    gameid: String,
     qtr: uint,
     min: Option<uint>,
     sec: Option<uint>,
-    team_off: StrBuf,
-    team_def: StrBuf,
+    team_off: String,
+    team_def: String,
     down: Option<uint>,
     togo: Option<uint>,
     ydline: Option<uint>,
-    description: StrBuf,
+    description: String,
     offscore: uint,
     defscore: uint,
     season: uint,

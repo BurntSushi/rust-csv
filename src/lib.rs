@@ -4,8 +4,8 @@
 #![license = "UNLICENSE"]
 #![doc(html_root_url = "http://burntsushi.net/rustdoc/csv")]
 
-//! This crate provides a streaming CSV (comma separated values) encoder and 
-//! decoder that works with the `Encoder` and `Decoder` traits in Rust's 
+//! This crate provides a streaming CSV (comma separated values) encoder and
+//! decoder that works with the `Encoder` and `Decoder` traits in Rust's
 //! `serialize` crate.
 //!
 //! A CSV file is composed of a list of records where each record starts on
@@ -47,11 +47,11 @@
 //! let mut rdr = csv::Decoder::from_str("abc,xyz\n1,2");
 //! rdr.has_headers(true);
 //!
-//! assert_eq!(rdr.headers().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<StrBuf>>(),
+//! assert_eq!(rdr.headers().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<String>>(),
 //!            vec!("abc".to_strbuf(), "xyz".to_strbuf()));
-//! assert_eq!(rdr.iter().next().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<StrBuf>>(),
+//! assert_eq!(rdr.iter().next().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<String>>(),
 //!            vec!("1".to_strbuf(), "2".to_strbuf()));
-//! assert_eq!(rdr.headers().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<StrBuf>>(),
+//! assert_eq!(rdr.headers().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<String>>(),
 //!            vec!("abc".to_strbuf(), "xyz".to_strbuf()));
 //! ```
 //!
@@ -63,9 +63,9 @@
 //! let mut rdr = csv::Decoder::from_str("a\tb\ny\tz");
 //! rdr.separator('\t');
 //!
-//! assert_eq!(rdr.iter().next().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<StrBuf>>(),
+//! assert_eq!(rdr.iter().next().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<String>>(),
 //!            vec!("a".to_strbuf(), "b".to_strbuf()));
-//! assert_eq!(rdr.iter().next().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<StrBuf>>(),
+//! assert_eq!(rdr.iter().next().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<String>>(),
 //!            vec!("y".to_strbuf(), "z".to_strbuf()));
 //! ```
 //!
@@ -84,7 +84,7 @@
 //!
 //! ```
 //! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
-//! let record: (StrBuf, uint) = rdr.decode().unwrap();
+//! let record: (String, uint) = rdr.decode().unwrap();
 //! assert_eq!(record, ("andrew".to_strbuf(), 1987));
 //! ```
 //!
@@ -92,7 +92,7 @@
 //!
 //! ```
 //! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
-//! for (name, birth) in rdr.decode_iter::<(StrBuf, uint)>() {
+//! for (name, birth) in rdr.decode_iter::<(String, uint)>() {
 //!     println!("Name: {}, Born: {}", name, birth);
 //! }
 //! ```
@@ -103,7 +103,7 @@
 //!
 //! ```
 //! # let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
-//! let mut it: csv::DecodedItems<(StrBuf, uint)> = rdr.decode_iter();
+//! let mut it: csv::DecodedItems<(String, uint)> = rdr.decode_iter();
 //! ```
 //!
 //! While this is convenient, CSV data in the real world can often be messy
@@ -121,8 +121,8 @@
 //!
 //! ```
 //! let mut rdr = csv::Decoder::from_str("andrew, \"\"\nkait,");
-//! let record1: (StrBuf, Option<uint>) = rdr.decode().unwrap();
-//! let record2: (StrBuf, Option<uint>) = rdr.decode().unwrap();
+//! let record1: (String, Option<uint>) = rdr.decode().unwrap();
+//! let record2: (String, Option<uint>) = rdr.decode().unwrap();
 //!
 //! assert_eq!(record1, ("andrew".to_strbuf(), None));
 //! assert_eq!(record2, ("kait".to_strbuf(), None));
@@ -136,7 +136,7 @@
 //! We can take this one step further with enumerations. For example, sometimes
 //! values are encoded with a variety of different types. As a contrived
 //! example, consider values that use any of `1`, `0`, `true` or `false`.
-//! None of these values are invalid, so we'd like to decode any of them. This 
+//! None of these values are invalid, so we'd like to decode any of them. This
 //! can be expressed with an `enum` type:
 //!
 //! ```
@@ -151,7 +151,7 @@
 //!
 //! fn main() {
 //!     let mut rdr = csv::Decoder::from_str("andrew,false\nkait,1");
-//!     let record: (StrBuf, Truthy) = rdr.decode().unwrap();
+//!     let record: (String, Truthy) = rdr.decode().unwrap();
 //!     assert_eq!(record, ("andrew".to_strbuf(), Bool(false)));
 //! }
 //! ```
@@ -210,14 +210,14 @@
 //!
 //! ```no_run
 //! extern crate csv;
-//! 
+//!
 //! use std::comm::channel;
 //! use std::io::{ChanReader, ChanWriter, Reader, Writer};
 //! use std::io::timer::sleep;
 //! use std::task::spawn;
-//! 
+//!
 //! use csv::{Decoder, Encoder};
-//! 
+//!
 //! fn main() {
 //!     let (send, recv) = channel();
 //!     spawn(proc() {
@@ -231,7 +231,7 @@
 //!             sleep(1000);
 //!         }
 //!     });
-//! 
+//!
 //!     let mut r = ChanReader::new(recv);
 //!     // We create a CSV reader with a small buffer so that we can see streaming
 //!     // in action on small inputs.
@@ -266,7 +266,7 @@
 //!     If a record with a different length is found, an error is returned.
 //!     This behavior may be turned off by calling `enforce_same_length` with
 //!     `false`.
-//!   * Empty lines (that do not include other whitespace) are ignored 
+//!   * Empty lines (that do not include other whitespace) are ignored
 //!     by the decoder.
 //!   * Only UTF-8 is supported (and therefore ASCII). Bytes that cannot be
 //!     decoded into UTF-8 will be ignored by the decoder.
@@ -334,16 +334,16 @@ impl<'a> StrEncoder<'a> {
 
     /// This is just like `Encoder::encode`, except it calls `fail!` if there
     /// was an error.
-    pub fn encode<E: Encodable<Encoder<'a>, StrBuf>>(&mut self, e: E) {
+    pub fn encode<E: Encodable<Encoder<'a>, String>>(&mut self, e: E) {
         match self.encoder.encode(e) {
             Ok(_) => {}
             Err(err) => fail!("{}", err),
         }
     }
 
-    /// This is just like `Encoder::encode_all`, except it calls `fail!` if 
+    /// This is just like `Encoder::encode_all`, except it calls `fail!` if
     /// there was an error.
-    pub fn encode_all<E: Encodable<Encoder<'a>, StrBuf>>(&mut self, es: &[E]) {
+    pub fn encode_all<E: Encodable<Encoder<'a>, String>>(&mut self, es: &[E]) {
         match self.encoder.encode_all(es) {
             Ok(_) => {}
             Err(err) => fail!("{}", err),
@@ -382,15 +382,15 @@ impl<'a> Encoder<'a> {
 
     /// Encodes a record as CSV data. Only values with types that correspond
     /// to records can be given here (i.e., structs, tuples or vectors).
-    pub fn encode<E: Encodable<Encoder<'a>, StrBuf>>
-                 (&mut self, e: E) -> Result<(), StrBuf> {
+    pub fn encode<E: Encodable<Encoder<'a>, String>>
+                 (&mut self, e: E) -> Result<(), String> {
         e.encode(self)
     }
 
     /// Calls `encode` on each element in the slice given.
-    pub fn encode_all<E: Encodable<Encoder<'a>, StrBuf>>
-                     (&mut self, es: &[E]) -> Result<(), StrBuf> {
-        // for e in es.move_iter() { 
+    pub fn encode_all<E: Encodable<Encoder<'a>, String>>
+                     (&mut self, es: &[E]) -> Result<(), String> {
+        // for e in es.move_iter() {
         for e in es.iter() {
             try!(self.encode(e))
         }
@@ -414,14 +414,14 @@ impl<'a> Encoder<'a> {
         self.use_crlf = yes;
     }
 
-    fn w(&mut self, s: &str) -> Result<(), StrBuf> {
+    fn w(&mut self, s: &str) -> Result<(), String> {
         match self.buf.write_str(s) {
             Ok(_) => Ok(()),
             Err(e) => Err(e.to_str()),
         }
     }
 
-    fn write_to_str<T: fmt::Show>(&mut self, t: T) -> Result<(), StrBuf> {
+    fn write_to_str<T: fmt::Show>(&mut self, t: T) -> Result<(), String> {
         self.w(t.to_str().as_slice())
     }
 
@@ -435,8 +435,8 @@ impl<'a> Encoder<'a> {
         }
     }
 
-    fn quote(&mut self, s: &str) -> StrBuf {
-        let mut buf = StrBuf::with_capacity(s.len() + 2);
+    fn quote(&mut self, s: &str) -> String {
+        let mut buf = String::with_capacity(s.len() + 2);
         buf.push_char('"');
         buf.push_str(s.replace("\"", "\"\"").as_slice());
         buf.push_char('"');
@@ -444,41 +444,41 @@ impl<'a> Encoder<'a> {
     }
 }
 
-impl<'a> serialize::Encoder<StrBuf> for Encoder<'a> {
-    fn emit_nil(&mut self) -> Result<(), StrBuf> { unimplemented!() }
-    fn emit_uint(&mut self, v: uint) -> Result<(), StrBuf> {
+impl<'a> serialize::Encoder<String> for Encoder<'a> {
+    fn emit_nil(&mut self) -> Result<(), String> { unimplemented!() }
+    fn emit_uint(&mut self, v: uint) -> Result<(), String> {
         self.write_to_str(v)
     }
-    fn emit_u64(&mut self, v: u64) -> Result<(), StrBuf> { self.write_to_str(v) }
-    fn emit_u32(&mut self, v: u32) -> Result<(), StrBuf> { self.write_to_str(v) }
-    fn emit_u16(&mut self, v: u16) -> Result<(), StrBuf> { self.write_to_str(v) }
-    fn emit_u8(&mut self, v: u8) -> Result<(), StrBuf> { self.write_to_str(v) }
-    fn emit_int(&mut self, v: int) -> Result<(), StrBuf> { self.write_to_str(v) }
-    fn emit_i64(&mut self, v: i64) -> Result<(), StrBuf> { self.write_to_str(v) }
-    fn emit_i32(&mut self, v: i32) -> Result<(), StrBuf> { self.write_to_str(v) }
-    fn emit_i16(&mut self, v: i16) -> Result<(), StrBuf> { self.write_to_str(v) }
-    fn emit_i8(&mut self, v: i8) -> Result<(), StrBuf> { self.write_to_str(v) }
-    fn emit_bool(&mut self, v: bool) -> Result<(), StrBuf> { self.write_to_str(v) }
-    fn emit_f64(&mut self, v: f64) -> Result<(), StrBuf> {
+    fn emit_u64(&mut self, v: u64) -> Result<(), String> { self.write_to_str(v) }
+    fn emit_u32(&mut self, v: u32) -> Result<(), String> { self.write_to_str(v) }
+    fn emit_u16(&mut self, v: u16) -> Result<(), String> { self.write_to_str(v) }
+    fn emit_u8(&mut self, v: u8) -> Result<(), String> { self.write_to_str(v) }
+    fn emit_int(&mut self, v: int) -> Result<(), String> { self.write_to_str(v) }
+    fn emit_i64(&mut self, v: i64) -> Result<(), String> { self.write_to_str(v) }
+    fn emit_i32(&mut self, v: i32) -> Result<(), String> { self.write_to_str(v) }
+    fn emit_i16(&mut self, v: i16) -> Result<(), String> { self.write_to_str(v) }
+    fn emit_i8(&mut self, v: i8) -> Result<(), String> { self.write_to_str(v) }
+    fn emit_bool(&mut self, v: bool) -> Result<(), String> { self.write_to_str(v) }
+    fn emit_f64(&mut self, v: f64) -> Result<(), String> {
         self.w(::std::f64::to_str_digits(v, 10).as_slice())
     }
-    fn emit_f32(&mut self, v: f32) -> Result<(), StrBuf> {
+    fn emit_f32(&mut self, v: f32) -> Result<(), String> {
         self.w(::std::f32::to_str_digits(v, 10).as_slice())
     }
-    fn emit_char(&mut self, v: char) -> Result<(), StrBuf> {
+    fn emit_char(&mut self, v: char) -> Result<(), String> {
         self.write_to_str(v)
     }
-    fn emit_str(&mut self, v: &str) -> Result<(), StrBuf> {
+    fn emit_str(&mut self, v: &str) -> Result<(), String> {
         let s = self.quoted(v);
         self.w(s.as_slice())
     }
-    fn emit_enum(&mut self, _: &str, f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                -> Result<(), StrBuf> {
+    fn emit_enum(&mut self, _: &str, f: |&mut Encoder<'a>| -> Result<(), String>)
+                -> Result<(), String> {
         f(self)
     }
     fn emit_enum_variant(&mut self, v_name: &str, _: uint, len: uint,
-                         f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                        -> Result<(), StrBuf> {
+                         f: |&mut Encoder<'a>| -> Result<(), String>)
+                        -> Result<(), String> {
         match len {
             0 => self.w(v_name),
             1 => f(self),
@@ -487,62 +487,62 @@ impl<'a> serialize::Encoder<StrBuf> for Encoder<'a> {
         }
     }
     fn emit_enum_variant_arg(&mut self, _: uint,
-                             f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                            -> Result<(), StrBuf> {
+                             f: |&mut Encoder<'a>| -> Result<(), String>)
+                            -> Result<(), String> {
         f(self)
     }
     fn emit_enum_struct_variant(&mut self, v_name: &str, v_id: uint, len: uint,
-                                f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                               -> Result<(), StrBuf> {
+                                f: |&mut Encoder<'a>| -> Result<(), String>)
+                               -> Result<(), String> {
         self.emit_enum_variant(v_name, v_id, len, f)
     }
     fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
-                                      _: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                                     -> Result<(), StrBuf> {
+                                      _: |&mut Encoder<'a>| -> Result<(), String>)
+                                     -> Result<(), String> {
         Err("Cannot encode enum variants with arguments.".to_owned())
     }
     fn emit_struct(&mut self, _: &str, len: uint,
-                   f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                  -> Result<(), StrBuf> {
+                   f: |&mut Encoder<'a>| -> Result<(), String>)
+                  -> Result<(), String> {
         self.emit_seq(len, f)
     }
     fn emit_struct_field(&mut self, _: &str, f_idx: uint,
-                         f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                        -> Result<(), StrBuf> {
+                         f: |&mut Encoder<'a>| -> Result<(), String>)
+                        -> Result<(), String> {
         self.emit_seq_elt(f_idx, f)
     }
     fn emit_tuple(&mut self, len: uint,
-                  f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                 -> Result<(), StrBuf> {
+                  f: |&mut Encoder<'a>| -> Result<(), String>)
+                 -> Result<(), String> {
         self.emit_seq(len, f)
     }
     fn emit_tuple_arg(&mut self, idx: uint,
-                      f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                     -> Result<(), StrBuf> {
+                      f: |&mut Encoder<'a>| -> Result<(), String>)
+                     -> Result<(), String> {
         self.emit_seq_elt(idx, f)
     }
     fn emit_tuple_struct(&mut self, _: &str, _: uint,
-                         _: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                        -> Result<(), StrBuf> {
+                         _: |&mut Encoder<'a>| -> Result<(), String>)
+                        -> Result<(), String> {
         unimplemented!()
     }
     fn emit_tuple_struct_arg(&mut self, _: uint,
-                             _: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                            -> Result<(), StrBuf> {
+                             _: |&mut Encoder<'a>| -> Result<(), String>)
+                            -> Result<(), String> {
         unimplemented!()
     }
-    fn emit_option(&mut self, f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                  -> Result<(), StrBuf> {
+    fn emit_option(&mut self, f: |&mut Encoder<'a>| -> Result<(), String>)
+                  -> Result<(), String> {
         f(self)
     }
-    fn emit_option_none(&mut self) -> Result<(), StrBuf> { Ok(()) }
-    fn emit_option_some(&mut self, f: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                       -> Result<(), StrBuf> {
+    fn emit_option_none(&mut self) -> Result<(), String> { Ok(()) }
+    fn emit_option_some(&mut self, f: |&mut Encoder<'a>| -> Result<(), String>)
+                       -> Result<(), String> {
         f(self)
     }
     fn emit_seq(&mut self, len: uint,
-                f: |this: &mut Encoder<'a>| -> Result<(), StrBuf>)
-               -> Result<(), StrBuf> {
+                f: |this: &mut Encoder<'a>| -> Result<(), String>)
+               -> Result<(), String> {
         if len == 0 {
             return Err("Records must have length bigger than 0.".to_owned())
         }
@@ -563,26 +563,26 @@ impl<'a> serialize::Encoder<StrBuf> for Encoder<'a> {
         }
     }
     fn emit_seq_elt(&mut self, idx: uint,
-                    f: |this: &mut Encoder<'a>| -> Result<(), StrBuf>)
-                   -> Result<(), StrBuf> {
+                    f: |this: &mut Encoder<'a>| -> Result<(), String>)
+                   -> Result<(), String> {
         if idx > 0 {
             try!(from_ioresult(self.buf.write_char(self.sep)));
         }
         f(self)
     }
     fn emit_map(&mut self, _: uint,
-                _: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-               -> Result<(), StrBuf> {
+                _: |&mut Encoder<'a>| -> Result<(), String>)
+               -> Result<(), String> {
         unimplemented!()
     }
     fn emit_map_elt_key(&mut self, _: uint,
-                        _: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                       -> Result<(), StrBuf> {
+                        _: |&mut Encoder<'a>| -> Result<(), String>)
+                       -> Result<(), String> {
         unimplemented!()
     }
     fn emit_map_elt_val(&mut self, _: uint,
-                        _: |&mut Encoder<'a>| -> Result<(), StrBuf>)
-                       -> Result<(), StrBuf> {
+                        _: |&mut Encoder<'a>| -> Result<(), String>)
+                       -> Result<(), String> {
         unimplemented!()
     }
 }
@@ -597,7 +597,7 @@ pub struct Error {
     col: uint,
 
     /// A message describing the error.
-    msg: StrBuf,
+    msg: String,
 
     /// Whether this error corresponds to EOF or not.
     eof: bool,
@@ -615,7 +615,7 @@ struct Parser<'a> {
     same_len: bool, // whether to enforce all rows be of same length
     first_len: uint, // length of first row
     has_headers: bool, // interpret first record as headers when true
-    headers: Vec<StrBuf>, // the first record in the CSV data
+    headers: Vec<String>, // the first record in the CSV data
     buf: BufferedReader<&'a mut Reader>, // buffer to read CSV data from
     cur: Option<char>, // the current character
     look: Option<char>, // one character look-ahead
@@ -676,7 +676,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_record(&mut self, as_header: bool) -> Result<Vec<StrBuf>, Error> {
+    fn parse_record(&mut self, as_header: bool) -> Result<Vec<String>, Error> {
         try!(self.eat_lineterms());
         if self.peek_is_eof() {
             return Err(self.err_eof())
@@ -726,9 +726,9 @@ impl<'a> Parser<'a> {
         Ok(vals)
     }
 
-    fn parse_value(&mut self) -> Result<StrBuf, Error> {
+    fn parse_value(&mut self) -> Result<String, Error> {
         let mut only_whitespace = true;
-        let mut res = StrBuf::with_capacity(4);
+        let mut res = String::with_capacity(4);
         loop {
             try!(self.next_char());
             if self.is_sep() || self.is_lineterm() || self.is_eof() {
@@ -748,9 +748,9 @@ impl<'a> Parser<'a> {
         Ok(res)
     }
 
-    fn parse_quoted_value(&mut self) -> Result<StrBuf, Error> {
+    fn parse_quoted_value(&mut self) -> Result<String, Error> {
         // Assumes that " has already been read.
-        let mut res = StrBuf::with_capacity(4);
+        let mut res = String::with_capacity(4);
         loop {
             try!(self.next_char());
             if self.is_eof() {
@@ -870,8 +870,8 @@ pub struct Decoder<'a> {
 /// A representation of a value found in a CSV document.
 /// A CSV document's structure is simple (non-recursive).
 enum Value {
-    Record(Vec<StrBuf>),
-    String(StrBuf),
+    Record(Vec<String>),
+    String(String),
 }
 
 impl<'a> Decoder<'a> {
@@ -934,12 +934,12 @@ impl<'a> Decoder<'a> {
     ///
     /// ```no_run
     /// let mut dec = csv::Decoder::from_str("abc,1");
-    /// let mut iter = dec.decode_iter::<(StrBuf, uint)>();
+    /// let mut iter = dec.decode_iter::<(String, uint)>();
     /// ```
     ///
     /// ```no_run
     /// let mut dec = csv::Decoder::from_str("abc,1");
-    /// let mut iter: csv::DecodedItems<(StrBuf, uint)> = dec.decode_iter();
+    /// let mut iter: csv::DecodedItems<(String, uint)> = dec.decode_iter();
     /// ```
     ///
     /// If there is an error decoding the data then `fail!` is called.
@@ -973,7 +973,7 @@ impl<'a> Decoder<'a> {
     /// Circumvents the decoding interface and forces the parsing of the next
     /// record and returns it. A record returned by this method will never be
     /// decoded.
-    pub fn record(&mut self) -> Result<Vec<StrBuf>, Error> {
+    pub fn record(&mut self) -> Result<Vec<String>, Error> {
         self.p.parse_record(false)
     }
 
@@ -1001,7 +1001,7 @@ impl<'a> Decoder<'a> {
     ///
     /// If `has_headers` is `false` (which is the default), then this will
     /// call `fail!`.
-    pub fn headers(&mut self) -> Result<Vec<StrBuf>, Error> {
+    pub fn headers(&mut self) -> Result<Vec<String>, Error> {
         if !self.p.has_headers {
             fail!("To get headers from CSV data, has_headers must be called.")
         }
@@ -1023,10 +1023,10 @@ pub struct Records<'a> {
     dec: &'a mut Decoder<'a>
 }
 
-impl<'a> Iterator<Vec<StrBuf>> for Records<'a> {
+impl<'a> Iterator<Vec<String>> for Records<'a> {
     /// Iterates over each record in the CSV data. The iterator stops when
     /// EOF is reached.
-    fn next(&mut self) -> Option<Vec<StrBuf>> {
+    fn next(&mut self) -> Option<Vec<String>> {
         match self.dec.record() {
             Ok(r) => Some(r),
             Err(err) => {
@@ -1077,7 +1077,7 @@ impl<'a> Decoder<'a> {
         Ok(())
     }
 
-    fn pop_record(&mut self) -> Result<Vec<StrBuf>, Error> {
+    fn pop_record(&mut self) -> Result<Vec<String>, Error> {
         match try!(self.pop()) {
             Record(r) => Ok(r),
             String(s) => {
@@ -1087,7 +1087,7 @@ impl<'a> Decoder<'a> {
         }
     }
 
-    fn pop_string(&mut self) -> Result<StrBuf, Error> {
+    fn pop_string(&mut self) -> Result<String, Error> {
         match try!(self.pop()) {
             Record(_) => {
                 let m = format!("Expected value but got record.");
@@ -1109,11 +1109,11 @@ impl<'a> Decoder<'a> {
         }
     }
 
-    fn push_record(&mut self, r: Vec<StrBuf>) {
+    fn push_record(&mut self, r: Vec<String>) {
         self.stack.push(Record(r))
     }
 
-    fn push_string(&mut self, s: StrBuf) {
+    fn push_string(&mut self, s: String) {
         self.stack.push(String(s))
     }
 
@@ -1146,8 +1146,8 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
         }
         Ok(*chars.get(0))
     }
-    fn read_str(&mut self) -> Result<StrBuf, Error> {
-        self.pop_string().map(StrBuf::from_owned_str)
+    fn read_str(&mut self) -> Result<String, Error> {
+        self.pop_string().map(String::from_owned_str)
     }
     fn read_enum<T>(&mut self, _: &str,
                     f: |&mut Decoder<'a>| -> Result<T, Error>)
@@ -1293,11 +1293,11 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
     }
 }
 
-fn to_lower(s: &str) -> StrBuf {
+fn to_lower(s: &str) -> String {
     s.chars().map(|c| c.to_lowercase()).collect()
 }
 
-fn from_ioresult(err: std::io::IoResult<()>) -> Result<(), StrBuf> {
+fn from_ioresult(err: std::io::IoResult<()>) -> Result<(), String> {
     match err {
         Ok(()) => Ok(()),
         Err(err) => Err(err.to_str()),
