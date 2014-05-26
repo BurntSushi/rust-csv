@@ -47,12 +47,9 @@
 //! let mut rdr = csv::Decoder::from_str("abc,xyz\n1,2");
 //! rdr.has_headers(true);
 //!
-//! assert_eq!(rdr.headers().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<String>>(),
-//!            vec!("abc".to_strbuf(), "xyz".to_strbuf()));
-//! assert_eq!(rdr.iter().next().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<String>>(),
-//!            vec!("1".to_strbuf(), "2".to_strbuf()));
-//! assert_eq!(rdr.headers().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<String>>(),
-//!            vec!("abc".to_strbuf(), "xyz".to_strbuf()));
+//! assert_eq!(rdr.headers().unwrap(), vec!("abc".to_strbuf(), "xyz".to_strbuf()));
+//! assert_eq!(rdr.iter().next().unwrap(), vec!("1".to_strbuf(), "2".to_strbuf()));
+//! assert_eq!(rdr.headers().unwrap(), vec!("abc".to_strbuf(), "xyz".to_strbuf()));
 //! ```
 //!
 //! The decoder also assumes that a comma (`,`) is the delimiter used to
@@ -63,10 +60,8 @@
 //! let mut rdr = csv::Decoder::from_str("a\tb\ny\tz");
 //! rdr.separator('\t');
 //!
-//! assert_eq!(rdr.iter().next().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<String>>(),
-//!            vec!("a".to_strbuf(), "b".to_strbuf()));
-//! assert_eq!(rdr.iter().next().unwrap().move_iter().map(|x| x.to_strbuf()).collect::<Vec<String>>(),
-//!            vec!("y".to_strbuf(), "z".to_strbuf()));
+//! assert_eq!(rdr.iter().next().unwrap(), vec!("a".to_strbuf(), "b".to_strbuf()));
+//! assert_eq!(rdr.iter().next().unwrap(), vec!("y".to_strbuf(), "z".to_strbuf()));
 //! ```
 //!
 //!
