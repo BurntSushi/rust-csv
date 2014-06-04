@@ -47,9 +47,9 @@
 //! let mut rdr = csv::Decoder::from_str("abc,xyz\n1,2");
 //! rdr.has_headers(true);
 //!
-//! assert_eq!(rdr.headers().unwrap(), vec!("abc".to_strbuf(), "xyz".to_strbuf()));
-//! assert_eq!(rdr.iter().next().unwrap(), vec!("1".to_strbuf(), "2".to_strbuf()));
-//! assert_eq!(rdr.headers().unwrap(), vec!("abc".to_strbuf(), "xyz".to_strbuf()));
+//! assert_eq!(rdr.headers().unwrap(), vec!("abc".to_string(), "xyz".to_string()));
+//! assert_eq!(rdr.iter().next().unwrap(), vec!("1".to_string(), "2".to_string()));
+//! assert_eq!(rdr.headers().unwrap(), vec!("abc".to_string(), "xyz".to_string()));
 //! ```
 //!
 //! The decoder also assumes that a comma (`,`) is the delimiter used to
@@ -60,8 +60,8 @@
 //! let mut rdr = csv::Decoder::from_str("a\tb\ny\tz");
 //! rdr.separator('\t');
 //!
-//! assert_eq!(rdr.iter().next().unwrap(), vec!("a".to_strbuf(), "b".to_strbuf()));
-//! assert_eq!(rdr.iter().next().unwrap(), vec!("y".to_strbuf(), "z".to_strbuf()));
+//! assert_eq!(rdr.iter().next().unwrap(), vec!("a".to_string(), "b".to_string()));
+//! assert_eq!(rdr.iter().next().unwrap(), vec!("y".to_string(), "z".to_string()));
 //! ```
 //!
 //!
@@ -80,7 +80,7 @@
 //! ```
 //! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
 //! let record: (String, uint) = rdr.decode().unwrap();
-//! assert_eq!(record, ("andrew".to_strbuf(), 1987));
+//! assert_eq!(record, ("andrew".to_string(), 1987));
 //! ```
 //!
 //! An iterator is provided to repeat this for all records in the CSV data:
@@ -119,8 +119,8 @@
 //! let record1: (String, Option<uint>) = rdr.decode().unwrap();
 //! let record2: (String, Option<uint>) = rdr.decode().unwrap();
 //!
-//! assert_eq!(record1, ("andrew".to_strbuf(), None));
-//! assert_eq!(record2, ("kait".to_strbuf(), None));
+//! assert_eq!(record1, ("andrew".to_string(), None));
+//! assert_eq!(record2, ("kait".to_string(), None));
 //! ```
 //!
 //! The `None` value here basically represents the fact that the decoder could
@@ -138,7 +138,7 @@
 //! extern crate csv;
 //! extern crate serialize;
 //!
-//! #[deriving(Eq, Show, Decodable)]
+//! #[deriving(PartialEq, Show, Decodable)]
 //! enum Truthy {
 //!     Uint(uint),
 //!     Bool(bool),
@@ -147,7 +147,7 @@
 //! fn main() {
 //!     let mut rdr = csv::Decoder::from_str("andrew,false\nkait,1");
 //!     let record: (String, Truthy) = rdr.decode().unwrap();
-//!     assert_eq!(record, ("andrew".to_strbuf(), Bool(false)));
+//!     assert_eq!(record, ("andrew".to_string(), Bool(false)));
 //! }
 //! ```
 //!
@@ -478,7 +478,7 @@ impl<'a> serialize::Encoder<String> for Encoder<'a> {
             0 => self.w(v_name),
             1 => f(self),
             _ => Err("Cannot encode enum variants with more \
-                      than one argument.".to_owned()),
+                      than one argument.".to_string()),
         }
     }
     fn emit_enum_variant_arg(&mut self, _: uint,
@@ -494,7 +494,7 @@ impl<'a> serialize::Encoder<String> for Encoder<'a> {
     fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
                                       _: |&mut Encoder<'a>| -> Result<(), String>)
                                      -> Result<(), String> {
-        Err("Cannot encode enum variants with arguments.".to_owned())
+        Err("Cannot encode enum variants with arguments.".to_string())
     }
     fn emit_struct(&mut self, _: &str, len: uint,
                    f: |&mut Encoder<'a>| -> Result<(), String>)
@@ -539,7 +539,7 @@ impl<'a> serialize::Encoder<String> for Encoder<'a> {
                 f: |this: &mut Encoder<'a>| -> Result<(), String>)
                -> Result<(), String> {
         if len == 0 {
-            return Err("Records must have length bigger than 0.".to_owned())
+            return Err("Records must have length bigger than 0.".to_string())
         }
         if self.same_len {
             if self.first_len == 0 {
@@ -623,7 +623,7 @@ impl<'a> Parser<'a> {
         Error {
             line: self.line,
             col: self.col,
-            msg: msg.to_strbuf(),
+            msg: msg.to_string(),
             eof: false,
         }
     }
@@ -632,7 +632,7 @@ impl<'a> Parser<'a> {
         Error {
             line: self.line,
             col: self.col,
-            msg: "EOF".to_strbuf(),
+            msg: "EOF".to_string(),
             eof: true,
         }
     }
@@ -1142,7 +1142,7 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
         Ok(*chars.get(0))
     }
     fn read_str(&mut self) -> Result<String, Error> {
-        self.pop_string().map(String::from_owned_str)
+        self.pop_string()
     }
     fn read_enum<T>(&mut self, _: &str,
                     f: |&mut Decoder<'a>| -> Result<T, Error>)
