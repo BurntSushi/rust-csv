@@ -869,6 +869,19 @@ enum Value {
     String(String),
 }
 
+impl Value {
+    fn is_record(&self) -> bool {
+        match *self {
+            Record(_) => true,
+            String(_) => false,
+        }
+    }
+
+    fn is_string(&self) -> bool {
+        !self.is_record()
+    }
+}
+
 impl<'a> Decoder<'a> {
     /// Creates a new CSV decoder from a file using the file path given.
     pub fn from_file(path: &Path) -> Decoder<'a> {
@@ -1112,6 +1125,18 @@ impl<'a> Decoder<'a> {
         self.stack.push(String(s))
     }
 
+    fn num_strings_on_top(&self) -> uint {
+        let mut count = 0;
+        for v in self.stack.iter().rev() {
+            if v.is_string() {
+                count += 1;
+            } else {
+                break
+            }
+        }
+        count
+    }
+
     fn err(&self, msg: &str) -> Error {
         self.p.err(msg)
     }
@@ -1205,7 +1230,7 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
                       f: |&mut Decoder<'a>| -> Result<T, Error>)
                      -> Result<T, Error> {
         let r = try!(self.pop_record());
-        if r.len() != len {
+        if r.len() < len {
             let m = format!("Struct '{}' has {} fields but current record \
                              has {} fields.", s_name, len, r.len());
             return Err(self.err(m.as_slice()))
@@ -1213,7 +1238,14 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
         for v in r.move_iter().rev() {
             self.push_string(v)
         }
-        f(self)
+        let result = f(self);
+        match result {
+            err @ Err(_) => err,
+            ok @ Ok(_) => {
+                assert!(self.num_strings_on_top() == 0);
+                ok
+            }
+        }
     }
     fn read_struct_field<T>(&mut self, _: &str, _: uint,
                             f: |&mut Decoder<'a>| -> Result<T, Error>)
@@ -1260,12 +1292,19 @@ impl<'a> serialize::Decoder<Error> for Decoder<'a> {
     }
     fn read_seq<T>(&mut self, f: |&mut Decoder<'a>, uint| -> Result<T, Error>)
                   -> Result<T, Error> {
-        let r = try!(self.pop_record());
-        let len = r.len();
-        for v in r.move_iter().rev() {
-            self.push_string(v)
+        match self.num_strings_on_top() {
+            0 => {
+                let r = try!(self.pop_record());
+                let len = r.len();
+                for v in r.move_iter().rev() {
+                    self.push_string(v)
+                }
+                f(self, len)
+            }
+            n => {
+                f(self, n)
+            }
         }
-        f(self, len)
     }
     fn read_seq_elt<T>(&mut self, _: uint,
                        f: |&mut Decoder<'a>| -> Result<T, Error>)
