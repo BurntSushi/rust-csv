@@ -270,7 +270,7 @@
 
 #![feature(phase)]
 
-#[phase(syntax, link)] extern crate log;
+#[phase(plugin, link)] extern crate log;
 extern crate rand;
 extern crate serialize;
 extern crate stdtest = "test";
