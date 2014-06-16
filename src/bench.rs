@@ -49,6 +49,7 @@ fn large_raw_records(b: &mut Bencher) {
     })
 }
 
+#[allow(dead_code)]
 #[deriving(Decodable)]
 struct Play {
     gameid: String,
