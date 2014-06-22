@@ -365,7 +365,7 @@ impl<'a> Encoder<'a> {
     }
 
     /// Creates an encoder that encodes CSV data with the `Writer` given.
-    pub fn to_writer(w: &mut Writer) -> Encoder<'a> {
+    pub fn to_writer(w: &'a mut Writer) -> Encoder<'a> {
         Encoder {
             buf: w,
             sep: ',',
@@ -894,13 +894,13 @@ impl<'a> Decoder<'a> {
     /// is decoded.
     ///
     /// The reader given is wrapped in a `BufferedReader` for you.
-    pub fn from_reader(r: &mut Reader) -> Decoder<'a> {
+    pub fn from_reader(r: &'a mut Reader) -> Decoder<'a> {
         Decoder::from_buffer(BufferedReader::new(r))
     }
 
     /// This is just like `from_reader`, except it allows you to specify
     /// the capacity used in the underlying buffer.
-    pub fn from_reader_capacity(r: &mut Reader, cap: uint) -> Decoder<'a> {
+    pub fn from_reader_capacity(r: &'a mut Reader, cap: uint) -> Decoder<'a> {
         Decoder::from_buffer(BufferedReader::with_capacity(cap, r))
     }
 
