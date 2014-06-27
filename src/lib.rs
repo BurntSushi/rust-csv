@@ -87,19 +87,14 @@
 //!
 //! ```
 //! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
-//! for (name, birth) in rdr.decode_iter::<(String, uint)>() {
+//! let mut iter = rdr.decode_iter::<(String, uint)>();
+//! for (name, birth) in iter {
 //!     println!("Name: {}, Born: {}", name, birth);
 //! }
 //! ```
 //!
 //! Note that the `decode_iter` is *explicitly* instantiated with the type
-//! of the record. Alternatively, you could create the iterator with a let
-//! binding and an explicit type annotation:
-//!
-//! ```
-//! # let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
-//! let mut it: csv::DecodedItems<(String, uint)> = rdr.decode_iter();
-//! ```
+//! of the record.
 //!
 //! While this is convenient, CSV data in the real world can often be messy
 //! or incomplete. For example, maybe some records don't have a birth year:
@@ -171,18 +166,18 @@
 //! decoder:
 //!
 //! ```
-//! let mut enc = csv::StrEncoder::new();
-//! enc.encode(("andrew", 1987));
-//! enc.encode(("kait", 1989));
+//! let mut enc = csv::Encoder::str_encoder();
+//! enc.encode(("andrew", 1987u)).unwrap();
+//! enc.encode(("kait", 1989u)).unwrap();
 //! assert_eq!(enc.to_str(), "andrew,1987\nkait,1989\n");
 //! ```
 //!
-//! Note that `StrEncoder` is a convenience for encoding to strings. You can
-//! encode to any `Writer` (with `to_writer`) or to a file:
+//! Note that `Encoder::str_encoder` creates a convenience encoder for
+//! strings. You can encode to any `Writer` (with `to_writer`) or to a file:
 //!
 //! ```no_run
 //! let mut enc = csv::Encoder::to_file(&Path::new("foo.csv"));
-//! let records = vec!(("andrew", 1987), ("kait", 1989));
+//! let records = vec!(("andrew", 1987u), ("kait", 1989u));
 //! match enc.encode_all(records.as_slice()) {
 //!     Ok(_) => {},
 //!     Err(err) => fail!("Error encoding: {}", err),
@@ -218,7 +213,7 @@
 //!     spawn(proc() {
 //!         let mut w = ChanWriter::new(send);
 //!         let mut enc = Encoder::to_writer(&mut w as &mut Writer);
-//!         for x in range(1, 6) {
+//!         for x in range(1u, 6) {
 //!             match enc.encode((x, x * x)) {
 //!                 Ok(_) => {},
 //!                 Err(err) => fail!("Failed encoding: {}", err),
@@ -299,7 +294,7 @@ mod bench;
 mod test;
 
 /// An encoder can encode Rust values into CSV records or documents.
-pub struct Encoder<'a, W> {
+pub struct Encoder<W> {
     buf: W,
     sep: char,
     same_len: bool,
@@ -307,10 +302,10 @@ pub struct Encoder<'a, W> {
     use_crlf: bool,
 }
 
-impl<'a> Encoder<'a, MemWriter> {
+impl Encoder<MemWriter> {
     /// Creates a new CSV string encoder. At any time, `to_str` can be called
     /// to retrieve the cumulative CSV data.
-    pub fn str_encoder() -> Encoder<'a, MemWriter> {
+    pub fn str_encoder() -> Encoder<MemWriter> {
         Encoder::to_writer(MemWriter::new())
     }
 
@@ -320,18 +315,18 @@ impl<'a> Encoder<'a, MemWriter> {
     }
 }
 
-impl<'a> Encoder<'a, std::io::IoResult<File>> {
+impl Encoder<IoResult<File>> {
     /// Creates an encoder that writes the file given. If the file doesn't
     /// exist, then it is created. If it already exists, then it is truncated
     /// before writing.
-    pub fn to_file(path: &Path) -> Encoder<'a, std::io::IoResult<File>> {
+    pub fn to_file(path: &Path) -> Encoder<IoResult<File>> {
         Encoder::to_writer(File::create(path))
     }
 }
 
-impl<'a, W: Writer> Encoder<'a, W> {
+impl<W: Writer> Encoder<W> {
     /// Creates an encoder that encodes CSV data with the `Writer` given.
-    pub fn to_writer(w: W) -> Encoder<'a, W> {
+    pub fn to_writer(w: W) -> Encoder<W> {
         Encoder {
             buf: w,
             sep: ',',
@@ -343,13 +338,13 @@ impl<'a, W: Writer> Encoder<'a, W> {
 
     /// Encodes a record as CSV data. Only values with types that correspond
     /// to records can be given here (i.e., structs, tuples or vectors).
-    pub fn encode<E: Encodable<Encoder<'a, W>, String>>
+    pub fn encode<E: Encodable<Encoder<W>, String>>
                  (&mut self, e: E) -> Result<(), String> {
         e.encode(self)
     }
 
     /// Calls `encode` on each element in the slice given.
-    pub fn encode_all<E: Encodable<Encoder<'a, W>, String>>
+    pub fn encode_all<E: Encodable<Encoder<W>, String>>
                      (&mut self, es: &[E]) -> Result<(), String> {
         // for e in es.move_iter() {
         for e in es.iter() {
@@ -405,7 +400,7 @@ impl<'a, W: Writer> Encoder<'a, W> {
     }
 }
 
-impl<'a, W: Writer> serialize::Encoder<String> for Encoder<'a, W> {
+impl<W: Writer> serialize::Encoder<String> for Encoder<W> {
     fn emit_nil(&mut self) -> Result<(), String> { unimplemented!() }
     fn emit_uint(&mut self, v: uint) -> Result<(), String> {
         self.write_to_str(v)
@@ -434,12 +429,12 @@ impl<'a, W: Writer> serialize::Encoder<String> for Encoder<'a, W> {
         self.w(s.as_slice())
     }
     fn emit_enum(&mut self, _: &str,
-                 f: |&mut Encoder<'a, W>| -> Result<(), String>)
+                 f: |&mut Encoder<W>| -> Result<(), String>)
                 -> Result<(), String> {
         f(self)
     }
     fn emit_enum_variant(&mut self, v_name: &str, _: uint, len: uint,
-                         f: |&mut Encoder<'a, W>| -> Result<(), String>)
+                         f: |&mut Encoder<W>| -> Result<(), String>)
                         -> Result<(), String> {
         match len {
             0 => self.w(v_name),
@@ -449,61 +444,61 @@ impl<'a, W: Writer> serialize::Encoder<String> for Encoder<'a, W> {
         }
     }
     fn emit_enum_variant_arg(&mut self, _: uint,
-                             f: |&mut Encoder<'a, W>| -> Result<(), String>)
+                             f: |&mut Encoder<W>| -> Result<(), String>)
                             -> Result<(), String> {
         f(self)
     }
     fn emit_enum_struct_variant(&mut self, v_name: &str, v_id: uint, len: uint,
-                                f: |&mut Encoder<'a, W>| -> Result<(), String>)
+                                f: |&mut Encoder<W>| -> Result<(), String>)
                                -> Result<(), String> {
         self.emit_enum_variant(v_name, v_id, len, f)
     }
     fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
-                                      _: |&mut Encoder<'a, W>| -> Result<(), String>)
+                                      _: |&mut Encoder<W>| -> Result<(), String>)
                                      -> Result<(), String> {
         Err("Cannot encode enum variants with arguments.".to_string())
     }
     fn emit_struct(&mut self, _: &str, len: uint,
-                   f: |&mut Encoder<'a, W>| -> Result<(), String>)
+                   f: |&mut Encoder<W>| -> Result<(), String>)
                   -> Result<(), String> {
         self.emit_seq(len, f)
     }
     fn emit_struct_field(&mut self, _: &str, f_idx: uint,
-                         f: |&mut Encoder<'a, W>| -> Result<(), String>)
+                         f: |&mut Encoder<W>| -> Result<(), String>)
                         -> Result<(), String> {
         self.emit_seq_elt(f_idx, f)
     }
     fn emit_tuple(&mut self, len: uint,
-                  f: |&mut Encoder<'a, W>| -> Result<(), String>)
+                  f: |&mut Encoder<W>| -> Result<(), String>)
                  -> Result<(), String> {
         self.emit_seq(len, f)
     }
     fn emit_tuple_arg(&mut self, idx: uint,
-                      f: |&mut Encoder<'a, W>| -> Result<(), String>)
+                      f: |&mut Encoder<W>| -> Result<(), String>)
                      -> Result<(), String> {
         self.emit_seq_elt(idx, f)
     }
     fn emit_tuple_struct(&mut self, _: &str, _: uint,
-                         _: |&mut Encoder<'a, W>| -> Result<(), String>)
+                         _: |&mut Encoder<W>| -> Result<(), String>)
                         -> Result<(), String> {
         unimplemented!()
     }
     fn emit_tuple_struct_arg(&mut self, _: uint,
-                             _: |&mut Encoder<'a, W>| -> Result<(), String>)
+                             _: |&mut Encoder<W>| -> Result<(), String>)
                             -> Result<(), String> {
         unimplemented!()
     }
-    fn emit_option(&mut self, f: |&mut Encoder<'a, W>| -> Result<(), String>)
+    fn emit_option(&mut self, f: |&mut Encoder<W>| -> Result<(), String>)
                   -> Result<(), String> {
         f(self)
     }
     fn emit_option_none(&mut self) -> Result<(), String> { Ok(()) }
-    fn emit_option_some(&mut self, f: |&mut Encoder<'a, W>| -> Result<(), String>)
+    fn emit_option_some(&mut self, f: |&mut Encoder<W>| -> Result<(), String>)
                        -> Result<(), String> {
         f(self)
     }
     fn emit_seq(&mut self, len: uint,
-                f: |this: &mut Encoder<'a, W>| -> Result<(), String>)
+                f: |this: &mut Encoder<W>| -> Result<(), String>)
                -> Result<(), String> {
         if len == 0 {
             return Err("Records must have length bigger than 0.".to_string())
@@ -525,7 +520,7 @@ impl<'a, W: Writer> serialize::Encoder<String> for Encoder<'a, W> {
         }
     }
     fn emit_seq_elt(&mut self, idx: uint,
-                    f: |this: &mut Encoder<'a, W>| -> Result<(), String>)
+                    f: |this: &mut Encoder<W>| -> Result<(), String>)
                    -> Result<(), String> {
         if idx > 0 {
             try!(from_ioresult(self.buf.write_char(self.sep)));
@@ -533,17 +528,17 @@ impl<'a, W: Writer> serialize::Encoder<String> for Encoder<'a, W> {
         f(self)
     }
     fn emit_map(&mut self, _: uint,
-                _: |&mut Encoder<'a, W>| -> Result<(), String>)
+                _: |&mut Encoder<W>| -> Result<(), String>)
                -> Result<(), String> {
         unimplemented!()
     }
     fn emit_map_elt_key(&mut self, _: uint,
-                        _: |&mut Encoder<'a, W>| -> Result<(), String>)
+                        _: |&mut Encoder<W>| -> Result<(), String>)
                        -> Result<(), String> {
         unimplemented!()
     }
     fn emit_map_elt_val(&mut self, _: uint,
-                        _: |&mut Encoder<'a, W>| -> Result<(), String>)
+                        _: |&mut Encoder<W>| -> Result<(), String>)
                        -> Result<(), String> {
         unimplemented!()
     }
@@ -907,17 +902,12 @@ impl<R: Reader> Decoder<R> {
     }
 
     /// Provides an iterator to decode one record at a time. Note that this
-    /// usually needs to have its type parameter `D` instantiated explicitly
-    /// or with a type hint. For example, both of the following are equivalent:
+    /// usually needs to have its type parameter `D` instantiated explicitly.
+    /// For example:
     ///
     /// ```no_run
     /// let mut dec = csv::Decoder::from_str("abc,1");
     /// let mut iter = dec.decode_iter::<(String, uint)>();
-    /// ```
-    ///
-    /// ```no_run
-    /// let mut dec = csv::Decoder::from_str("abc,1");
-    /// let mut iter: csv::DecodedItems<(String, uint)> = dec.decode_iter();
     /// ```
     ///
     /// If there is an error decoding the data then `fail!` is called.

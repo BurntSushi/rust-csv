@@ -32,7 +32,7 @@ fn same_record() {
 #[test]
 fn encoder_simple() {
     let mut senc = Encoder::str_encoder();
-    ordie(senc.encode(("springsteen", 's', 1, 0.14, false)));
+    ordie(senc.encode(("springsteen", 's', 1i, 0.14f64, false)));
     assert_eq!("springsteen,s,1,0.14,false\n", senc.to_str());
 }
 
@@ -40,7 +40,7 @@ fn encoder_simple() {
 fn encoder_simple_crlf() {
     let mut senc = Encoder::str_encoder();
     senc.crlf(true);
-    ordie(senc.encode(("springsteen", 's', 1, 0.14, false)));
+    ordie(senc.encode(("springsteen", 's', 1i, 0.14f64, false)));
     assert_eq!("springsteen,s,1,0.14,false\r\n", senc.to_str());
 }
 
@@ -48,7 +48,7 @@ fn encoder_simple_crlf() {
 fn encoder_simple_tabbed() {
     let mut senc = Encoder::str_encoder();
     senc.separator('\t');
-    ordie(senc.encode(("springsteen", 's', 1, 0.14, false)));
+    ordie(senc.encode(("springsteen", 's', 1i, 0.14f64, false)));
     assert_eq!("springsteen\ts\t1\t0.14\tfalse\n", senc.to_str());
 }
 
@@ -285,8 +285,9 @@ fn decoder_sample() {
 fn decoder_iter() {
     let mut d = Decoder::from_str("andrew,1\nkait,2\ncauchy,3\nplato,4");
     let mut rs: Vec<uint> = vec!();
-    for (_, num) in d.decode_iter::<(String, uint)>() {
+    let mut iter = d.decode_iter::<(String, uint)>();
+    for (_, num) in iter {
         rs.push(num);
     }
-    assert_eq!(rs, vec!(1, 2, 3, 4));
+    assert_eq!(rs, vec!(1u, 2, 3, 4));
 }
