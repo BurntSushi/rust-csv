@@ -6,6 +6,6 @@ install:
 script:
   - git clone git://github.com/BurntSushi/quickcheck
     && mkdir -p ./build/
-    && rustc ./quickcheck/src/lib.rs -o ./build/
+    && rustc ./quickcheck/src/lib.rs --out-dir ./build/
     && make test
 
