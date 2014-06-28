@@ -5,6 +5,7 @@ install:
   - (cd rust-nightly-x86_64-unknown-linux-gnu/ && sudo ./install.sh)
 script:
   - git clone git://github.com/BurntSushi/quickcheck
-    && rustc ./quickcheck/src/lib.rs
+    && mkdir -p ./build/
+    && rustc ./quickcheck/src/lib.rs -o ./build/
     && make test
 
