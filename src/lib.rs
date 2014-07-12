@@ -1,4 +1,4 @@
-#![crate_id = "csv#0.1.0"]
+#![crate_name = "csv"]
 #![crate_type = "rlib"]
 #![crate_type = "dylib"]
 #![license = "UNLICENSE"]
@@ -169,7 +169,7 @@
 //! let mut enc = csv::Encoder::str_encoder();
 //! enc.encode(("andrew", 1987u)).unwrap();
 //! enc.encode(("kait", 1989u)).unwrap();
-//! assert_eq!(enc.to_str(), "andrew,1987\nkait,1989\n");
+//! assert_eq!(enc.to_string(), "andrew,1987\nkait,1989\n");
 //! ```
 //!
 //! Note that `Encoder::str_encoder` creates a convenience encoder for
@@ -373,12 +373,12 @@ impl<W: Writer> Encoder<W> {
     fn w(&mut self, s: &str) -> Result<(), String> {
         match self.buf.write_str(s) {
             Ok(_) => Ok(()),
-            Err(e) => Err(e.to_str()),
+            Err(e) => Err(e.to_string()),
         }
     }
 
-    fn write_to_str<T: fmt::Show>(&mut self, t: T) -> Result<(), String> {
-        self.w(t.to_str().as_slice())
+    fn write_to_string<T: fmt::Show>(&mut self, t: T) -> Result<(), String> {
+        self.w(t.to_string().as_slice())
     }
 
     fn quoted<'a>(&mut self, s: &'a str) -> str::MaybeOwned<'a> {
@@ -403,18 +403,18 @@ impl<W: Writer> Encoder<W> {
 impl<W: Writer> serialize::Encoder<String> for Encoder<W> {
     fn emit_nil(&mut self) -> Result<(), String> { unimplemented!() }
     fn emit_uint(&mut self, v: uint) -> Result<(), String> {
-        self.write_to_str(v)
+        self.write_to_string(v)
     }
-    fn emit_u64(&mut self, v: u64) -> Result<(), String> { self.write_to_str(v) }
-    fn emit_u32(&mut self, v: u32) -> Result<(), String> { self.write_to_str(v) }
-    fn emit_u16(&mut self, v: u16) -> Result<(), String> { self.write_to_str(v) }
-    fn emit_u8(&mut self, v: u8) -> Result<(), String> { self.write_to_str(v) }
-    fn emit_int(&mut self, v: int) -> Result<(), String> { self.write_to_str(v) }
-    fn emit_i64(&mut self, v: i64) -> Result<(), String> { self.write_to_str(v) }
-    fn emit_i32(&mut self, v: i32) -> Result<(), String> { self.write_to_str(v) }
-    fn emit_i16(&mut self, v: i16) -> Result<(), String> { self.write_to_str(v) }
-    fn emit_i8(&mut self, v: i8) -> Result<(), String> { self.write_to_str(v) }
-    fn emit_bool(&mut self, v: bool) -> Result<(), String> { self.write_to_str(v) }
+    fn emit_u64(&mut self, v: u64) -> Result<(), String> { self.write_to_string(v) }
+    fn emit_u32(&mut self, v: u32) -> Result<(), String> { self.write_to_string(v) }
+    fn emit_u16(&mut self, v: u16) -> Result<(), String> { self.write_to_string(v) }
+    fn emit_u8(&mut self, v: u8) -> Result<(), String> { self.write_to_string(v) }
+    fn emit_int(&mut self, v: int) -> Result<(), String> { self.write_to_string(v) }
+    fn emit_i64(&mut self, v: i64) -> Result<(), String> { self.write_to_string(v) }
+    fn emit_i32(&mut self, v: i32) -> Result<(), String> { self.write_to_string(v) }
+    fn emit_i16(&mut self, v: i16) -> Result<(), String> { self.write_to_string(v) }
+    fn emit_i8(&mut self, v: i8) -> Result<(), String> { self.write_to_string(v) }
+    fn emit_bool(&mut self, v: bool) -> Result<(), String> { self.write_to_string(v) }
     fn emit_f64(&mut self, v: f64) -> Result<(), String> {
         self.w(::std::f64::to_str_digits(v, 10).as_slice())
     }
@@ -422,7 +422,7 @@ impl<W: Writer> serialize::Encoder<String> for Encoder<W> {
         self.w(::std::f32::to_str_digits(v, 10).as_slice())
     }
     fn emit_char(&mut self, v: char) -> Result<(), String> {
-        self.write_to_str(v)
+        self.write_to_string(v)
     }
     fn emit_str(&mut self, v: &str) -> Result<(), String> {
         let s = self.quoted(v);
@@ -1294,6 +1294,6 @@ fn to_lower(s: &str) -> String {
 fn from_ioresult(err: std::io::IoResult<()>) -> Result<(), String> {
     match err {
         Ok(()) => Ok(()),
-        Err(err) => Err(err.to_str()),
+        Err(err) => Err(err.to_string()),
     }
 }

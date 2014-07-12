@@ -12,7 +12,7 @@ fn main() {
     spawn(proc() {
         let mut w = ChanWriter::new(send);
         let mut enc = Encoder::to_writer(&mut w as &mut Writer);
-        for x in range(1, 6) {
+        for x in range(1u, 6) {
             match enc.encode((x, x * x)) {
                 Ok(_) => {},
                 Err(err) => fail!("Failed encoding: {}", err),

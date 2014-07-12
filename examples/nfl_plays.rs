@@ -4,6 +4,7 @@ extern crate serialize;
 use std::path::Path;
 use csv::Decoder;
 
+#[allow(dead_code)]
 #[deriving(Decodable)]
 struct Play {
     gameid: String,

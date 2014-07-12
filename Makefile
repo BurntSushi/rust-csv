@@ -2,6 +2,7 @@ RUST_CFG=
 BUILD ?= build
 LIB ?= $(BUILD)/.timestamp_csv
 RUST_PATH ?= -L $(BUILD) -L ./target/deps
+RUST_TEST_PATH ?= -L $(BUILD) -L ./target/deps -L ./target/test/deps
 
 compile: $(LIB)
 
@@ -26,7 +27,7 @@ test: $(BUILD)/test
 	RUST_TEST_TASKS=1 RUST_LOG=quickcheck,csv $(BUILD)/test
 
 $(BUILD)/test: $(LIB) src/lib.rs src/test.rs src/bench.rs
-	rustc $(RUST_PATH) --test src/lib.rs -o $(BUILD)/test
+	rustc $(RUST_TEST_PATH) --test src/lib.rs -o $(BUILD)/test
 
 test-examples:
 	(cd ./examples && ./test)
@@ -42,6 +43,7 @@ $(BUILD)/bench: $(LIB) src/lib.rs src/test.rs src/bench.rs
 
 clean:
 	rm -f $(BUILD)/* $(LIB)
+	rm -rf target
 
 push:
 	git push origin master
