@@ -1124,7 +1124,7 @@ impl<R: Reader> serialize::Decoder<Error> for Decoder<R> {
             return Err(self.err(format!(
                 "Expected single character but got '{}'.", s).as_slice()))
         }
-        Ok(*chars.get(0))
+        Ok(chars[0])
     }
     fn read_str(&mut self) -> Result<String, Error> {
         self.pop_string()
