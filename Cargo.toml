@@ -8,6 +8,6 @@ name = "csv"
 path = "src/lib.rs"
 crate_type = ["dylib", "rlib"]
 
-[dependencies.quickcheck]
-git = "git://github.com/BurntSushi/quickcheck"
+# [dependencies.quickcheck] 
+# git = "git://github.com/BurntSushi/quickcheck" 
 
