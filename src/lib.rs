@@ -1103,6 +1103,9 @@ impl<R: Reader> Decoder<R> {
 }
 
 impl<R: Reader> serialize::Decoder<Error> for Decoder<R> {
+    fn error(&mut self, err: &str) -> Error {
+        self.err(err)
+    }
     fn read_nil(&mut self) -> Result<(), Error> { unimplemented!() }
     fn read_uint(&mut self) -> Result<uint, Error> { self.pop_from_str() }
     fn read_u64(&mut self) -> Result<u64, Error> { self.pop_from_str() }
