@@ -303,8 +303,8 @@ pub struct Encoder<W> {
 }
 
 impl Encoder<MemWriter> {
-    /// Creates a new CSV string encoder. At any time, `to_str` can be called
-    /// to retrieve the cumulative CSV data.
+    /// Creates a new CSV string encoder. At any time, `to_string` can
+    /// be called to retrieve the cumulative CSV data.
     pub fn string_encoder() -> Encoder<MemWriter> {
         Encoder::to_writer(MemWriter::new())
     }

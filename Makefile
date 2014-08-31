@@ -15,13 +15,10 @@ ctags:
 	ctags --recurse --options=ctags.rust --languages=Rust
 
 docs:
-	rm -rf doc
-	rustdoc -L . --test src/lib.rs
-	rustdoc src/lib.rs
+	cargo doc
 	# WTF is rustdoc doing?
-	chmod 755 doc
-	in-dir doc fix-perms
-	rscp ./doc/* gopher:~/www/burntsushi.net/rustdoc/
+	in-dir ./target/doc fix-perms
+	rscp ./target/doc/* gopher:~/www/burntsushi.net/rustdoc/
 
 test: $(BUILD)/test
 	RUST_TEST_TASKS=1 RUST_LOG=quickcheck,csv $(BUILD)/test
