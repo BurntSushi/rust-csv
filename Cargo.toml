@@ -3,11 +3,11 @@ name = "csv"
 version = "0.1.0"
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 
-[[lib]]
+[lib]
 name = "csv"
 path = "src/lib.rs"
 crate_type = ["dylib", "rlib"]
 
-# [dependencies.quickcheck] 
-# git = "git://github.com/BurntSushi/quickcheck" 
+[dependencies.quickcheck]
+git = "git://github.com/BurntSushi/quickcheck"
 

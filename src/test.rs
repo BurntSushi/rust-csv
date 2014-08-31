@@ -18,10 +18,10 @@ fn same_record() {
             return TestResult::discard()
         }
 
-        let mut senc = Encoder::str_encoder();
+        let mut senc = Encoder::string_encoder();
         ordie(senc.encode(input.as_slice()));
 
-        let mut dec = Decoder::from_str(senc.to_str());
+        let mut dec = Decoder::from_str(senc.to_string());
         let output: Vec<String> = ordie(dec.decode());
 
         TestResult::from_bool(input == output)
@@ -31,30 +31,30 @@ fn same_record() {
 
 #[test]
 fn encoder_simple() {
-    let mut senc = Encoder::str_encoder();
+    let mut senc = Encoder::string_encoder();
     ordie(senc.encode(("springsteen", 's', 1i, 0.14f64, false)));
-    assert_eq!("springsteen,s,1,0.14,false\n", senc.to_str());
+    assert_eq!("springsteen,s,1,0.14,false\n", senc.to_string());
 }
 
 #[test]
 fn encoder_simple_crlf() {
-    let mut senc = Encoder::str_encoder();
+    let mut senc = Encoder::string_encoder();
     senc.crlf(true);
     ordie(senc.encode(("springsteen", 's', 1i, 0.14f64, false)));
-    assert_eq!("springsteen,s,1,0.14,false\r\n", senc.to_str());
+    assert_eq!("springsteen,s,1,0.14,false\r\n", senc.to_string());
 }
 
 #[test]
 fn encoder_simple_tabbed() {
-    let mut senc = Encoder::str_encoder();
+    let mut senc = Encoder::string_encoder();
     senc.separator('\t');
     ordie(senc.encode(("springsteen", 's', 1i, 0.14f64, false)));
-    assert_eq!("springsteen\ts\t1\t0.14\tfalse\n", senc.to_str());
+    assert_eq!("springsteen\ts\t1\t0.14\tfalse\n", senc.to_string());
 }
 
 #[test]
 fn encoder_same_length_records() {
-    let mut senc = Encoder::str_encoder();
+    let mut senc = Encoder::string_encoder();
     senc.enforce_same_length(true);
     ordie(senc.encode(vec!('a')));
     match senc.encode(vec!('a', 'b')) {
@@ -67,29 +67,29 @@ fn encoder_same_length_records() {
 
 #[test]
 fn encoder_quoted_quotes() {
-    let mut senc = Encoder::str_encoder();
+    let mut senc = Encoder::string_encoder();
     ordie(senc.encode(vec!("sprin\"g\"steen")));
-    assert_eq!("\"sprin\"\"g\"\"steen\"\n", senc.to_str());
+    assert_eq!("\"sprin\"\"g\"\"steen\"\n", senc.to_string());
 }
 
 #[test]
 fn encoder_quoted_sep() {
-    let mut senc = Encoder::str_encoder();
+    let mut senc = Encoder::string_encoder();
     senc.separator(',');
     ordie(senc.encode(vec!("spring,steen")));
-    assert_eq!("\"spring,steen\"\n", senc.to_str());
+    assert_eq!("\"spring,steen\"\n", senc.to_string());
 }
 
 #[test]
 fn encoder_quoted_newlines() {
-    let mut senc = Encoder::str_encoder();
+    let mut senc = Encoder::string_encoder();
     ordie(senc.encode(vec!("spring\nsteen")));
-    assert_eq!("\"spring\nsteen\"\n", senc.to_str());
+    assert_eq!("\"spring\nsteen\"\n", senc.to_string());
 }
 
 #[test]
 fn encoder_zero() {
-    let mut senc = Encoder::str_encoder();
+    let mut senc = Encoder::string_encoder();
     match senc.encode::<Vec<int>>(vec!()) {
         Ok(_) => fail!("Encoder should report an error when trying to \
                         encode records of length 0."),
@@ -249,25 +249,25 @@ fn decoder_option() {
 #[test]
 fn encoder_enum() {
     let r = (Red,);
-    let mut senc = Encoder::str_encoder();
+    let mut senc = Encoder::string_encoder();
     ordie(senc.encode(r));
-    assert_eq!("Red\n", senc.to_str());
+    assert_eq!("Red\n", senc.to_string());
 }
 
 #[test]
 fn encoder_enum_arg() {
     let r = (Bool(false), Signed(-5), Unsigned(5));
-    let mut senc = Encoder::str_encoder();
+    let mut senc = Encoder::string_encoder();
     ordie(senc.encode(r));
-    assert_eq!("false,-5,5\n", senc.to_str());
+    assert_eq!("false,-5,5\n", senc.to_string());
 }
 
 #[test]
 fn encoder_option() {
     let r: (Option<bool>, uint) = (None, 1);
-    let mut senc = Encoder::str_encoder();
+    let mut senc = Encoder::string_encoder();
     ordie(senc.encode(r));
-    assert_eq!(",1\n", senc.to_str());
+    assert_eq!(",1\n", senc.to_string());
 }
 
 #[test]

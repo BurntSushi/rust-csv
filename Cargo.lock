@@ -1,0 +1,20 @@
+[root]
+name = "csv"
+version = "0.1.0"
+dependencies = [
+ "quickcheck 0.1.0 (git+git://github.com/BurntSushi/quickcheck#b122316d32b19701dfebe57119c44cf1a9f76b8c)",
+]
+
+[[package]]
+name = "quickcheck"
+version = "0.1.0"
+source = "git+git://github.com/BurntSushi/quickcheck#b122316d32b19701dfebe57119c44cf1a9f76b8c"
+dependencies = [
+ "quickcheck_macros 0.1.0 (git+git://github.com/BurntSushi/quickcheck#b122316d32b19701dfebe57119c44cf1a9f76b8c)",
+]
+
+[[package]]
+name = "quickcheck_macros"
+version = "0.1.0"
+source = "git+git://github.com/BurntSushi/quickcheck#b122316d32b19701dfebe57119c44cf1a9f76b8c"
+

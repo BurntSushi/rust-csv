@@ -86,7 +86,6 @@
 //! An iterator is provided to repeat this for all records in the CSV data:
 //!
 //! ```rust
-//! ```
 //! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
 //! for (name, birth) in rdr.decode_iter::<(String, uint)>() {
 //!     println!("Name: {}, Born: {}", name, birth);
@@ -166,13 +165,13 @@
 //! decoder:
 //!
 //! ```
-//! let mut enc = csv::Encoder::str_encoder();
+//! let mut enc = csv::Encoder::string_encoder();
 //! enc.encode(("andrew", 1987u)).unwrap();
 //! enc.encode(("kait", 1989u)).unwrap();
 //! assert_eq!(enc.to_string(), "andrew,1987\nkait,1989\n");
 //! ```
 //!
-//! Note that `Encoder::str_encoder` creates a convenience encoder for
+//! Note that `Encoder::string_encoder` creates a convenience encoder for
 //! strings. You can encode to any `Writer` (with `to_writer`) or to a file:
 //!
 //! ```no_run
@@ -205,6 +204,7 @@
 //! use std::io::{ChanReader, ChanWriter, Reader, Writer};
 //! use std::io::timer::sleep;
 //! use std::task::spawn;
+//! use std::time::Duration;
 //!
 //! use csv::{Decoder, Encoder};
 //!
@@ -218,7 +218,7 @@
 //!                 Ok(_) => {},
 //!                 Err(err) => fail!("Failed encoding: {}", err),
 //!             }
-//!             sleep(1000);
+//!             sleep(Duration::seconds(1));
 //!         }
 //!     });
 //!
@@ -305,12 +305,12 @@ pub struct Encoder<W> {
 impl Encoder<MemWriter> {
     /// Creates a new CSV string encoder. At any time, `to_str` can be called
     /// to retrieve the cumulative CSV data.
-    pub fn str_encoder() -> Encoder<MemWriter> {
+    pub fn string_encoder() -> Encoder<MemWriter> {
         Encoder::to_writer(MemWriter::new())
     }
 
     /// Returns the encoded CSV data as a string.
-    pub fn to_str<'r>(&'r self) -> &'r str {
+    pub fn to_string<'r>(&'r self) -> &'r str {
         str::from_utf8(self.buf.get_ref()).unwrap()
     }
 }
@@ -987,7 +987,7 @@ impl<R: Reader> Decoder<R> {
 
 /// An iterator that yields records as plain vectors of strings. This
 /// completely avoids the decoding machinery.
-pub struct Records<'a, R> {
+pub struct Records<'a, R: 'a> {
     dec: &'a mut Decoder<R>
 }
 
@@ -1009,7 +1009,7 @@ impl<'a, R: Reader> Iterator<Vec<String>> for Records<'a, R> {
 }
 
 /// An iterator that yields decoded items.
-pub struct DecodedItems<'a, R, D> {
+pub struct DecodedItems<'a, R: 'a, D> {
     dec: &'a mut Decoder<R>
 }
 

@@ -4,6 +4,7 @@ use std::comm::channel;
 use std::io::{ChanReader, ChanWriter, Reader, Writer};
 use std::io::timer::sleep;
 use std::task::spawn;
+use std::time::Duration;
 
 use csv::{Decoder, Encoder};
 
@@ -17,7 +18,7 @@ fn main() {
                 Ok(_) => {},
                 Err(err) => fail!("Failed encoding: {}", err),
             }
-            sleep(500);
+            sleep(Duration::milliseconds(500));
         }
     });
 
