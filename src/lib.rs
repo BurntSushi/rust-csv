@@ -85,10 +85,10 @@
 //!
 //! An iterator is provided to repeat this for all records in the CSV data:
 //!
+//! ```rust
 //! ```
 //! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
-//! let mut iter = rdr.decode_iter::<(String, uint)>();
-//! for (name, birth) in iter {
+//! for (name, birth) in rdr.decode_iter::<(String, uint)>() {
 //!     println!("Name: {}, Born: {}", name, birth);
 //! }
 //! ```

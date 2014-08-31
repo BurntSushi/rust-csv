@@ -284,10 +284,7 @@ fn decoder_sample() {
 #[test]
 fn decoder_iter() {
     let mut d = Decoder::from_str("andrew,1\nkait,2\ncauchy,3\nplato,4");
-    let mut rs: Vec<uint> = vec!();
-    let mut iter = d.decode_iter::<(String, uint)>();
-    for (_, num) in iter {
-        rs.push(num);
-    }
+    let rs: Vec<uint> = d.decode_iter::<(String, uint)>()
+                         .map(|(_, num)| num).collect();
     assert_eq!(rs, vec!(1u, 2, 3, 4));
 }
