@@ -29,7 +29,7 @@
 //! read as vectors of strings using an iterator:
 //!
 //! ```no_run
-//! let mut rdr = csv::Decoder::from_file(&Path::new("foo.csv"));
+//! let mut rdr = csv::Decoder::from_file(&Path::new("foo.csv")).no_headers();
 //! for record in rdr.iter() {
 //!     println!("{}", record);
 //! }
@@ -39,16 +39,16 @@
 //! ## Headers and delimiters
 //!
 //! By default, the decoder in this crate assumes that the CSV data contains
-//! no header record. Therefore, we must tell the decoder that there is a
-//! header record before we start parsing with the `has_headers` method.
-//! Then we can access the header record at any time with the `headers` method:
+//! a header record. The header record will be omitted from standard record
+//! traversal, but we can access the header record at any time with the
+//! `headers` method:
 //!
 //! ```
 //! let mut rdr = csv::Decoder::from_str("abc,xyz\n1,2");
-//! rdr.has_headers(true);
 //!
 //! assert_eq!(rdr.headers().unwrap(), vec!("abc".to_string(), "xyz".to_string()));
-//! assert_eq!(rdr.iter().next().unwrap(), vec!("1".to_string(), "2".to_string()));
+//! assert_eq!(rdr.iter().next().unwrap().unwrap(),
+//!            vec!("1".to_string(), "2".to_string()));
 //! assert_eq!(rdr.headers().unwrap(), vec!("abc".to_string(), "xyz".to_string()));
 //! ```
 //!
@@ -57,12 +57,20 @@
 //! method. For example, to read tab separated values:
 //!
 //! ```
-//! let mut rdr = csv::Decoder::from_str("a\tb\ny\tz");
-//! rdr.separator('\t');
+//! let mut rdr = csv::Decoder::from_str("a\tb\ny\tz")
+//!                            .no_headers()
+//!                            .separator(b'\t');
 //!
-//! assert_eq!(rdr.iter().next().unwrap(), vec!("a".to_string(), "b".to_string()));
-//! assert_eq!(rdr.iter().next().unwrap(), vec!("y".to_string(), "z".to_string()));
+//! assert_eq!(rdr.iter().next().unwrap().unwrap(),
+//!            vec!("a".to_string(), "b".to_string()));
+//! assert_eq!(rdr.iter().next().unwrap().unwrap(),
+//!            vec!("y".to_string(), "z".to_string()));
 //! ```
+//!
+//! Note that the delimiter is using a byte character literal: `b'\t'`. This is
+//! because CSV parsing makes no assumptions about the encoding of the data
+//! being read (other than the use of a few standard ASCII characters like the
+//! field/record separators and `"`).
 //!
 //!
 //! ## Decoding
@@ -78,7 +86,7 @@
 //! very simple to retrieve records as tuples. For example:
 //!
 //! ```
-//! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
+//! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989").no_headers();
 //! let record: (String, uint) = rdr.decode().unwrap();
 //! assert_eq!(record, ("andrew".to_string(), 1987));
 //! ```
@@ -86,13 +94,14 @@
 //! An iterator is provided to repeat this for all records in the CSV data:
 //!
 //! ```rust
-//! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989");
-//! for (name, birth) in rdr.decode_iter::<(String, uint)>() {
+//! let mut rdr = csv::Decoder::from_str("andrew,1987\nkait,1989").no_headers();
+//! for record in rdr.iter_decode::<(String, uint)>() {
+//!     let (name, birth) = record.unwrap();
 //!     println!("Name: {}, Born: {}", name, birth);
 //! }
 //! ```
 //!
-//! Note that the `decode_iter` is *explicitly* instantiated with the type
+//! Note that `iter_decode` is *explicitly* instantiated with the type
 //! of the record.
 //!
 //! While this is convenient, CSV data in the real world can often be messy
@@ -109,7 +118,7 @@
 //! in our previous example:
 //!
 //! ```
-//! let mut rdr = csv::Decoder::from_str("andrew, \"\"\nkait,");
+//! let mut rdr = csv::Decoder::from_str("andrew, \"\"\nkait,").no_headers();
 //! let record1: (String, Option<uint>) = rdr.decode().unwrap();
 //! let record2: (String, Option<uint>) = rdr.decode().unwrap();
 //!
@@ -139,7 +148,7 @@
 //! }
 //!
 //! fn main() {
-//!     let mut rdr = csv::Decoder::from_str("andrew,false\nkait,1");
+//!     let mut rdr = csv::Decoder::from_str("andrew,false\nkait,1").no_headers();
 //!     let record: (String, Truthy) = rdr.decode().unwrap();
 //!     assert_eq!(record, ("andrew".to_string(), Bool(false)));
 //! }
@@ -165,19 +174,19 @@
 //! decoder:
 //!
 //! ```
-//! let mut enc = csv::Encoder::string_encoder();
+//! let mut enc = csv::Encoder::mem_encoder();
 //! enc.encode(("andrew", 1987u)).unwrap();
 //! enc.encode(("kait", 1989u)).unwrap();
 //! assert_eq!(enc.to_string(), "andrew,1987\nkait,1989\n");
 //! ```
 //!
-//! Note that `Encoder::string_encoder` creates a convenience encoder for
+//! Note that `Encoder::mem_encoder` creates a convenience encoder for
 //! strings. You can encode to any `Writer` (with `to_writer`) or to a file:
 //!
 //! ```no_run
 //! let mut enc = csv::Encoder::to_file(&Path::new("foo.csv"));
 //! let records = vec!(("andrew", 1987u), ("kait", 1989u));
-//! match enc.encode_all(records.as_slice()) {
+//! match enc.encode_all(records.iter()) {
 //!     Ok(_) => {},
 //!     Err(err) => fail!("Error encoding: {}", err),
 //! }
@@ -186,7 +195,8 @@
 //! The encoder in this crate supports all of the same things as the decoder,
 //! including writing enum and option types. The encoder will make sure that
 //! values containing special characters (like quotes, new lines or the
-//! delimiter) are appropriately quoted.
+//! delimiter) are appropriately quoted. Quoting only occurs when it is
+//! necessary.
 //!
 //!
 //! ## Streaming
@@ -242,10 +252,10 @@
 //!   * Both CRLF and LF line endings are supported. This is seamless in the
 //!     decoder. By default, the encoder uses LF line endings but can be
 //!     instructed to use CRLF with the `crlf` method.
-//!   * The first record is read as a "header" if and only if `has_headers`
-//!     has been called with `true`. This is off by default.
-//!     The encoder has no explicit support for headers. Simply encode a
-//!     vector of strings instead.
+//!   * The first record is read as a "header" by default, but this can be
+//!     disabled by calling `no_headers` before decoding any records.
+//!     (N.B. The encoder has no explicit support for headers. Simply encode a
+//!     vector of strings instead.)
 //!   * By default, the delimiter is a comma, but it can be changed to any
 //!     unicode character with the `separator` method (for either encoding
 //!     or decoding).
@@ -258,8 +268,12 @@
 //!     `false`.
 //!   * Empty lines (that do not include other whitespace) are ignored
 //!     by the decoder.
-//!   * Only UTF-8 is supported (and therefore ASCII). Bytes that cannot be
-//!     decoded into UTF-8 will be ignored by the decoder.
+//!   * Currently, this crate biases toward UTF-8 support. However, both
+//!     the `Decoder` and the `Encoder` expose methods for dealing with raw
+//!     encoding agnostic byte strings. The only restriction is that the field
+//!     delimiter must be a single 8-bit encoded character, quotations must
+//!     be the ASCII `"` and record separators must be the ASCII `\n` or `\r\n`
+//!     characters.
 //!
 //! Everything else should be supported, including new lines in quoted values.
 
@@ -273,294 +287,155 @@ extern crate stdtest = "test";
 #[cfg(test)]
 extern crate quickcheck;
 
-use std::default::Default;
 use std::fmt;
-use std::from_str::FromStr;
-use std::io::{
-    Reader, Writer, MemReader, MemWriter,
-    BufferedReader,
-    EndOfFile, InvalidInput,
-    File, IoResult,
-};
-use std::iter::Iterator;
-use std::path::Path;
-use std::str;
-use serialize::{Encodable, Decodable};
+use std::io;
+
+pub use encoder::{Encoder};
+pub use decoder::{Decoder, Records};
+
+mod encoder;
+mod decoder;
 
 #[cfg(test)]
 mod bench;
-
 #[cfg(test)]
 mod test;
 
-/// An encoder can encode Rust values into CSV records or documents.
-pub struct Encoder<W> {
-    buf: W,
-    sep: char,
-    same_len: bool,
-    first_len: uint,
-    use_crlf: bool,
-}
+/// A type that represents unadulterated byte strings.
+///
+/// Byte strings represent *any* 8 bit character encoding. There are no
+/// restrictions placed on the type of encoding used. (This means that there
+/// may be *multiple* encodings in any particular byte string!)
+///
+/// Many CSV files in the wild aren't just malformed with respect to RFC 4180,
+/// but they are commonly *not* UTF-8 encoded. Even worse, some of them are
+/// encoded improperly. Therefore, any useful CSV parser must be flexible with
+/// respect to encodings.
+///
+/// Thus, this CSV parser uses byte strings internally. This means that
+/// quotes and field and record separators *must* be ASCII. Otherwise,
+/// the parser places no other restrictions on the content of data in each
+/// cell.
+///
+/// Note that most of the methods in the encoder/decoder will assume UTF-8
+/// encoding, but they also expose some lower level methods that use byte
+/// strings when absolutely necessary. This type is exposed in case you need
+/// to deal with the raw bytes directly.
+#[deriving(Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ByteString(Vec<u8>);
 
-impl Encoder<MemWriter> {
-    /// Creates a new CSV string encoder. At any time, `to_string` can
-    /// be called to retrieve the cumulative CSV data.
-    pub fn string_encoder() -> Encoder<MemWriter> {
-        Encoder::to_writer(MemWriter::new())
+impl ByteString {
+    /// Create a new byte string from a vector or slice of bytes.
+    pub fn from_bytes<S: CloneableVector<u8>>(bs: S) -> ByteString {
+        ByteString(bs.into_vec())
     }
 
-    /// Returns the encoded CSV data as a string.
-    pub fn to_string<'r>(&'r self) -> &'r str {
-        str::from_utf8(self.buf.get_ref()).unwrap()
-    }
-}
-
-impl Encoder<IoResult<File>> {
-    /// Creates an encoder that writes the file given. If the file doesn't
-    /// exist, then it is created. If it already exists, then it is truncated
-    /// before writing.
-    pub fn to_file(path: &Path) -> Encoder<IoResult<File>> {
-        Encoder::to_writer(File::create(path))
-    }
-}
-
-impl<W: Writer> Encoder<W> {
-    /// Creates an encoder that encodes CSV data with the `Writer` given.
-    pub fn to_writer(w: W) -> Encoder<W> {
-        Encoder {
-            buf: w,
-            sep: ',',
-            same_len: true,
-            first_len: 0,
-            use_crlf: false,
-        }
+    /// Consumes this byte string into a vector of bytes.
+    pub fn into_bytes(self) -> Vec<u8> {
+        let ByteString(chars) = self;
+        chars
     }
 
-    /// Encodes a record as CSV data. Only values with types that correspond
-    /// to records can be given here (i.e., structs, tuples or vectors).
-    pub fn encode<E: Encodable<Encoder<W>, String>>
-                 (&mut self, e: E) -> Result<(), String> {
-        e.encode(self)
-    }
-
-    /// Calls `encode` on each element in the slice given.
-    pub fn encode_all<E: Encodable<Encoder<W>, String>>
-                     (&mut self, es: &[E]) -> Result<(), String> {
-        // for e in es.move_iter() {
-        for e in es.iter() {
-            try!(self.encode(e))
-        }
-        Ok(())
-    }
-
-    /// Sets the separator character that delimits values in a record.
-    pub fn separator(&mut self, c: char) {
-        self.sep = c;
-    }
-
-    /// When `yes` is `true`, all records written must have the same length.
-    /// If a record is written that has a different length than other records
-    /// already written, the encoding will fail.
-    pub fn enforce_same_length(&mut self, yes: bool) {
-        self.same_len = yes;
-    }
-
-    /// When `yes` is `true`, CRLF (`\r\n`) line endings will be used.
-    pub fn crlf(&mut self, yes: bool) {
-        self.use_crlf = yes;
-    }
-
-    fn w(&mut self, s: &str) -> Result<(), String> {
-        match self.buf.write_str(s) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e.to_string()),
-        }
-    }
-
-    fn write_to_string<T: fmt::Show>(&mut self, t: T) -> Result<(), String> {
-        self.w(t.to_string().as_slice())
-    }
-
-    fn quoted<'a>(&mut self, s: &'a str) -> str::MaybeOwned<'a> {
-        let sep = self.sep;
-        let quotable = |c: char| c == sep || c == '\n' || c == '"';
-        if s.len() == 0 || s.find(quotable).is_some() {
-            str::Owned(self.quote(s))
-        } else {
-            str::Slice(s)
-        }
-    }
-
-    fn quote(&mut self, s: &str) -> String {
-        let mut buf = String::with_capacity(s.len() + 2);
-        buf.push_char('"');
-        buf.push_str(s.replace("\"", "\"\"").as_slice());
-        buf.push_char('"');
-        buf
+    /// Consumes the byte string and decodes it into a Unicode string. If the
+    /// decoding fails, then the original ByteString is returned.
+    pub fn to_utf8_string(self) -> Result<String, ByteString> {
+        String::from_utf8(self.into_bytes()).map_err(ByteString)
     }
 }
 
-impl<W: Writer> serialize::Encoder<String> for Encoder<W> {
-    fn emit_nil(&mut self) -> Result<(), String> { unimplemented!() }
-    fn emit_uint(&mut self, v: uint) -> Result<(), String> {
-        self.write_to_string(v)
-    }
-    fn emit_u64(&mut self, v: u64) -> Result<(), String> { self.write_to_string(v) }
-    fn emit_u32(&mut self, v: u32) -> Result<(), String> { self.write_to_string(v) }
-    fn emit_u16(&mut self, v: u16) -> Result<(), String> { self.write_to_string(v) }
-    fn emit_u8(&mut self, v: u8) -> Result<(), String> { self.write_to_string(v) }
-    fn emit_int(&mut self, v: int) -> Result<(), String> { self.write_to_string(v) }
-    fn emit_i64(&mut self, v: i64) -> Result<(), String> { self.write_to_string(v) }
-    fn emit_i32(&mut self, v: i32) -> Result<(), String> { self.write_to_string(v) }
-    fn emit_i16(&mut self, v: i16) -> Result<(), String> { self.write_to_string(v) }
-    fn emit_i8(&mut self, v: i8) -> Result<(), String> { self.write_to_string(v) }
-    fn emit_bool(&mut self, v: bool) -> Result<(), String> { self.write_to_string(v) }
-    fn emit_f64(&mut self, v: f64) -> Result<(), String> {
-        self.w(::std::f64::to_str_digits(v, 10).as_slice())
-    }
-    fn emit_f32(&mut self, v: f32) -> Result<(), String> {
-        self.w(::std::f32::to_str_digits(v, 10).as_slice())
-    }
-    fn emit_char(&mut self, v: char) -> Result<(), String> {
-        self.write_to_string(v)
-    }
-    fn emit_str(&mut self, v: &str) -> Result<(), String> {
-        let s = self.quoted(v);
-        self.w(s.as_slice())
-    }
-    fn emit_enum(&mut self, _: &str,
-                 f: |&mut Encoder<W>| -> Result<(), String>)
-                -> Result<(), String> {
-        f(self)
-    }
-    fn emit_enum_variant(&mut self, v_name: &str, _: uint, len: uint,
-                         f: |&mut Encoder<W>| -> Result<(), String>)
-                        -> Result<(), String> {
-        match len {
-            0 => self.w(v_name),
-            1 => f(self),
-            _ => Err("Cannot encode enum variants with more \
-                      than one argument.".to_string()),
-        }
-    }
-    fn emit_enum_variant_arg(&mut self, _: uint,
-                             f: |&mut Encoder<W>| -> Result<(), String>)
-                            -> Result<(), String> {
-        f(self)
-    }
-    fn emit_enum_struct_variant(&mut self, v_name: &str, v_id: uint, len: uint,
-                                f: |&mut Encoder<W>| -> Result<(), String>)
-                               -> Result<(), String> {
-        self.emit_enum_variant(v_name, v_id, len, f)
-    }
-    fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
-                                      _: |&mut Encoder<W>| -> Result<(), String>)
-                                     -> Result<(), String> {
-        Err("Cannot encode enum variants with arguments.".to_string())
-    }
-    fn emit_struct(&mut self, _: &str, len: uint,
-                   f: |&mut Encoder<W>| -> Result<(), String>)
-                  -> Result<(), String> {
-        self.emit_seq(len, f)
-    }
-    fn emit_struct_field(&mut self, _: &str, f_idx: uint,
-                         f: |&mut Encoder<W>| -> Result<(), String>)
-                        -> Result<(), String> {
-        self.emit_seq_elt(f_idx, f)
-    }
-    fn emit_tuple(&mut self, len: uint,
-                  f: |&mut Encoder<W>| -> Result<(), String>)
-                 -> Result<(), String> {
-        self.emit_seq(len, f)
-    }
-    fn emit_tuple_arg(&mut self, idx: uint,
-                      f: |&mut Encoder<W>| -> Result<(), String>)
-                     -> Result<(), String> {
-        self.emit_seq_elt(idx, f)
-    }
-    fn emit_tuple_struct(&mut self, _: &str, _: uint,
-                         _: |&mut Encoder<W>| -> Result<(), String>)
-                        -> Result<(), String> {
-        unimplemented!()
-    }
-    fn emit_tuple_struct_arg(&mut self, _: uint,
-                             _: |&mut Encoder<W>| -> Result<(), String>)
-                            -> Result<(), String> {
-        unimplemented!()
-    }
-    fn emit_option(&mut self, f: |&mut Encoder<W>| -> Result<(), String>)
-                  -> Result<(), String> {
-        f(self)
-    }
-    fn emit_option_none(&mut self) -> Result<(), String> { Ok(()) }
-    fn emit_option_some(&mut self, f: |&mut Encoder<W>| -> Result<(), String>)
-                       -> Result<(), String> {
-        f(self)
-    }
-    fn emit_seq(&mut self, len: uint,
-                f: |this: &mut Encoder<W>| -> Result<(), String>)
-               -> Result<(), String> {
-        if len == 0 {
-            return Err("Records must have length bigger than 0.".to_string())
-        }
-        if self.same_len {
-            if self.first_len == 0 {
-                self.first_len = len
-            } else if self.first_len != len {
-                return Err(format!(
-                    "Record has length {} but other records have length {}",
-                    len, self.first_len))
-            }
-        }
-        try!(f(self));
-        if self.use_crlf {
-            self.w("\r\n")
-        } else {
-            self.w("\n")
-        }
-    }
-    fn emit_seq_elt(&mut self, idx: uint,
-                    f: |this: &mut Encoder<W>| -> Result<(), String>)
-                   -> Result<(), String> {
-        if idx > 0 {
-            try!(from_ioresult(self.buf.write_char(self.sep)));
-        }
-        f(self)
-    }
-    fn emit_map(&mut self, _: uint,
-                _: |&mut Encoder<W>| -> Result<(), String>)
-               -> Result<(), String> {
-        unimplemented!()
-    }
-    fn emit_map_elt_key(&mut self, _: uint,
-                        _: |&mut Encoder<W>| -> Result<(), String>)
-                       -> Result<(), String> {
-        unimplemented!()
-    }
-    fn emit_map_elt_val(&mut self, _: uint,
-                        _: |&mut Encoder<W>| -> Result<(), String>)
-                       -> Result<(), String> {
-        unimplemented!()
+impl fmt::Show for ByteString {
+    /// Writes the raw bytes to `f`. (There is no conversion to UTF-8
+    /// encoding.)
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let ByteString(ref chars) = *self;
+        // XXX: Ideally, we could just do this:
+        //
+        //    f.write(chars.as_slice())
+        //
+        // and let the output device figure out how to render it. But it seems
+        // the formatting infrastructure assumes that the data is UTF-8
+        // encodable, which obviously doesn't work with raw byte strings.
+        //
+        // For now, we just show the bytes, e.g., `[255, 50, 48, 49, ...]`.
+        write!(f, "{}", chars.as_slice())
     }
 }
 
-/// Information for a CSV decoding error.
+impl Slice<u8> for ByteString {
+    fn as_slice<'a>(&'a self) -> &'a [u8] {
+        let ByteString(ref chars) = *self;
+        chars.as_slice()
+    }
+}
+
+/// A type that encapsulates any type of error that can be generated by
+/// reading and writing CSV data.
 #[deriving(Clone)]
-pub struct Error {
+pub enum Error {
+    /// An error caused by invalid encoding. (Such as trying to write records
+    /// of varying length when `enforce_same_length` is enabled.)
+    ErrEncode(String),
+
+    /// An error caused by parsing or decoding a single CSV record.
+    ErrRecord(RecordError),
+
+    /// An IO error that occurred when reading or writing CSV data.
+    ErrIo(io::IoError),
+
+    /// EOF is reached. This is only exposed through the `record`,
+    /// `record_bytes` and `decode` methods in the decoder.
+    ErrEOF,
+}
+
+/// An error caused by parsing or decoding a single record.
+#[deriving(Clone)]
+pub struct RecordError {
     /// The line on which the error occurred.
-    line: uint,
+    pub line: uint,
 
     /// The column where the error occurred.
-    col: uint,
+    pub col: uint,
 
     /// A message describing the error.
-    msg: String,
+    pub msg: String,
+}
 
-    /// Whether this error corresponds to EOF or not.
-    eof: bool,
+impl Error {
+    fn record<S: StrAllocating>(line: uint, col: uint, msg: S) -> Error {
+        ErrRecord(RecordError {
+            line: line,
+            col: col,
+            msg: msg.into_string(),
+        })
+    }
+    fn eof() -> Error { ErrEOF }
+    fn io(e: io::IoError) -> Error { ErrIo(e) }
+
+    /// Returns true if this error is an EOF error.
+    pub fn is_eof(&self) -> bool {
+        match self { &ErrEOF => true, _ => false }
+    }
 }
 
 impl fmt::Show for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &ErrEncode(ref msg) => write!(f, "Encode error: {}", msg),
+            &ErrRecord(ref re) => write!(f, "{}", re),
+            &ErrIo(ref ie) => {
+                try!(write!(f, "IO error ({}): {}", ie.kind, ie.desc));
+                match ie.detail {
+                    None => {},
+                    Some(ref det) => try!(write!(f, " (detail: {})", det)),
+                }
+                Ok(())
+            }
+            &ErrEOF => write!(f, "EOF"),
+        }
+    }
+}
+
+impl fmt::Show for RecordError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Parse error:{}:{}: {}", self.line, self.col, self.msg)
     }
@@ -568,90 +443,49 @@ impl fmt::Show for Error {
 
 /// The parser state used in the decoder.
 struct Parser<R> {
-    buf: BufferedReader<R>, // buffer to read CSV data from
-    sep: char, // separator character to use
+    buf: io::BufferedReader<R>, // buffer to read CSV data from
+    sep: u8, // separator character to use
     same_len: bool, // whether to enforce all rows be of same length
     first_len: uint, // length of first row
-    has_headers: bool, // interpret first record as headers when true
-    headers: Vec<String>, // the first record in the CSV data
-    cur: Option<char>, // the current character
-    look: Option<char>, // one character look-ahead
+    no_headers: bool, // interpret first record as headers when true
+    headers: Vec<ByteString>, // the first record in the CSV data
+    cur: Option<u8>, // the current character
+    look: Option<u8>, // one character look-ahead
     line: uint, // current line
     col: uint, // current column
+    byte: u64, // current byte offset
+    byte_record_start: u64, // byte offset of previous read record
 }
 
 impl<R: Reader> Parser<R> {
-    fn err(&self, msg: &str) -> Error {
-        Error {
-            line: self.line,
-            col: self.col,
-            msg: msg.to_string(),
-            eof: false,
-        }
-    }
-
-    fn err_eof(&self) -> Error {
-        Error {
-            line: self.line,
-            col: self.col,
-            msg: "EOF".to_string(),
-            eof: true,
-        }
-    }
-
-    fn next_char(&mut self) -> Result<(), Error> {
-        self.cur = try!(self.read_next_char());
-        if !self.is_eof() {
-            if self.cur_is('\n') {
-                self.line += 1;
-                self.col = 1;
-            } else {
-                self.col += 1;
-            }
-        }
-        Ok(())
-    }
-
-    fn read_next_char(&mut self) -> Result<Option<char>, Error> {
-        match self.look {
-            Some(c) => { self.look = None; Ok(Some(c)) }
-            None => match self.buf.read_char() {
-                Ok(c) => Ok(Some(c)),
-                Err(err) => {
-                    match err.kind {
-                        EndOfFile => Ok(None),
-                        InvalidInput => {
-                            // Ignore invalid input.
-                            self.read_next_char()
-                        }
-                        _ => Err(self.err(format!(
-                                 "Could not read char [{}]: {} (detail: {})",
-                                 err.kind, err, err.detail).as_slice())),
-                    }
-                }
-            }
-        }
-    }
-
-    fn parse_record(&mut self, as_header: bool) -> Result<Vec<String>, Error> {
+    fn parse_record(&mut self, as_header: bool)
+                   -> Result<Vec<ByteString>, Error> {
+        self.line += 1;
         try!(self.eat_lineterms());
-        if self.peek_is_eof() {
-            return Err(self.err_eof())
+        if try!(self.peek()).is_none() {
+            return Err(Error::eof())
         }
 
+        self.byte_record_start = self.byte;
         let mut vals = Vec::with_capacity(self.first_len);
         while !self.is_eof() {
             let val = try!(self.parse_value());
             vals.push(val);
             if self.is_lineterm() {
                 try!(self.eat_lineterm());
-                try!(self.eat_lineterms());
                 break
             }
         }
         if self.is_eof() && vals.len() == 0 {
-            return Err(self.err_eof())
+            return Err(Error::eof())
         }
+
+        // This is a bit hokey, but if an error is generated at this point
+        // (like a decoding error), then the line number will be off by one.
+        // We correct this here, but we have to offset this correction the
+        // next time `parse_record` is called.
+        self.line -= 1;
+
         if self.same_len {
             if self.first_len == 0 {
                 self.first_len = vals.len()
@@ -673,7 +507,7 @@ impl<R: Reader> Parser<R> {
         // records having non-zero length. For example, if `headers` has zero
         // length, then that indicates that it hasn't been filled yet.
         assert!(vals.len() > 0);
-        if self.has_headers && self.headers.len() == 0 {
+        if !self.no_headers && self.headers.len() == 0 {
             self.headers = vals;
             if as_header {
                 return Ok(self.headers.clone())
@@ -683,620 +517,154 @@ impl<R: Reader> Parser<R> {
         Ok(vals)
     }
 
-    fn parse_value(&mut self) -> Result<String, Error> {
+    fn parse_value(&mut self) -> Result<ByteString, Error> {
         let mut only_whitespace = true;
-        let mut res = String::with_capacity(4);
+        let mut res = Vec::with_capacity(4);
         loop {
-            try!(self.next_char());
-            if self.is_sep() || self.is_lineterm() || self.is_eof() {
+            try!(self.next_byte());
+            if self.is_end_of_val() {
                 break
             } else if only_whitespace {
-                if self.cur_is('"') {
+                if self.cur_is(b'"') {
                     // Throw away any leading whitespace.
                     return self.parse_quoted_value()
-                } else if self.cur.unwrap().is_whitespace() {
-                    res.push_char(self.cur.unwrap());
+                } else if self.is_blank() {
+                    res.push(self.cur.unwrap());
                     continue
                 }
             }
             only_whitespace = false;
-            res.push_char(self.cur.unwrap());
+            res.push(self.cur.unwrap());
         }
-        Ok(res)
+        Ok(ByteString(res))
     }
 
-    fn parse_quoted_value(&mut self) -> Result<String, Error> {
+    fn parse_quoted_value(&mut self) -> Result<ByteString, Error> {
         // Assumes that " has already been read.
-        let mut res = String::with_capacity(4);
+        let mut res = Vec::with_capacity(4);
         loop {
-            try!(self.next_char());
+            try!(self.next_byte());
             if self.is_eof() {
                 return Err(self.err("EOF while parsing quoted value."))
-            } else if self.cur_is('"') {
-                if self.is_escaped_quote() {
-                    try!(self.next_char()); // throw away second "
-                    res.push_char('"');
+            } else if self.cur_is(b'"') {
+                if self.peek_is(b'"') {
+                    try!(self.next_byte()); // throw away second "
+                    res.push(b'"');
                     continue
                 }
 
                 // Eat and spit out everything up to next separator.
                 // If we see something that isn't whitespace, it's an error.
-                try!(self.next_char());
+                try!(self.next_byte());
                 loop {
-                    if self.is_sep() || self.is_lineterm() || self.is_eof() {
+                    if self.is_end_of_val() {
                         break
-                    } else if !self.cur.unwrap().is_whitespace() {
+                    } else if !self.is_blank() {
                         let msg = format!(
                             "Expected EOF, line terminator, separator or \
                             whitespace following quoted value but found \
                             '{}' instead.", self.cur.unwrap());
                         return Err(self.err(msg.as_slice()));
                     }
-                    try!(self.next_char());
+                    try!(self.next_byte());
                 }
                 break
-            } else if self.cur_is('\\') && self.peek_is('"') {
+            } else if self.cur_is(b'\\') && self.peek_is(b'"') {
                 // We also try to support \ escaped quotes even though
                 // the spec says "" is used.
-                try!(self.next_char()); // throw away the "
-                res.push_char('"');
+                try!(self.next_byte()); // throw away the "
+                res.push(b'"');
                 continue
             }
-            res.push_char(self.cur.unwrap());
+            res.push(self.cur.unwrap());
         }
-        Ok(res)
+        Ok(ByteString(res))
     }
 
-    fn is_eof(&self) -> bool {
-        self.cur.is_none()
+    fn next_byte(&mut self) -> Result<(), Error> {
+        self.cur = try!(self.read_next_byte());
+        if !self.is_eof() {
+            self.byte += 1;
+            if self.cur_is(b'\n') {
+                self.line += 1;
+                self.col = 1;
+            } else {
+                self.col += 1;
+            }
+        }
+        Ok(())
     }
 
-    fn cur_is(&self, c: char) -> bool {
-        self.cur == Some(c)
+    fn read_next_byte(&mut self) -> Result<Option<u8>, Error> {
+        match self.look {
+            Some(c) => { self.look = None; Ok(Some(c)) }
+            None => match self.buf.read_byte() {
+                Ok(c) => Ok(Some(c)),
+                Err(io::IoError { kind: io::EndOfFile, .. }) => Ok(None),
+                Err(err) => Err(Error::io(err)),
+            }
+        }
     }
 
-    fn peek(&mut self) -> Result<Option<char>, Error> {
+    fn peek(&mut self) -> Result<Option<u8>, Error> {
         match self.look {
             Some(c) => Ok(Some(c)),
             None => {
-                self.look = try!(self.read_next_char());
+                self.look = try!(self.read_next_byte());
                 Ok(self.look)
             }
         }
     }
 
-    fn peek_is(&mut self, c: char) -> bool {
+    fn cur_is(&self, c: u8) -> bool {
+        self.cur == Some(c)
+    }
+
+    fn peek_is(&mut self, c: u8) -> bool {
         match self.peek() {
             Ok(Some(p)) => p == c,
             _ => false,
         }
     }
 
-    fn peek_is_eof(&mut self) -> bool {
-        match self.peek() {
-            Ok(None) => true,
-            _ => false,
-        }
+    fn is_end_of_val(&mut self) -> bool {
+        self.cur_is(self.sep) || self.is_lineterm() || self.is_eof()
+    }
+
+    fn is_eof(&self) -> bool {
+        self.cur.is_none()
+    }
+
+    fn is_blank(&self) -> bool {
+        return self.cur == Some(b' ') || self.cur == Some(b'\t')
     }
 
     fn is_lineterm(&mut self) -> bool {
-        if self.cur_is('\n') {
+        if self.cur_is(b'\n') {
             return true
         }
-        if self.cur_is('\r') {
-            return self.peek_is('\n')
+        if self.cur_is(b'\r') {
+            return self.peek_is(b'\n')
         }
         false
     }
 
     fn eat_lineterms(&mut self) -> Result<(), Error> {
-        while self.peek_is('\n') || self.peek_is('\r') {
-            try!(self.next_char()); // read a '\r' or a '\n'
-            try!(self.eat_lineterm()); // read a '\n' if read '\r' ^^
+        while self.peek_is(b'\n') || self.peek_is(b'\r') {
+            try!(self.next_byte()); // read a '\r' or a '\n'
+            try!(self.eat_lineterm()); // read a '\n' if read '\r'
         }
         Ok(())
     }
 
     fn eat_lineterm(&mut self) -> Result<(), Error> {
-        if self.cur_is('\r') {
-            try!(self.next_char());
+        if self.cur_is(b'\r') {
+            try!(self.next_byte());
         }
         Ok(())
     }
 
-    fn is_sep(&mut self) -> bool {
-        self.cur_is(self.sep)
-    }
-
-    fn is_escaped_quote(&mut self) -> bool {
-        // Assumes that self.cur == '"'
-        self.peek_is('"')
-    }
-}
-
-/// A decoder can decode CSV values (or entire documents) into values with
-/// Rust types automatically.
-///
-/// Raw records (as strings) can also be accessed with the `record` method
-/// or with a standard iterator.
-pub struct Decoder<R> {
-    stack: Vec<Value>,
-    p: Parser<R>,
-}
-
-/// A representation of a value found in a CSV document.
-/// A CSV document's structure is simple (non-recursive).
-enum Value {
-    Record(Vec<String>),
-    String(String),
-}
-
-impl Value {
-    fn is_record(&self) -> bool {
-        match *self {
-            Record(_) => true,
-            String(_) => false,
-        }
-    }
-
-    fn is_string(&self) -> bool {
-        !self.is_record()
-    }
-}
-
-impl Decoder<IoResult<File>> {
-    /// Creates a new CSV decoder from a file using the file path given.
-    pub fn from_file(path: &Path) -> Decoder<IoResult<File>> {
-        Decoder::from_reader(File::open(path))
-    }
-}
-
-impl Decoder<MemReader> {
-    /// Creates a new CSV decoder that reads CSV data from the string given.
-    pub fn from_str(s: &str) -> Decoder<MemReader> {
-        let r = MemReader::new(Vec::from_slice(s.as_bytes()));
-        Decoder::from_reader(r)
-    }
-}
-
-impl<R: Reader> Decoder<R> {
-    /// Creates a new CSV decoder that reads CSV data from the `Reader` given.
-    /// Note that the `Reader` given may be a stream. Data is only read as it
-    /// is decoded.
-    ///
-    /// The reader given is wrapped in a `BufferedReader` for you.
-    pub fn from_reader(r: R) -> Decoder<R> {
-        Decoder::from_buffer(BufferedReader::new(r))
-    }
-
-    /// This is just like `from_reader`, except it allows you to specify
-    /// the capacity used in the underlying buffer.
-    pub fn from_reader_capacity(r: R, cap: uint) -> Decoder<R> {
-        Decoder::from_buffer(BufferedReader::with_capacity(cap, r))
-    }
-
-    fn from_buffer(buf: BufferedReader<R>) -> Decoder<R> {
-        Decoder {
-            stack: vec!(),
-            p: Parser {
-                buf: buf,
-                sep: ',',
-                same_len: true,
-                first_len: 0,
-                has_headers: false,
-                headers: vec!(),
-                cur: Some(0u8 as char),
-                look: None,
-                line: 1,
-                col: 0,
-            },
-        }
-    }
-
-    /// Decodes the next record for some type. Note that since this decodes
-    /// records, only types corresponding to a record (like structs, tuples or
-    /// vectors) can be used.
-    pub fn decode<D: Decodable<Decoder<R>, Error>>
-                 (&mut self) -> Result<D, Error> {
-        Decodable::decode(self)
-    }
-
-    /// Provides an iterator to decode one record at a time. Note that this
-    /// usually needs to have its type parameter `D` instantiated explicitly.
-    /// For example:
-    ///
-    /// ```no_run
-    /// let mut dec = csv::Decoder::from_str("abc,1");
-    /// let mut iter = dec.decode_iter::<(String, uint)>();
-    /// ```
-    ///
-    /// If there is an error decoding the data then `fail!` is called.
-    pub fn decode_iter<'a, D: Decodable<Decoder<R>, Error>>
-                      (&'a mut self) -> DecodedItems<'a, R, D> {
-        DecodedItems { dec: self }
-    }
-
-    /// Calls `decode` on every record in the CSV data until EOF and returns
-    /// them as a vector. If there was an error decoding a vector, parsing is
-    /// stopped and the error is returned.
-    pub fn decode_all<D: Decodable<Decoder<R>, Error>>
-                     (&mut self) -> Result<Vec<D>, Error> {
-        let mut records: Vec<D> = vec!();
-        loop {
-            match self.decode() {
-                Ok(r) => records.push(r),
-                Err(err) => if err.eof { break } else { return Err(err) }
-            }
-        }
-        Ok(records)
-    }
-
-    /// Circumvents the decoding interface and iterates over the records as
-    /// vectors of strings. A record returned by this method will never be
-    /// decoded.
-    pub fn iter<'a>(&'a mut self) -> Records<'a, R> {
-        Records { dec: self }
-    }
-
-    /// Circumvents the decoding interface and forces the parsing of the next
-    /// record and returns it. A record returned by this method will never be
-    /// decoded.
-    pub fn record(&mut self) -> Result<Vec<String>, Error> {
-        self.p.parse_record(false)
-    }
-
-    /// Sets the separator character that delimits values in a record.
-    pub fn separator(&mut self, c: char) {
-        self.p.sep = c;
-    }
-
-    /// When `yes` is `true`, all records decoded must have the same length.
-    /// If a record is decoded that has a different length than other records
-    /// already decoded, the decoding will fail.
-    pub fn enforce_same_length(&mut self, yes: bool) {
-        self.p.same_len = yes;
-    }
-
-    /// When `yes` is `true`, the first record decoded will be interpreted as
-    /// the headers for the CSV data. Each header is represented as a string.
-    /// Headers can be accessed at any time with the `headers` method.
-    pub fn has_headers(&mut self, yes: bool) {
-        self.p.has_headers = yes;
-    }
-
-    /// Returns the header record for the underlying CSV data. This method may
-    /// be called repeatedly and at any time.
-    ///
-    /// If `has_headers` is `false` (which is the default), then this will
-    /// call `fail!`.
-    pub fn headers(&mut self) -> Result<Vec<String>, Error> {
-        if !self.p.has_headers {
-            fail!("To get headers from CSV data, has_headers must be called.")
-        }
-        if self.p.headers.len() == 0 {
-            // Don't return an EOF error here.
-            match self.p.parse_record(true) {
-                Ok(_) => {}
-                Err(err) => if !err.eof { return Err(err) }
-            }
-            assert!(self.p.headers.len() > 0);
-        }
-        Ok(self.p.headers.clone())
-    }
-}
-
-/// An iterator that yields records as plain vectors of strings. This
-/// completely avoids the decoding machinery.
-pub struct Records<'a, R: 'a> {
-    dec: &'a mut Decoder<R>
-}
-
-impl<'a, R: Reader> Iterator<Vec<String>> for Records<'a, R> {
-    /// Iterates over each record in the CSV data. The iterator stops when
-    /// EOF is reached.
-    fn next(&mut self) -> Option<Vec<String>> {
-        match self.dec.record() {
-            Ok(r) => Some(r),
-            Err(err) => {
-                if err.eof {
-                    None
-                } else {
-                    fail!("{}", err)
-                }
-            }
-        }
-    }
-}
-
-/// An iterator that yields decoded items.
-pub struct DecodedItems<'a, R: 'a, D> {
-    dec: &'a mut Decoder<R>
-}
-
-impl<'a, R: Reader, D: Decodable<Decoder<R>, Error>> Iterator<D> for DecodedItems<'a, R, D> {
-    fn next(&mut self) -> Option<D> {
-        match self.dec.decode() {
-            Ok(r) => Some(r),
-            Err(err) => {
-                if err.eof {
-                    None
-                } else {
-                    fail!("Error decoding CSV data: {}", err)
-                }
-            }
-        }
-    }
-}
-
-impl<R: Reader> Decoder<R> {
-    fn pop(&mut self) -> Result<Value, Error> {
-        if self.stack.len() == 0 {
-            try!(self.read_to_stack())
-        }
-        // On successful return, read_to_stack guarantees a non-empty
-        // stack.
-        assert!(self.stack.len() > 0);
-        Ok(self.stack.pop().unwrap())
-    }
-
-    fn read_to_stack(&mut self) -> Result<(), Error> {
-        let r = try!(self.p.parse_record(false));
-        self.push_record(r);
-        Ok(())
-    }
-
-    fn pop_record(&mut self) -> Result<Vec<String>, Error> {
-        match try!(self.pop()) {
-            Record(r) => Ok(r),
-            String(s) => {
-                let m = format!("Expected record but got value '{}'.", s);
-                Err(self.err(m.as_slice()))
-            }
-        }
-    }
-
-    fn pop_string(&mut self) -> Result<String, Error> {
-        match try!(self.pop()) {
-            Record(_) => {
-                let m = format!("Expected value but got record.");
-                Err(self.err(m.as_slice()))
-            }
-            String(s) => Ok(s),
-        }
-    }
-
-    fn pop_from_str<T: FromStr + Default>(&mut self) -> Result<T, Error> {
-        let s = try!(self.pop_string());
-        let s = s.as_slice().trim();
-        match FromStr::from_str(s) {
-            Some(t) => Ok(t),
-            None => {
-                let m = format!("Failed converting '{}' from str.", s);
-                Err(self.err(m.as_slice()))
-            }
-        }
-    }
-
-    fn push_record(&mut self, r: Vec<String>) {
-        self.stack.push(Record(r))
-    }
-
-    fn push_string(&mut self, s: String) {
-        self.stack.push(String(s))
-    }
-
-    fn num_strings_on_top(&self) -> uint {
-        let mut count = 0;
-        for v in self.stack.iter().rev() {
-            if v.is_string() {
-                count += 1;
-            } else {
-                break
-            }
-        }
-        count
-    }
-
-    fn err(&self, msg: &str) -> Error {
-        self.p.err(msg)
-    }
-}
-
-impl<R: Reader> serialize::Decoder<Error> for Decoder<R> {
-    fn error(&mut self, err: &str) -> Error {
-        self.err(err)
-    }
-    fn read_nil(&mut self) -> Result<(), Error> { unimplemented!() }
-    fn read_uint(&mut self) -> Result<uint, Error> { self.pop_from_str() }
-    fn read_u64(&mut self) -> Result<u64, Error> { self.pop_from_str() }
-    fn read_u32(&mut self) -> Result<u32, Error> { self.pop_from_str() }
-    fn read_u16(&mut self) -> Result<u16, Error> { self.pop_from_str() }
-    fn read_u8(&mut self) -> Result<u8, Error> { self.pop_from_str() }
-    fn read_int(&mut self) -> Result<int, Error> { self.pop_from_str() }
-    fn read_i64(&mut self) -> Result<i64, Error> { self.pop_from_str() }
-    fn read_i32(&mut self) -> Result<i32, Error> { self.pop_from_str() }
-    fn read_i16(&mut self) -> Result<i16, Error> { self.pop_from_str() }
-    fn read_i8(&mut self) -> Result<i8, Error> { self.pop_from_str() }
-    fn read_bool(&mut self) -> Result<bool, Error> { self.pop_from_str() }
-    fn read_f64(&mut self) -> Result<f64, Error> { self.pop_from_str() }
-    fn read_f32(&mut self) -> Result<f32, Error> { self.pop_from_str() }
-    fn read_char(&mut self) -> Result<char, Error> {
-        let s = try!(self.pop_string());
-        let chars: Vec<char> = s.as_slice().chars().collect();
-        if chars.len() != 1 {
-            return Err(self.err(format!(
-                "Expected single character but got '{}'.", s).as_slice()))
-        }
-        Ok(chars[0])
-    }
-    fn read_str(&mut self) -> Result<String, Error> {
-        self.pop_string()
-    }
-    fn read_enum<T>(&mut self, _: &str,
-                    f: |&mut Decoder<R>| -> Result<T, Error>)
-                   -> Result<T, Error> {
-        f(self)
-    }
-    fn read_enum_variant<T>(&mut self, names: &[&str],
-                            f: |&mut Decoder<R>, uint| -> Result<T, Error>)
-                           -> Result<T, Error> {
-        let variant = to_lower(try!(self.pop_string()).as_slice());
-        match names.iter().position(|&name| to_lower(name) == variant) {
-            Some(idx) => return f(self, idx),
-            None => {}
-        }
-
-        // At this point, we couldn't find a verbatim Enum variant, so let's
-        // assume we're trying to load enum variants of one argument.
-        // We don't know which one to pick, so we try each of them until we
-        // get a hit.
-        //
-        // If we fail, it's tough to know what error to report. Probably the
-        // right way to do this is to maintain a stack of errors. Ug.
-        self.push_string(variant); // push what we popped earlier
-        for i in range(0, names.len()) {
-            // Copy the top of the stack now. We'll push it back on if
-            // decoding into this variant fails.
-            let cur = try!(self.pop_string());
-            let copy = cur.clone();
-            self.push_string(cur);
-
-            match f(self, i) {
-                Ok(v) => return Ok(v), // loaded a value successfully; bail!
-                Err(_) => {
-                    // Put what we popped back on the stack so we can retry.
-                    self.push_string(copy);
-                }
-            }
-        }
-        return Err(self.err(format!(
-            "Could not load value into any variant in {}", names).as_slice()))
-    }
-    fn read_enum_variant_arg<T>(&mut self, _: uint,
-                                f: |&mut Decoder<R>| -> Result<T, Error>)
-                               -> Result<T, Error> {
-        f(self)
-    }
-    fn read_enum_struct_variant<T>(&mut self, names: &[&str],
-                                   f: |&mut Decoder<R>, uint|
-                                      -> Result<T, Error>)
-                                  -> Result<T, Error> {
-        self.read_enum_variant(names, f)
-    }
-    fn read_enum_struct_variant_field<T>(&mut self, _: &str, f_idx: uint,
-                                         f: |&mut Decoder<R>|
-                                            -> Result<T, Error>)
-                                        -> Result<T, Error> {
-        self.read_enum_variant_arg(f_idx, f)
-    }
-    fn read_struct<T>(&mut self, s_name: &str, len: uint,
-                      f: |&mut Decoder<R>| -> Result<T, Error>)
-                     -> Result<T, Error> {
-        let r = try!(self.pop_record());
-        if r.len() < len {
-            let m = format!("Struct '{}' has {} fields but current record \
-                             has {} fields.", s_name, len, r.len());
-            return Err(self.err(m.as_slice()))
-        }
-        for v in r.move_iter().rev() {
-            self.push_string(v)
-        }
-        let result = f(self);
-        match result {
-            err @ Err(_) => err,
-            ok @ Ok(_) => {
-                assert!(self.num_strings_on_top() == 0);
-                ok
-            }
-        }
-    }
-    fn read_struct_field<T>(&mut self, _: &str, _: uint,
-                            f: |&mut Decoder<R>| -> Result<T, Error>)
-                           -> Result<T, Error> {
-        f(self)
-    }
-    fn read_tuple<T>(&mut self, f: |&mut Decoder<R>, uint| -> Result<T, Error>)
-                    -> Result<T, Error> {
-        let r = try!(self.pop_record());
-        let len = r.len();
-        for v in r.move_iter().rev() {
-            self.push_string(v)
-        }
-        f(self, len)
-    }
-    fn read_tuple_arg<T>(&mut self, _: uint,
-                         f: |&mut Decoder<R>| -> Result<T, Error>)
-                        -> Result<T, Error> {
-        f(self)
-    }
-    fn read_tuple_struct<T>(&mut self, _: &str,
-                            _: |&mut Decoder<R>, uint| -> Result<T, Error>)
-                           -> Result<T, Error> {
-        unimplemented!()
-    }
-    fn read_tuple_struct_arg<T>(&mut self, _: uint,
-                                _: |&mut Decoder<R>| -> Result<T, Error>)
-                               -> Result<T, Error> {
-        unimplemented!()
-    }
-    fn read_option<T>(&mut self,
-                      f: |&mut Decoder<R>, bool| -> Result<T, Error>)
-                     -> Result<T, Error> {
-        let s = try!(self.pop_string());
-        if s.is_empty() {
-            f(self, false)
-        } else {
-            self.push_string(s);
-            match f(self, true) {
-                Ok(v) => Ok(v),
-                Err(_) => f(self, false),
-            }
-        }
-    }
-    fn read_seq<T>(&mut self, f: |&mut Decoder<R>, uint| -> Result<T, Error>)
-                  -> Result<T, Error> {
-        match self.num_strings_on_top() {
-            0 => {
-                let r = try!(self.pop_record());
-                let len = r.len();
-                for v in r.move_iter().rev() {
-                    self.push_string(v)
-                }
-                f(self, len)
-            }
-            n => {
-                f(self, n)
-            }
-        }
-    }
-    fn read_seq_elt<T>(&mut self, _: uint,
-                       f: |&mut Decoder<R>| -> Result<T, Error>)
-                      -> Result<T, Error> {
-        f(self)
-    }
-    fn read_map<T>(&mut self, _: |&mut Decoder<R>, uint| -> Result<T, Error>)
-                  -> Result<T, Error> {
-        unimplemented!()
-    }
-    fn read_map_elt_key<T>(&mut self, _: uint,
-                           _: |&mut Decoder<R>| -> Result<T, Error>)
-                          -> Result<T, Error> {
-        unimplemented!()
-    }
-    fn read_map_elt_val<T>(&mut self, _: uint,
-                           _: |&mut Decoder<R>| -> Result<T, Error>)
-                          -> Result<T, Error> {
-        unimplemented!()
-    }
-}
-
-fn to_lower(s: &str) -> String {
-    s.chars().map(|c| c.to_lowercase()).collect()
-}
-
-fn from_ioresult(err: std::io::IoResult<()>) -> Result<(), String> {
-    match err {
-        Ok(()) => Ok(()),
-        Err(err) => Err(err.to_string()),
+    fn err<S: StrAllocating>(&self, msg: S) -> Error {
+        Error::record(self.line, self.col, msg)
     }
 }

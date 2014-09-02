@@ -73,7 +73,6 @@ fn short_decoded_records(b: &mut Bencher) {
     b.iter(|| {
         let _ = ordie(data.seek(0, io::SeekSet));
         let mut dec = Decoder::from_reader(&mut data as &mut io::Reader);
-        dec.has_headers(true);
         match dec.decode_all::<Play>() {
             Ok(_) => {}
             Err(err) => fail!("{}", err),

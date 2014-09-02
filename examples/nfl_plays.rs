@@ -26,7 +26,6 @@ fn main() {
     let fp = &Path::new("./data/2012_nfl_pbp_data.csv");
 
     let mut dec = Decoder::from_file(fp);
-    dec.has_headers(true);
     match dec.decode_all::<Play>() {
         Err(err) => fail!("{}", err),
         Ok(plays) => {

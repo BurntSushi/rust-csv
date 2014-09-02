@@ -23,7 +23,8 @@ fn main() {
     let fp = &Path::new("./data/simple.csv");
     let mut rdr = csv::Decoder::from_file(fp);
 
-    for (s1, s2, dist) in rdr.decode_iter::<(String, String, uint)>() {
+    for record in rdr.iter_decode::<(String, String, uint)>() {
+        let (s1, s2, dist) = record.unwrap();
         println!("({}, {}): {}", s1, s2, dist);
     }
 }
@@ -48,7 +49,8 @@ fn main() {
     let fp = &Path::new("./data/simple.csv");
     let mut rdr = csv::Decoder::from_file(fp);
 
-    for record in rdr.decode_iter::<Record>() {
+    for record in rdr.iter_decode::<Record>() {
+        let record = record.unwrap();
         println!("({}, {}): {}", record.s1, record.s2, record.dist);
     }
 }
@@ -77,29 +79,21 @@ The API is fully documented with lots of examples:
 
 ### Installation
 
-This will hopefully get easier when the new `cargo` package manager lands, but
-for right now, you can either clone the repo and build manually or install with
-`cargo-lite`.
-
-From source:
+This crate works with Cargo. Assuming you have Rust and
+[Cargo](http://crates.io/) installed, simply check out the source and run 
+tests:
 
 ```bash
-git clone git://github.com/BurntSushi/rust-csv
+git checkout git://github.com/BurntSushi/rust-csv
 cd rust-csv
-rustc -O --crate-type lib ./src/lib.rs # makes libcsv-{version}.rlib in CWD
-cd ./examples
-rustc -O -L .. ./nfl_plays.rs
-./nfl_plays
+cargo test
 ```
 
-For `cargo-lite`:
+You can also add `rust-csv` as a dependency to your project's `Cargo.toml`:
 
-```bash
-pip2 install cargo-lite
-cargo-lite install git://github.com/BurntSushi/rust-csv # installs to ~/.rust
-cd ~/.rust/src/rust-csv/examples
-rustc -O ./nfl_plays.rs
-./nfl_plays
+```toml
+[dependencies.rust-csv]
+git = "git://github.com/BurntSushi/rust-csv"
 ```
 
 

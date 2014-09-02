@@ -14,7 +14,8 @@ fn main() {
     let fp = &Path::new("./data/simple.csv");
     let mut rdr = csv::Decoder::from_file(fp);
 
-    for record in rdr.decode_iter::<Record>() {
+    for record in rdr.iter_decode::<Record>() {
+        let record = record.unwrap();
         println!("({}, {}): {}", record.s1, record.s2, record.dist);
     }
 }
