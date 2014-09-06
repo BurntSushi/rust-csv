@@ -467,18 +467,25 @@ struct Parser<R> {
     same_len: bool, // whether to enforce all rows be of same length
     first_len: uint, // length of first row
     no_headers: bool, // interpret first record as headers when true
-    headers: Vec<ByteString>, // the first record in the CSV data
+    first_record: Option<Vec<ByteString>>, // the first record in the CSV data
     cur: Option<u8>, // the current character
     look: Option<u8>, // one character look-ahead
     line: uint, // current line
     col: uint, // current column
     byte: u64, // current byte offset
     byte_record_start: u64, // byte offset of previous read record
+    returned_non_header: bool, // whether normal records have parsed or not
 }
 
 impl<R: Reader> Parser<R> {
     fn parse_record(&mut self, as_header: bool)
                    -> Result<Vec<ByteString>, Error> {
+        if self.no_headers
+            && self.first_record.is_some() && !self.returned_non_header {
+            self.returned_non_header = true;
+            return Ok(self.first_record.clone().unwrap());
+        }
+
         self.line += 1;
         try!(self.eat_lineterms());
         if try!(self.peek()).is_none() {
@@ -526,10 +533,13 @@ impl<R: Reader> Parser<R> {
         // records having non-zero length. For example, if `headers` has zero
         // length, then that indicates that it hasn't been filled yet.
         assert!(vals.len() > 0);
-        if !self.no_headers && self.headers.len() == 0 {
-            self.headers = vals;
-            if as_header {
-                return Ok(self.headers.clone())
+        if !as_header {
+            self.returned_non_header = true;
+        }
+        if self.first_record.is_none() {
+            self.first_record = Some(vals);
+            if as_header || self.no_headers {
+                return Ok(self.first_record.clone().unwrap())
             }
             return self.parse_record(false)
         }

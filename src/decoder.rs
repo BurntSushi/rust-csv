@@ -83,13 +83,14 @@ impl<R: Reader> Decoder<R> {
                 same_len: true,
                 first_len: 0,
                 no_headers: false,
-                headers: vec!(),
+                first_record: None,
                 cur: Some(0),
                 look: None,
                 line: 0,
                 col: 0,
                 byte: 0,
                 byte_record_start: 0,
+                returned_non_header: false,
             },
         }
     }
@@ -209,29 +210,17 @@ impl<R: Reader> Decoder<R> {
 
     /// Returns the header record for the underlying CSV data. This method may
     /// be called repeatedly and at any time.
-    ///
-    /// If `no_headers` is `true`, then an error is returned.
     pub fn headers(&mut self) -> Result<Vec<String>, Error> {
         to_utf8_record(try!(self.headers_bytes())).or_else(|m| self.err(m))
     }
 
     /// Returns the headers as raw byte strings.
-    ///
-    /// If `no_headers` is `true`, then an error is returned.
     pub fn headers_bytes(&mut self) -> Result<Vec<ByteString>, Error> {
-        if self.p.no_headers {
-            return self.err("Cannot get headers from CSV data when \
-                             `no_headers` is called on the decoder.")
+        if self.p.first_record.is_none() {
+            let _ = try!(self.p.parse_record(true));
+            assert!(self.p.first_record.is_some());
         }
-        if self.p.headers.len() == 0 {
-            // Don't return an EOF error here.
-            match self.p.parse_record(true) {
-                Ok(_) | Err(ErrEOF) => {}
-                Err(err) => return Err(err),
-            }
-            assert!(self.p.headers.len() > 0);
-        }
-        Ok(self.p.headers.clone())
+        Ok(self.p.first_record.clone().unwrap())
     }
 
     /// Returns the byte offset in the data stream that corresponds to the

@@ -1,5 +1,5 @@
 use quickcheck::{TestResult, quickcheck};
-use {Encoder, Decoder, ByteString};
+use {Encoder, Decoder, ByteString, Error};
 
 fn ordie<T, E: ::std::fmt::Show>(res: Result<T, E>) -> T {
     match res {
@@ -204,9 +204,31 @@ fn decoder_quotes() {
 }
 
 #[test]
-fn decoder_bad_header_access() {
-    let mut d = Decoder::from_str("").no_headers();
+fn decoder_headers_eof() {
+    let mut d = Decoder::from_str("");
     assert!(d.headers().is_err());
+}
+
+#[test]
+fn decoder_no_headers_first_record() {
+    let mut d = Decoder::from_str("a,b").no_headers();
+    let r = ordie(d.headers());
+    assert_eq!(r, vec!("a".to_string(), "b".to_string()));
+}
+
+#[test]
+fn decoder_no_headers_no_skip() {
+    let mut d = Decoder::from_str("a,b\nc,d").no_headers();
+    let _ = ordie(d.headers());
+    let rows: Vec<Result<Vec<String>, Error>> = d.iter().collect();
+    assert_eq!(rows.len(), 2);
+}
+
+#[test]
+fn decoder_empty_string() {
+    let mut d = Decoder::from_str("");
+    let rows: Vec<Result<Vec<String>, Error>> = d.iter().collect();
+    assert!(rows.len() == 0);
 }
 
 #[deriving(Decodable, Encodable, Show, PartialEq, Eq)]
