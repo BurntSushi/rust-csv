@@ -204,10 +204,9 @@ fn decoder_quotes() {
 }
 
 #[test]
-#[should_fail]
 fn decoder_bad_header_access() {
     let mut d = Decoder::from_str("").no_headers();
-    let _ = d.headers();
+    assert!(d.headers().is_err());
 }
 
 #[deriving(Decodable, Encodable, Show, PartialEq, Eq)]

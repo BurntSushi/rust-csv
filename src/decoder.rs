@@ -210,17 +210,18 @@ impl<R: Reader> Decoder<R> {
     /// Returns the header record for the underlying CSV data. This method may
     /// be called repeatedly and at any time.
     ///
-    /// If `no_headers` is `true`, this will cause task failure.
+    /// If `no_headers` is `true`, then an error is returned.
     pub fn headers(&mut self) -> Result<Vec<String>, Error> {
         to_utf8_record(try!(self.headers_bytes())).or_else(|m| self.err(m))
     }
 
     /// Returns the headers as raw byte strings.
     ///
-    /// If `no_headers` is `true`, this will cause task failure.
+    /// If `no_headers` is `true`, then an error is returned.
     pub fn headers_bytes(&mut self) -> Result<Vec<ByteString>, Error> {
         if self.p.no_headers {
-            fail!("To get headers from CSV data, `no_headers` must be called.")
+            return self.err("Cannot get headers from CSV data when \
+                             `no_headers` is called on the decoder.")
         }
         if self.p.headers.len() == 0 {
             // Don't return an EOF error here.
