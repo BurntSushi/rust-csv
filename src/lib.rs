@@ -337,6 +337,12 @@ impl ByteString {
         chars
     }
 
+    /// Returns this byte string as a slice of bytes.
+    pub fn as_bytes<'a>(&'a self) -> &'a [u8] {
+        let &ByteString(ref chars) = self;
+        chars.as_slice()
+    }
+
     /// Consumes the byte string and decodes it into a Unicode string. If the
     /// decoding fails, then the original ByteString is returned.
     pub fn to_utf8_string(self) -> Result<String, ByteString> {
@@ -372,6 +378,12 @@ impl Slice<u8> for ByteString {
 impl<H: hash::Writer> hash::Hash<H> for ByteString {
     fn hash(&self, hasher: &mut H) {
         self.as_slice().hash(hasher);
+    }
+}
+
+impl<S: Str> Equiv<S> for ByteString {
+    fn equiv(&self, other: &S) -> bool {
+        self.as_bytes() == other.as_slice().as_bytes()
     }
 }
 
