@@ -277,7 +277,7 @@
 //!
 //! Everything else should be supported, including new lines in quoted values.
 
-#![feature(phase)]
+#![feature(default_type_params, phase)]
 
 #[phase(plugin, link)] extern crate log;
 extern crate rand;
@@ -288,6 +288,7 @@ extern crate stdtest = "test";
 extern crate quickcheck;
 
 use std::fmt;
+use std::hash;
 use std::io;
 
 pub use encoder::{Encoder};
@@ -365,6 +366,12 @@ impl Slice<u8> for ByteString {
     fn as_slice<'a>(&'a self) -> &'a [u8] {
         let ByteString(ref chars) = *self;
         chars.as_slice()
+    }
+}
+
+impl<H: hash::Writer> hash::Hash<H> for ByteString {
+    fn hash(&self, hasher: &mut H) {
+        self.as_slice().hash(hasher);
     }
 }
 
