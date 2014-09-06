@@ -1,6 +1,6 @@
 [package]
 name = "rust-csv"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 
 [lib]
