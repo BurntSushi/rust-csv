@@ -1,6 +1,6 @@
 [root]
 name = "rust-csv"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "quickcheck 0.1.0 (git+git://github.com/BurntSushi/quickcheck#c64b4ebbafdb8521c3b20b58d2cd4b4020f45854)",
 ]
