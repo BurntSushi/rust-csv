@@ -144,6 +144,16 @@ fn decoder_same_length_records() {
 }
 
 #[test]
+fn decoder_different_length_records() {
+    let mut d = Decoder::from_str("a\na,b")
+                        .no_headers()
+                        .enforce_same_length(false);
+    let rs = ordie(d.decode_all::<Vec<String>>());
+    assert_eq!(rs, vec!(vec!("a".to_string()),
+                        vec!("a".to_string(), "b".to_string())));
+}
+
+#[test]
 fn decoder_headers() {
     let mut d = Decoder::from_str("a,b,c\n1,2,3");
     assert_eq!(ordie(d.headers()),
@@ -331,4 +341,25 @@ fn decoder_iter() {
     let rs: Vec<uint> = d.iter_decode::<(String, uint)>()
                          .map(|r| r.unwrap().val1()).collect();
     assert_eq!(rs, vec!(1u, 2, 3, 4));
+}
+
+#[test]
+fn decoder_reset() {
+    use std::io;
+
+    let data = "1,2\n3,4\n5,6\n";
+    let mut buf = io::MemReader::new(data.as_bytes().to_vec());
+
+    {
+        let mut d = Decoder::from_reader(buf.by_ref()).no_headers();
+        let vals: Vec<(uint, uint)> = ordie(d.decode_all());
+        assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
+    }
+
+    buf.seek(0, io::SeekSet).unwrap();
+    {
+        let mut d = Decoder::from_reader(buf.by_ref()).no_headers();
+        let vals: Vec<(uint, uint)> = ordie(d.decode_all());
+        assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
+    }
 }
