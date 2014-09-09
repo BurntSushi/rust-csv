@@ -282,7 +282,7 @@
 #[phase(plugin, link)] extern crate log;
 extern crate rand;
 extern crate serialize;
-extern crate stdtest = "test";
+extern crate "test" as stdtest;
 
 #[cfg(test)]
 extern crate quickcheck;
