@@ -65,33 +65,9 @@ impl<R: Reader> Decoder<R> {
     ///
     /// The reader given is wrapped in a `BufferedReader` for you.
     pub fn from_reader(r: R) -> Decoder<R> {
-        Decoder::from_buffer(BufferedReader::new(r))
-    }
-
-    /// This is just like `from_reader`, except it allows you to specify
-    /// the capacity used in the underlying buffer.
-    pub fn from_reader_capacity(r: R, cap: uint) -> Decoder<R> {
-        Decoder::from_buffer(BufferedReader::with_capacity(cap, r))
-    }
-
-    fn from_buffer(buf: BufferedReader<R>) -> Decoder<R> {
         Decoder {
             stack: vec!(),
-            p: Parser {
-                buf: buf,
-                sep: b',',
-                same_len: true,
-                first_len: 0,
-                no_headers: false,
-                first_record: None,
-                cur: Some(0),
-                look: None,
-                line: 0,
-                col: 0,
-                byte: 0,
-                byte_record_start: 0,
-                returned_non_header: false,
-            },
+            p: Parser::new(r, b',', false, true),
         }
     }
 
@@ -99,17 +75,17 @@ impl<R: Reader> Decoder<R> {
     ///
     /// This may be changed at any time.
     pub fn separator(mut self, c: u8) -> Decoder<R> {
-        self.p.sep = c;
+        self.p.delimiter = c;
         self
     }
 
-    /// When `yes` is `true`, all records decoded must have the same length.
+    /// When `yes` is `false`, all records decoded must have the same length.
     /// If a record is decoded that has a different length than other records
     /// already decoded, the decoding will fail.
     ///
-    /// This may be toggled at any time.
-    pub fn enforce_same_length(mut self, yes: bool) -> Decoder<R> {
-        self.p.same_len = yes;
+    /// This may be toggled at any time. The default is `false`.
+    pub fn flexible(mut self, yes: bool) -> Decoder<R> {
+        self.p.flexible = yes;
         self
     }
 
@@ -121,8 +97,8 @@ impl<R: Reader> Decoder<R> {
     /// Calling this method after the first row has been decoded will result
     /// in a task failure.
     pub fn no_headers(mut self) -> Decoder<R> {
-        assert!(self.p.first_len == 0);
-        self.p.no_headers = true;
+        assert!(!self.p.first_record_parsed);
+        self.p.has_headers = false;
         self
     }
 }
@@ -147,9 +123,8 @@ impl<R: Reader> Decoder<R> {
     /// ```
     pub fn iter_decode<'a, D: Decodable<Decoder<R>, Error>>
                       (&'a mut self) -> Records<'a, R, D> {
-        Records {
+        DecodedRecords {
             decoder: self,
-            decode: |d| d.decode(),
             errored: false,
         }
     }
@@ -174,38 +149,18 @@ impl<R: Reader> Decoder<R> {
 /// The following methods provide direct access to CSV records as Unicode
 /// strings or as byte strings.
 impl<R: Reader> Decoder<R> {
-    /// Circumvents the decoding interface and forces the parsing of the next
-    /// record and returns it. A record returned by this method will never be
-    /// decoded.
-    pub fn record(&mut self) -> Result<Vec<String>, Error> {
-        to_utf8_record(try!(self.record_bytes())).or_else(|m| self.err(m))
-    }
-
-    /// Returns the next record as a vector of raw byte strings.
-    pub fn record_bytes(&mut self) -> Result<Vec<ByteString>, Error> {
-        self.p.parse_record(false)
-    }
-
     /// Circumvents the decoding interface and iterates over the records as
     /// vectors of strings. A record returned by this method will never be
     /// decoded.
-    pub fn iter<'a>(&'a mut self) -> Records<'a, R, Vec<String>> {
-        Records {
-            decoder: self,
-            decode: |d| d.record(),
-            errored: false,
-        }
+    pub fn records<'a>(&'a mut self) -> Records<'a, R> {
+        self.p.records()
     }
 
     /// Circumvents the decoding interface and iterates over the records as
     /// vectors of byte strings. A record returned by this method will never be
     /// decoded.
-    pub fn iter_bytes<'a>(&'a mut self) -> Records<'a, R, Vec<ByteString>> {
-        Records {
-            decoder: self,
-            decode: |d| d.record_bytes(),
-            errored: false,
-        }
+    pub fn byte_records<'a>(&'a mut self) -> ByteRecords<'a, R> {
+        self.p.byte_records()
     }
 
     /// Returns the header record for the underlying CSV data. This method may
