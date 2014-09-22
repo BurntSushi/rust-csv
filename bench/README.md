@@ -60,3 +60,6 @@ Rust (byte slice)   32 seconds
 TODO: Fill in the other Rust access patterns for the huge benchmark. (The "byte 
 slice" access pattern is the fastest.)
 
+TODO: Benchmark with Python. (Estimate: "byte slice" is faster by around 2x, 
+but the other access patterns are probably comparable.)
+
