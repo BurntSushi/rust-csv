@@ -103,6 +103,12 @@ git = "git://github.com/BurntSushi/rust-csv"
 ```
 
 
+### Benchmarks
+
+There are some rough benchmarks (compared with Go) here:
+https://github.com/BurntSushi/rust-csv/tree/master/bench
+
+
 ### Related work
 
 The only other one I know is
