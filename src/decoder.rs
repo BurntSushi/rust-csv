@@ -22,14 +22,14 @@ pub struct Decoder<R> {
 /// A CSV document's structure is simple (non-recursive).
 enum Value {
     Record(Vec<String>),
-    String(String),
+    Field(String),
 }
 
 impl Value {
     fn is_record(&self) -> bool {
         match *self {
             Record(_) => true,
-            String(_) => false,
+            Field(_) => false,
         }
     }
 
@@ -283,7 +283,7 @@ impl<R: Reader> Decoder<R> {
     fn pop_record(&mut self) -> Result<Vec<String>, Error> {
         match try!(self.pop()) {
             Record(r) => Ok(r),
-            String(s) => {
+            Field(s) => {
                 self.err(format!("Expected record but got value '{}'.", s))
             }
         }
@@ -294,7 +294,7 @@ impl<R: Reader> Decoder<R> {
             Record(_) => {
                 self.err(format!("Expected value but got record."))
             }
-            String(s) => Ok(s),
+            Field(s) => Ok(s),
         }
     }
 
@@ -314,7 +314,7 @@ impl<R: Reader> Decoder<R> {
     }
 
     fn push_string(&mut self, s: String) {
-        self.stack.push(String(s))
+        self.stack.push(Field(s))
     }
 
     fn num_strings_on_top(&self) -> uint {
@@ -430,7 +430,7 @@ impl<R: Reader> serialize::Decoder<Error> for Decoder<R> {
                 format!("Struct '{}' has {} fields but current record \
                          has {} fields.", s_name, len, r.len()));
         }
-        for v in r.move_iter().rev() {
+        for v in r.into_iter().rev() {
             self.push_string(v)
         }
         let result = f(self);
@@ -451,7 +451,7 @@ impl<R: Reader> serialize::Decoder<Error> for Decoder<R> {
                     -> Result<T, Error> {
         let r = try!(self.pop_record());
         let len = r.len();
-        for v in r.move_iter().rev() {
+        for v in r.into_iter().rev() {
             self.push_string(v)
         }
         f(self, len)
@@ -491,7 +491,7 @@ impl<R: Reader> serialize::Decoder<Error> for Decoder<R> {
             0 => {
                 let r = try!(self.pop_record());
                 let len = r.len();
-                for v in r.move_iter().rev() {
+                for v in r.into_iter().rev() {
                     self.push_string(v)
                 }
                 f(self, len)
@@ -528,7 +528,7 @@ fn to_lower(s: &str) -> String {
 
 fn to_utf8_record(raw: Vec<ByteString>) -> Result<Vec<String>, String> {
     let mut strs = Vec::with_capacity(raw.len());
-    for bytes in raw.move_iter() {
+    for bytes in raw.into_iter() {
         match bytes.to_utf8_string() {
             Err(bytes) => {
                 return Err(format!(
