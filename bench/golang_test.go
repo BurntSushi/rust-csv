@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"io/ioutil"
+	"log"
+	"os"
 	"testing"
 )
 
-func BenchmarkShort(b *testing.B) {
-	rdr := asByteReader("../examples/data/short.csv")
+func BenchmarkReadCsv(b *testing.B) {
+	rdr := asByteReader("../examples/data/bench.csv")
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -14,22 +18,14 @@ func BenchmarkShort(b *testing.B) {
 	}
 }
 
-func BenchmarkMedium(b *testing.B) {
-	rdr := asByteReader("../examples/data/medium.csv")
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		rdr.Seek(0, 0)
-		readAll(rdr)
+func asByteReader(fpath string) *bytes.Reader {
+	f, err := os.Open(fpath)
+	if err != nil {
+		log.Fatal(err)
 	}
-}
-
-func BenchmarkLarge(b *testing.B) {
-	rdr := asByteReader("../examples/data/large.csv")
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		rdr.Seek(0, 0)
-		readAll(rdr)
+	bs, err := ioutil.ReadAll(f)
+	if err != nil {
+		log.Fatal(err)
 	}
+	return bytes.NewReader(bs)
 }

@@ -1,25 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"encoding/csv"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 )
-
-func asByteReader(fpath string) *bytes.Reader {
-	f, err := os.Open(fpath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	bs, err := ioutil.ReadAll(f)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return bytes.NewReader(bs)
-}
 
 func readAll(r io.Reader) {
 	csvr := csv.NewReader(r)
