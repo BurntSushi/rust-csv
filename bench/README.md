@@ -35,11 +35,13 @@ suspect the granularity is big enough that the values are comparable.
 
 For rust, --opt-level=3 was used.
 
+```
 Go                  41033948 ns/iter
 Rust (decode)       24016498
 Rust (string)       17052713
 Rust (byte string)  14876428
 Rust (byte slice)   11932269
+```
 
 You'll note that none of the above benchmarks use a particularly large CSV 
 file. So I've also run a pretty rough benchmark on a huge CSV file (3.6GB). A 
@@ -50,8 +52,10 @@ The huge benchmark for both Rust and Go use buffering. The times are wall
 clock times. The file system cache was warm and no disk access occurred during
 the benchmark. Both use a negligible and constant amount of memory (~1KB).
 
+```
 Go                 146 seconds
 Rust (byte slice)   32 seconds
+```
 
 TODO: Fill in the other Rust access patterns for the huge benchmark. (The "byte 
 slice" access pattern is the fastest.)
