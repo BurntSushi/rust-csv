@@ -1,5 +1,6 @@
-use quickcheck::{TestResult, quickcheck};
-use {Encoder, Decoder, ByteString, Error};
+use std::io::Reader as IoReader;
+use std::io::Writer as IoWriter;
+use {Reader, Writer, ByteString, CsvResult, collect};
 
 fn ordie<T, E: ::std::fmt::Show>(res: Result<T, E>) -> T {
     match res {
@@ -8,54 +9,37 @@ fn ordie<T, E: ::std::fmt::Show>(res: Result<T, E>) -> T {
     }
 }
 
-#[test]
-fn same_record() {
-    fn prop(input: Vec<String>) -> TestResult {
-        if input.len() == 0 {
-            return TestResult::discard()
-        }
-        if input.iter().any(|s| s.len() == 0) {
-            return TestResult::discard()
-        }
-
-        let mut senc = Encoder::mem_encoder();
-        ordie(senc.encode(input.as_slice()));
-
-        let mut dec = Decoder::from_str(senc.to_string()).no_headers();
-        let output: Vec<String> = ordie(dec.decode());
-
-        TestResult::from_bool(input == output)
-    }
-    quickcheck(prop);
+fn bytes<S: CloneableVector<u8>>(bs: S) -> ByteString {
+    ByteString::from_bytes(bs)
 }
 
 #[test]
 fn encoder_simple() {
-    let mut senc = Encoder::mem_encoder();
+    let mut senc = Writer::from_memory();
     ordie(senc.encode(("springsteen", 's', 1i, 0.14f64, false)));
-    assert_eq!("springsteen,s,1,0.14,false\n", senc.to_string());
+    assert_eq!("springsteen,s,1,0.14,false\n", senc.as_string());
 }
 
 #[test]
 fn encoder_simple_crlf() {
-    let mut senc = Encoder::mem_encoder().crlf(true);
+    let mut senc = Writer::from_memory().crlf(true);
     ordie(senc.encode(("springsteen", 's', 1i, 0.14f64, false)));
-    assert_eq!("springsteen,s,1,0.14,false\r\n", senc.to_string());
+    assert_eq!("springsteen,s,1,0.14,false\r\n", senc.as_string());
 }
 
 #[test]
 fn encoder_simple_tabbed() {
-    let mut senc = Encoder::mem_encoder().separator(b'\t');
+    let mut senc = Writer::from_memory().delimiter(b'\t');
     ordie(senc.encode(("springsteen", 's', 1i, 0.14f64, false)));
-    assert_eq!("springsteen\ts\t1\t0.14\tfalse\n", senc.to_string());
+    assert_eq!("springsteen\ts\t1\t0.14\tfalse\n", senc.as_string());
 }
 
 #[test]
 fn encoder_same_length_records() {
-    let mut senc = Encoder::mem_encoder().enforce_same_length(true);
+    let mut senc = Writer::from_memory().flexible(false);
     ordie(senc.encode(vec!('a')));
     match senc.encode(vec!('a', 'b')) {
-        Ok(_) => fail!("Encoder should report an error when records of \
+        Ok(_) => fail!("Writer should report an error when records of \
                         varying length are added and records of same \
                         length is enabled."),
         Err(_) => {}
@@ -64,30 +48,30 @@ fn encoder_same_length_records() {
 
 #[test]
 fn encoder_quoted_quotes() {
-    let mut senc = Encoder::mem_encoder();
+    let mut senc = Writer::from_memory();
     ordie(senc.encode(vec!("sprin\"g\"steen")));
-    assert_eq!("\"sprin\"\"g\"\"steen\"\n", senc.to_string());
+    assert_eq!("\"sprin\"\"g\"\"steen\"\n", senc.as_string());
 }
 
 #[test]
 fn encoder_quoted_sep() {
-    let mut senc = Encoder::mem_encoder().separator(b',');
+    let mut senc = Writer::from_memory().delimiter(b',');
     ordie(senc.encode(vec!("spring,steen")));
-    assert_eq!("\"spring,steen\"\n", senc.to_string());
+    assert_eq!("\"spring,steen\"\n", senc.as_string());
 }
 
 #[test]
 fn encoder_quoted_newlines() {
-    let mut senc = Encoder::mem_encoder();
+    let mut senc = Writer::from_memory();
     ordie(senc.encode(vec!("spring\nsteen")));
-    assert_eq!("\"spring\nsteen\"\n", senc.to_string());
+    assert_eq!("\"spring\nsteen\"\n", senc.as_string());
 }
 
 #[test]
 fn encoder_zero() {
-    let mut senc = Encoder::mem_encoder();
+    let mut senc = Writer::from_memory();
     match senc.encode::<Vec<int>>(vec!()) {
-        Ok(_) => fail!("Encoder should report an error when trying to \
+        Ok(_) => fail!("Writer should report an error when trying to \
                         encode records of length 0."),
         Err(_) => {}
     }
@@ -95,47 +79,49 @@ fn encoder_zero() {
 
 #[test]
 fn decoder_simple_nonl() {
-    let mut d = Decoder::from_str("springsteen,s,1,0.14,false").no_headers();
-    let r: (String, char, int, f64, bool) = ordie(d.decode());
-    assert_eq!(r, ("springsteen".to_string(), 's', 1, 0.14, false));
+    let mut d = Reader::from_string("springsteen,s,1,0.14,false").no_headers();
+    let r: Vec<(String, char, int, f64, bool)> = ordie(collect(d.decode()));
+    assert_eq!(r, vec![("springsteen".to_string(), 's', 1, 0.14, false)]);
 }
 
 #[test]
 fn decoder_simple_nonl_comma() {
-    let mut d = Decoder::from_str("springsteen,s,").no_headers();
-    let r: (String, char, Option<int>) = ordie(d.decode());
-    assert_eq!(r, ("springsteen".to_string(), 's', None));
+    let mut d = Reader::from_string("springsteen,s,").no_headers();
+    let r: Vec<(String, char, Option<int>)> = ordie(collect(d.decode()));
+    assert_eq!(r, vec![("springsteen".to_string(), 's', None)]);
 }
 
 #[test]
 fn decoder_simple() {
-    let mut d = Decoder::from_str("springsteen,s,1,0.14,false\n").no_headers();
-    let r: (String, char, int, f64, bool) = ordie(d.decode());
-    assert_eq!(r, ("springsteen".to_string(), 's', 1, 0.14, false));
+    let mut d = Reader::from_string("springsteen,s,1,0.14,false\n")
+                       .no_headers();
+    let r: Vec<(String, char, int, f64, bool)> = ordie(collect(d.decode()));
+    assert_eq!(r, vec![("springsteen".to_string(), 's', 1, 0.14, false)]);
 }
 
 #[test]
 fn decoder_simple_crlf() {
-    let mut d = Decoder::from_str("springsteen,s,1,0.1,false\r\n").no_headers();
-    let r: (String, char, int, f64, bool) = ordie(d.decode());
-    assert_eq!(r, ("springsteen".to_string(), 's', 1, 0.1, false));
+    let mut d = Reader::from_string("springsteen,s,1,0.1,false\r\n")
+                       .no_headers();
+    let r: Vec<(String, char, int, f64, bool)> = ordie(collect(d.decode()));
+    assert_eq!(r, vec![("springsteen".to_string(), 's', 1, 0.1, false)]);
 }
 
 #[test]
 fn decoder_simple_tabbed() {
-    let mut d = Decoder::from_str("springsteen\ts\t1\t0.14\tfalse\r\n")
-                        .no_headers()
-                        .separator(b'\t');
-    let r: (String, char, int, f64, bool) = ordie(d.decode());
-    assert_eq!(r, ("springsteen".to_string(), 's', 1, 0.14, false));
+    let mut d = Reader::from_string("springsteen\ts\t1\t0.14\tfalse\r\n")
+                       .no_headers()
+                       .delimiter(b'\t');
+    let r: Vec<(String, char, int, f64, bool)> = ordie(collect(d.decode()));
+    assert_eq!(r, vec![("springsteen".to_string(), 's', 1, 0.14, false)]);
 }
 
 #[test]
 fn decoder_same_length_records() {
-    let mut d = Decoder::from_str("a\na,b")
-                        .no_headers()
-                        .enforce_same_length(true);
-    match d.decode_all::<Vec<String>>() {
+    let mut d = Reader::from_string("a\na,b")
+                       .no_headers()
+                       .flexible(false);
+    match collect(d.decode::<Vec<String>>()) {
         Ok(_) => fail!("Decoder should report an error when records of \
                         varying length are decoded and records of same \
                         length if enabled."),
@@ -145,99 +131,100 @@ fn decoder_same_length_records() {
 
 #[test]
 fn decoder_different_length_records() {
-    let mut d = Decoder::from_str("a\na,b")
+    let mut d = Reader::from_string("a\na,b")
                         .no_headers()
-                        .enforce_same_length(false);
-    let rs = ordie(d.decode_all::<Vec<String>>());
+                        .flexible(true);
+    let rs = ordie(collect(d.decode::<Vec<String>>()));
     assert_eq!(rs, vec!(vec!("a".to_string()),
                         vec!("a".to_string(), "b".to_string())));
 }
 
 #[test]
 fn decoder_headers() {
-    let mut d = Decoder::from_str("a,b,c\n1,2,3");
+    let mut d = Reader::from_string("a,b,c\n1,2,3");
     assert_eq!(ordie(d.headers()),
                vec!("a".to_string(), "b".to_string(), "c".to_string()));
 
-    let r: (uint, uint, uint) = ordie(d.decode());
-    assert_eq!(r, (1, 2, 3));
+    let r: Vec<(uint, uint, uint)> = ordie(collect(d.decode()));
+    assert_eq!(r, vec![(1, 2, 3)]);
 }
 
 #[test]
 fn decoder_empty_lines() {
-    let mut d = Decoder::from_str("1,2\n\n3,4\n\n\n\n5,6\n\n").no_headers();
-    let vals: Vec<(uint, uint)> = ordie(d.decode_all());
+    let mut d = Reader::from_string("1,2\n\n3,4\n\n\n\n5,6\n\n").no_headers();
+    let vals: Vec<(uint, uint)> = ordie(collect(d.decode()));
     assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
 }
 
 #[test]
 fn decoder_empty_lines_crlf() {
-    let mut d = Decoder::from_str("1,2\r\n\r\n3,4\r\n\r\n\r\n\r\n5,6\r\n\r\n")
+    let mut d = Reader::from_string("1,2\r\n\r\n3,4\r\n\r\n\r\n\r\n5,6\r\n\r\n")
                         .no_headers();
-    let vals: Vec<(uint, uint)> = ordie(d.decode_all());
+    let vals: Vec<(uint, uint)> = ordie(collect(d.decode()));
     assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
 }
 
 #[test]
 fn decoder_empties_headers() {
-    let mut d = Decoder::from_str("a,b,c\n\n\n\n");
+    let mut d = Reader::from_string("a,b,c\n\n\n\n");
     assert_eq!(ordie(d.headers()),
                vec!("a".to_string(), "b".to_string(), "c".to_string()));
-    assert!(d.iter().next().is_none());
+    assert!(d.next().is_none());
 }
 
 #[test]
 fn decoder_all_empties() {
-    let mut d = Decoder::from_str("\n\n\n\n").no_headers();
-    assert!(d.iter().next().is_none());
+    let mut d = Reader::from_string("\n\n\n\n").no_headers();
+    assert!(d.next().is_none());
 }
 
 #[test]
 fn decoder_all_empties_crlf() {
-    let mut d = Decoder::from_str("\r\n\r\n\r\n\r\n").no_headers();
-    assert!(d.iter().next().is_none());
+    let mut d = Reader::from_string("\r\n\r\n\r\n\r\n").no_headers();
+    assert!(d.next().is_none());
 }
 
 #[test]
 fn decoder_empty_strings() {
-    let mut d = Decoder::from_str("\"\"").no_headers();
-    let r: (String,) = ordie(d.decode());
-    assert_eq!(r, ("".to_string(),));
+    let mut d = Reader::from_string("\"\"").no_headers();
+    let r: Vec<(String,)> = ordie(collect(d.decode()));
+    assert_eq!(r, vec![("".to_string(),)]);
 }
 
 #[test]
 fn decoder_quotes() {
-    let mut d = Decoder::from_str("\" a \",   \"1\"   ,\"1\",  1  ")
+    let mut d = Reader::from_string("\" a \",   \"1\"   ,\"1\",  1  ")
                         .no_headers();
-    let r: (String, String, uint, uint) = ordie(d.decode());
-    assert_eq!(r, (" a ".to_string(), "1".to_string(), 1, 1));
+    let r: Vec<(String, String, uint, uint)> = ordie(collect(d.decode()));
+    assert_eq!(r, vec![(" a ".to_string(), "   \"1\"   ".to_string(), 1, 1)]);
 }
 
 #[test]
 fn decoder_headers_eof() {
-    let mut d = Decoder::from_str("");
-    assert!(d.headers().is_err());
+    let mut d = Reader::from_string("");
+    assert!(d.headers().is_ok());
+    assert!(d.done());
 }
 
 #[test]
 fn decoder_no_headers_first_record() {
-    let mut d = Decoder::from_str("a,b").no_headers();
+    let mut d = Reader::from_string("a,b").no_headers();
     let r = ordie(d.headers());
     assert_eq!(r, vec!("a".to_string(), "b".to_string()));
 }
 
 #[test]
 fn decoder_no_headers_no_skip() {
-    let mut d = Decoder::from_str("a,b\nc,d").no_headers();
+    let mut d = Reader::from_string("a,b\nc,d").no_headers();
     let _ = ordie(d.headers());
-    let rows: Vec<Result<Vec<String>, Error>> = d.iter().collect();
+    let rows: Vec<CsvResult<Vec<String>>> = d.records().collect();
     assert_eq!(rows.len(), 2);
 }
 
 #[test]
 fn decoder_empty_string() {
-    let mut d = Decoder::from_str("");
-    let rows: Vec<Result<Vec<String>, Error>> = d.iter().collect();
+    let mut d = Reader::from_string("");
+    let rows: Vec<CsvResult<Vec<String>>> = d.records().collect();
     assert!(rows.len() == 0);
 }
 
@@ -255,90 +242,101 @@ enum Color {
 
 #[test]
 fn decoder_enum() {
-    let mut d = Decoder::from_str("ReD").no_headers();
-    let r: (Color,) = ordie(d.decode());
-    assert_eq!(r, (Red,));
+    let mut d = Reader::from_string("ReD").no_headers();
+    let r: Vec<(Color,)> = ordie(collect(d.decode()));
+    assert_eq!(r, vec![(Red,)]);
 }
 
 #[test]
 fn decoder_enum_arg() {
-    let mut d = Decoder::from_str("false,-5,5").no_headers();
-    let r: (Val, Val, Val) = ordie(d.decode());
-    assert_eq!(r, (Bool(false), Signed(-5), Unsigned(5)));
+    let mut d = Reader::from_string("false,-5,5").no_headers();
+    let r: Vec<(Val, Val, Val)> = ordie(collect(d.decode()));
+    assert_eq!(r, vec![(Bool(false), Signed(-5), Unsigned(5))]);
 }
 
 #[test]
 fn decoder_option() {
-    let mut d = Decoder::from_str(",1").no_headers();
-    let r: (Option<bool>, uint) = ordie(d.decode());
-    assert_eq!(r, (None, 1));
+    let mut d = Reader::from_string(",1").no_headers();
+    let r: Vec<(Option<bool>, uint)> = ordie(collect(d.decode()));
+    assert_eq!(r, vec![(None, 1)]);
 }
 
 #[test]
 fn encoder_enum() {
     let r = (Red,);
-    let mut senc = Encoder::mem_encoder();
+    let mut senc = Writer::from_memory();
     ordie(senc.encode(r));
-    assert_eq!("Red\n", senc.to_string());
+    assert_eq!("Red\n", senc.as_string());
 }
 
 #[test]
 fn encoder_enum_arg() {
     let r = (Bool(false), Signed(-5), Unsigned(5));
-    let mut senc = Encoder::mem_encoder();
+    let mut senc = Writer::from_memory();
     ordie(senc.encode(r));
-    assert_eq!("false,-5,5\n", senc.to_string());
+    assert_eq!("false,-5,5\n", senc.as_string());
 }
 
 #[test]
 fn encoder_option() {
     let r: (Option<bool>, uint) = (None, 1);
-    let mut senc = Encoder::mem_encoder();
+    let mut senc = Writer::from_memory();
     ordie(senc.encode(r));
-    assert_eq!(",1\n", senc.to_string());
+    assert_eq!(",1\n", senc.as_string());
+}
+
+#[test]
+fn trailing_lines_no_record() {
+    let s = "
+a,b,c
+d,e,f
+";
+    let mut rdr = Reader::from_string(s);
+    let mut count = 0u;
+    while !rdr.done() {
+        for r in rdr { let _ = ordie(r); }
+        count += 1;
+    }
+    assert_eq!(count, 2);
 }
 
 #[test]
 fn decoder_sample() {
     let s = "1997,Ford,E350,\n\
-            \"1997\", \"Ford\", \"E350\", \"Super, luxurious truck\"\n\
-            1997,Ford,E350, \"Go get one now\n\
+            \"1997\", \"Ford\",\"E350\",\"Super, luxurious truck\"\n\
+            1997,Ford,E350,\"Go get one now\n\
             they are going fast\"";
-    let mut d = Decoder::from_str(s);
-    let r: Vec<(uint, String, String, String)> = ordie(d.decode_all());
-    assert_eq!(*r.get(1).ref0(), 1997);
-}
-
-fn bytes<S: CloneableVector<u8>>(bs: S) -> ByteString {
-    ByteString::from_bytes(bs)
+    let mut d = Reader::from_string(s);
+    let r: Vec<(uint, String, String, String)> = ordie(collect(d.decode()));
+    assert_eq!(*r[1].ref0(), 1997);
 }
 
 #[test]
 fn decoder_byte_strings() {
-    let mut d = Decoder::from_str("abc,xyz").no_headers();
-    let r = ordie(d.record_bytes());
-    assert_eq!(r, vec!(bytes(b"abc"), bytes(b"xyz")));
+    let mut d = Reader::from_string("abc,xyz").no_headers();
+    let r = ordie(d.byte_records().next().unwrap());
+    assert_eq!(r, vec![bytes(b"abc"), bytes(b"xyz")]);
 }
 
 #[test]
 fn decoder_byte_strings_invalid_utf8() {
-    let mut d = Decoder::from_bytes(b"a\xffbc,xyz").no_headers();
-    let r = ordie(d.record_bytes());
-    assert_eq!(r, vec!(bytes(b"a\xffbc"), bytes(b"xyz")));
+    let mut d = Reader::from_bytes(b"a\xffbc,xyz").no_headers();
+    let r = ordie(d.byte_records().next().unwrap());
+    assert_eq!(r, vec![bytes(b"a\xffbc"), bytes(b"xyz")]);
 }
 
 #[test]
 #[should_fail]
 fn decoder_invalid_utf8() {
-    let mut d = Decoder::from_bytes(b"a\xffbc,xyz").no_headers();
-    ordie(d.record());
+    let mut d = Reader::from_bytes(b"a\xffbc,xyz").no_headers();
+    ordie(d.records().next().unwrap());
 }
 
 #[test]
 fn decoder_iter() {
-    let mut d = Decoder::from_str("andrew,1\nkait,2\ncauchy,3\nplato,4")
-                        .no_headers();
-    let rs: Vec<uint> = d.iter_decode::<(String, uint)>()
+    let mut d = Reader::from_string("andrew,1\nkait,2\ncauchy,3\nplato,4")
+                            .no_headers();
+    let rs: Vec<uint> = d.decode::<(String, uint)>()
                          .map(|r| r.unwrap().val1()).collect();
     assert_eq!(rs, vec!(1u, 2, 3, 4));
 }
@@ -351,15 +349,15 @@ fn decoder_reset() {
     let mut buf = io::MemReader::new(data.as_bytes().to_vec());
 
     {
-        let mut d = Decoder::from_reader(buf.by_ref()).no_headers();
-        let vals: Vec<(uint, uint)> = ordie(d.decode_all());
+        let mut d = Reader::from_reader(buf.by_ref()).no_headers();
+        let vals: Vec<(uint, uint)> = ordie(collect(d.decode()));
         assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
     }
 
     buf.seek(0, io::SeekSet).unwrap();
     {
-        let mut d = Decoder::from_reader(buf.by_ref()).no_headers();
-        let vals: Vec<(uint, uint)> = ordie(d.decode_all());
+        let mut d = Reader::from_reader(buf.by_ref()).no_headers();
+        let vals: Vec<(uint, uint)> = ordie(collect(d.decode()));
         assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
     }
 }

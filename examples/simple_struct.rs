@@ -12,10 +12,10 @@ struct Record {
 
 fn main() {
     let fp = &Path::new("./data/simple.csv");
-    let mut rdr = csv::Decoder::from_file(fp);
+    let mut rdr = csv::Reader::from_file(fp);
 
-    for record in rdr.iter_decode::<Record>() {
-        let record = record.unwrap();
+    for record in rdr.decode() {
+        let record: Record = record.unwrap();
         println!("({}, {}): {}", record.s1, record.s2, record.dist);
     }
 }

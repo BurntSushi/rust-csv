@@ -1,13 +1,10 @@
 [package]
 name = "rust-csv"
-version = "0.2.4"
+version = "0.3.0"
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 
 [lib]
 name = "csv"
 path = "src/lib.rs"
 crate_type = ["dylib", "rlib"]
-
-[dependencies.quickcheck]
-git = "git://github.com/BurntSushi/quickcheck"
 

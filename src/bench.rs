@@ -1,11 +1,12 @@
 use std::fmt::Show;
 use std::io;
+use std::io::Reader as IoReader;
+use std::io::Writer as IoWriter;
 use stdtest::Bencher;
-use super::Decoder;
 
-static CSV_SHORT: &'static str = "./examples/data/short.csv";
-static CSV_MEDIUM: &'static str = "./examples/data/medium.csv";
-static CSV_LARGE: &'static str = "./examples/data/large.csv";
+use Reader;
+
+static CSV_DATA: &'static str = "./examples/data/bench.csv";
 
 fn ordie<T, E: Show>(r: Result<T, E>) -> T {
     r.or_else(|e: E| -> Result<T, E> fail!(e.to_string())).unwrap()
@@ -19,33 +20,38 @@ fn file_to_mem(fp: &str) -> io::MemReader {
     io::MemReader::new(bs)
 }
 
+fn reader<'a>(rdr: &'a mut io::MemReader)
+             -> Reader<io::RefReader<'a, io::MemReader>> {
+    let _ = ordie(rdr.seek(0, io::SeekSet));
+    Reader::from_reader(rdr.by_ref())
+}
+
 #[bench]
-fn short_raw_records(b: &mut Bencher) {
-    let mut data = file_to_mem(CSV_SHORT);
+fn raw_records(b: &mut Bencher) {
+    let mut data = file_to_mem(CSV_DATA);
     b.iter(|| {
-        let _ = ordie(data.seek(0, io::SeekSet));
-        let mut dec = Decoder::from_reader(&mut data as &mut io::Reader);
-        for _ in dec.iter() {}
+        let mut dec = reader(&mut data);
+        while !dec.done() {
+            for r in dec { let _ = r.unwrap(); }
+        }
     })
 }
 
 #[bench]
-fn medium_raw_records(b: &mut Bencher) {
-    let mut data = file_to_mem(CSV_MEDIUM);
+fn byte_records(b: &mut Bencher) {
+    let mut data = file_to_mem(CSV_DATA);
     b.iter(|| {
-        let _ = ordie(data.seek(0, io::SeekSet));
-        let mut dec = Decoder::from_reader(&mut data as &mut io::Reader);
-        for _ in dec.iter() {}
+        let mut dec = reader(&mut data);
+        for r in dec.byte_records() { let _ = r.unwrap(); }
     })
 }
 
 #[bench]
-fn large_raw_records(b: &mut Bencher) {
-    let mut data = file_to_mem(CSV_LARGE);
+fn string_records(b: &mut Bencher) {
+    let mut data = file_to_mem(CSV_DATA);
     b.iter(|| {
-        let _ = ordie(data.seek(0, io::SeekSet));
-        let mut dec = Decoder::from_reader(&mut data as &mut io::Reader);
-        for _ in dec.iter() {}
+        let mut dec = reader(&mut data);
+        for r in dec.records() { let _ = r.unwrap(); }
     })
 }
 
@@ -68,14 +74,10 @@ struct Play {
 }
 
 #[bench]
-fn short_decoded_records(b: &mut Bencher) {
-    let mut data = file_to_mem(CSV_SHORT);
+fn decoded_records(b: &mut Bencher) {
+    let mut data = file_to_mem(CSV_DATA);
     b.iter(|| {
-        let _ = ordie(data.seek(0, io::SeekSet));
-        let mut dec = Decoder::from_reader(&mut data as &mut io::Reader);
-        match dec.decode_all::<Play>() {
-            Ok(_) => {}
-            Err(err) => fail!("{}", err),
-        }
+        let mut dec = reader(&mut data);
+        for r in dec.decode::<Play>() { let _ = r.unwrap(); }
     })
 }

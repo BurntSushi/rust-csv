@@ -2,7 +2,6 @@ extern crate csv;
 extern crate serialize;
 
 use std::path::Path;
-use csv::Decoder;
 
 #[allow(dead_code)]
 #[deriving(Decodable)]
@@ -25,8 +24,8 @@ struct Play {
 fn main() {
     let fp = &Path::new("./data/2012_nfl_pbp_data.csv");
 
-    let mut dec = Decoder::from_file(fp);
-    match dec.decode_all::<Play>() {
+    let mut dec = csv::Reader::from_file(fp);
+    match csv::collect(dec.decode::<Play>()) {
         Err(err) => fail!("{}", err),
         Ok(plays) => {
             println!("Found {} plays.", plays.len());
