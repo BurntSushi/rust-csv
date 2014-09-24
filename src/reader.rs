@@ -3,6 +3,7 @@ use std::mem::transmute;
 
 use serialize::Decodable;
 
+use buffered::BufferedReader;
 use {
     ByteString, CsvResult, Decoded,
     Error, ErrDecode, ErrIo, ErrParse,
@@ -61,7 +62,7 @@ static ESCAPE: u8 = b'\\';
 pub struct Reader<R> {
     delimiter: u8,
     flexible: bool, // true => records of varying length are allowed
-    buffer: io::BufferedReader<R>,
+    buffer: BufferedReader<R>,
     fieldbuf: Vec<u8>, // reusable buffer used to store fields
     state: ParseState, // current state in parsing machine
     err: Option<Error>, // current error; when `Some`, parsing is done forever
@@ -75,10 +76,10 @@ pub struct Reader<R> {
     has_headers: bool,
 
     // Various book-keeping counts.
-    field_count: uint, // number of fields in current record
-    column: uint, // current column (by byte, *shrug*)
-    line_record: uint, // line at which current record started
-    line_current: uint, // current line
+    field_count: u64, // number of fields in current record
+    column: u64, // current column (by byte, *shrug*)
+    line_record: u64, // line at which current record started
+    line_current: u64, // current line
     byte_offset: u64, // current byte offset
 }
 
@@ -274,7 +275,7 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// The reader is buffered for you automatically.
     pub fn from_reader(rdr: R) -> Reader<R> {
-        Reader::from_buffer(io::BufferedReader::new(rdr))
+        Reader::from_buffer(BufferedReader::new(rdr))
     }
 
     /// Creates a new CSV reader from a buffer.
@@ -282,7 +283,7 @@ impl<R: io::Reader> Reader<R> {
     /// This allows you to create your own buffer with a capacity of your
     /// choosing. In all other constructors, a buffer with default capacity
     /// is created for you.
-    pub fn from_buffer(buf: io::BufferedReader<R>) -> Reader<R> {
+    fn from_buffer(buf: BufferedReader<R>) -> Reader<R> {
         Reader {
             delimiter: b',',
             flexible: false,
@@ -408,12 +409,39 @@ impl<R: io::Reader> Reader<R> {
         self.err.is_some()
     }
 
+    /// Returns the line at which the current record started.
+    pub fn line(&self) -> u64 {
+        self.line_record
+    }
+
+    /// Returns the byte offset at which the current record started.
+    pub fn byte_offset(&self) -> u64 {
+        self.byte_offset
+    }
+
     fn parse_err(&self, kind: ParseErrorKind) -> Error {
         ErrParse(ParseError {
             line: self.line_record,
             column: self.column,
             kind: kind,
         })
+    }
+}
+
+impl<R: io::Reader + io::Seek> Reader<R> {
+    /// Seeks the underlying reader to the file cursor specified.
+    ///
+    /// This comes with several caveats:
+    ///
+    /// * The existing buffer is dropped and a new one is created.
+    /// * If you seek to a position other than the start of a record, you'll
+    ///   probably get an incorrect parse. (This is *not* unsafe.)
+    ///
+    /// Mostly, this is intended for use with the `index` sub module.
+    pub fn seek(&mut self, pos: i64, style: io::SeekStyle) -> CsvResult<()> {
+        self.buffer.clear();
+        try!(self.buffer.get_mut_ref().seek(pos, style).map_err(ErrIo));
+        Ok(())
     }
 }
 
@@ -465,9 +493,10 @@ impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>> for Reader<R> {
         // iteration, check for same-length records and reset a little
         // record-based book keeping.
         if self.state == EndRecord {
-            if !self.flexible && self.first_record.len() != self.field_count {
-                let err = self.parse_err(UnequalLengths(self.first_record.len(),
-                                                        self.field_count));
+            let first_len = self.first_record.len() as u64;
+            if !self.flexible && first_len != self.field_count {
+                let err = self.parse_err(UnequalLengths(
+                    self.first_record.len() as u64, self.field_count));
                 self.err = Some(err.clone());
                 return Some(Err(err));
             }

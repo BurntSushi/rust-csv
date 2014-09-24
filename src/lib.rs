@@ -196,6 +196,10 @@ pub use decoder::Decoded;
 pub use reader::{Reader, DecodedRecords, StringRecords, ByteRecords};
 pub use writer::{Writer};
 
+/// An experimental module for processing CSV data in parallel.
+pub mod index;
+
+mod buffered;
 mod bytestr;
 mod encoder;
 mod decoder;
@@ -267,9 +271,9 @@ impl Error {
 #[deriving(Clone)]
 pub struct ParseError {
     /// The line number of the parse error.
-    pub line: uint,
+    pub line: u64,
     /// The column (byte offset) of the parse error.
-    pub column: uint,
+    pub column: u64,
     /// The type of parse error.
     pub kind: ParseErrorKind,
 }
@@ -286,7 +290,7 @@ pub struct ParseError {
 pub enum ParseErrorKind {
     /// This error occurs when a record has a different number of fields
     /// than the first record parsed.
-    UnequalLengths(uint, uint),
+    UnequalLengths(u64, u64),
 
     /// This error occurs when parsing CSV data as Unicode.
     InvalidUTF8,
