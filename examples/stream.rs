@@ -23,7 +23,7 @@ fn main() {
     // We create a CSV reader with a small buffer so that we can see streaming
     // in action on small inputs.
     let buf = io::BufferedReader::with_capacity(1, r);
-    let mut dec = csv::Reader::from_buffer(buf);
+    let mut dec = csv::Reader::from_reader(buf);
     for r in dec.records() {
         println!("Record: {}", r);
     }
