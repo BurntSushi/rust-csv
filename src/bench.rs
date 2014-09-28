@@ -29,6 +29,7 @@ fn reader<'a>(rdr: &'a mut io::MemReader)
 #[bench]
 fn raw_records(b: &mut Bencher) {
     let mut data = file_to_mem(CSV_DATA);
+    b.bytes = data.get_ref().len() as u64;
     b.iter(|| {
         let mut dec = reader(&mut data);
         while !dec.done() {
@@ -40,6 +41,7 @@ fn raw_records(b: &mut Bencher) {
 #[bench]
 fn byte_records(b: &mut Bencher) {
     let mut data = file_to_mem(CSV_DATA);
+    b.bytes = data.get_ref().len() as u64;
     b.iter(|| {
         let mut dec = reader(&mut data);
         for r in dec.byte_records() { let _ = r.unwrap(); }
@@ -49,6 +51,7 @@ fn byte_records(b: &mut Bencher) {
 #[bench]
 fn string_records(b: &mut Bencher) {
     let mut data = file_to_mem(CSV_DATA);
+    b.bytes = data.get_ref().len() as u64;
     b.iter(|| {
         let mut dec = reader(&mut data);
         for r in dec.records() { let _ = r.unwrap(); }
@@ -76,6 +79,7 @@ struct Play {
 #[bench]
 fn decoded_records(b: &mut Bencher) {
     let mut data = file_to_mem(CSV_DATA);
+    b.bytes = data.get_ref().len() as u64;
     b.iter(|| {
         let mut dec = reader(&mut data);
         for r in dec.decode::<Play>() { let _ = r.unwrap(); }

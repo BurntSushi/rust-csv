@@ -310,7 +310,7 @@ impl<W: io::Writer> Writer<W> {
             c == delim || c == b'\n' || c == b'\r' || c == b'"'
         };
         if s.iter().any(quotable) {
-            self.w_bytes(quote(s).as_slice())
+            self.w_bytes(quote(s)[])
         } else {
             self.w_bytes(s)
         }

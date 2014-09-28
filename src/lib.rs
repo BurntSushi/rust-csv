@@ -31,7 +31,7 @@
 //! interposed,emmett,9
 //! chocolate,refile,7";
 //!
-//! let mut rdr = csv::Reader::from_string(data).no_headers();
+//! let mut rdr = csv::Reader::from_string(data).has_headers(false);
 //! for row in rdr.decode() {
 //!     let (n1, n2, dist): (String, String, uint) = row.unwrap();
 //!     println!("{}, {}: {:u}", n1, n2, dist);
@@ -49,7 +49,7 @@
 //! interposed,emmett,9
 //! chocolate,refile,7";
 //!
-//! let mut rdr = csv::Reader::from_string(data).no_headers();
+//! let mut rdr = csv::Reader::from_string(data).has_headers(false);
 //! let rows = csv::collect(rdr.decode::<(String, String, uint)>()).unwrap();
 //! assert_eq!(rows.len(), 5);
 //! ```
@@ -86,7 +86,7 @@
 //! interposed,emmett,9
 //! chocolate,refile,7";
 //!
-//! let mut rdr = csv::Reader::from_string(data).no_headers();
+//! let mut rdr = csv::Reader::from_string(data).has_headers(false);
 //! for row in rdr.records() {
 //!     let row = row.unwrap();
 //!     println!("{}", row);
@@ -103,7 +103,7 @@
 //! sti\xffcker,mortals,7
 //! chocolate,refile,7";
 //!
-//! let mut rdr = csv::Reader::from_bytes(data).no_headers();
+//! let mut rdr = csv::Reader::from_bytes(data).has_headers(false);
 //! for row in rdr.byte_records() {
 //!     let row = row.unwrap();
 //!     println!("{}", row);
@@ -233,7 +233,7 @@ pub type CsvResult<T> = Result<T, Error>;
 /// interposed,emmett,9
 /// chocolate,refile,7";
 ///
-/// let mut rdr = csv::Reader::from_string(data).no_headers();
+/// let mut rdr = csv::Reader::from_string(data).has_headers(false);
 /// let rows = csv::collect(rdr.records()).unwrap();
 ///
 /// assert_eq!(rows[2][2], "4".to_string());

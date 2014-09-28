@@ -12,7 +12,7 @@ pub struct Indexed<R, I> {
 impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
     pub fn new(rdr: Reader<R>, idx: I) -> Indexed<R, I> {
         Indexed {
-            rdr: rdr.no_headers(),
+            rdr: rdr.has_headers(false),
             idx: idx,
         }
     }
@@ -31,7 +31,7 @@ impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
 
 pub fn create<R: io::Reader + io::Seek, W: io::Writer>
              (csv_rdr: Reader<R>, mut idx_wtr: W) -> CsvResult<()> {
-    let mut rdr = csv_rdr.no_headers();
+    let mut rdr = csv_rdr.has_headers(false);
     while !rdr.done() {
         try!(idx_wtr.write_be_u64(rdr.byte_offset()).map_err(ErrIo));
         for field in rdr { let _ = try!(field); }

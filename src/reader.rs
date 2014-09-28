@@ -32,7 +32,7 @@ static ESCAPE: u8 = b'\\';
 /// interposed,emmett,9
 /// chocolate,refile,7";
 ///
-/// let mut rdr = csv::Reader::from_string(data).no_headers();
+/// let mut rdr = csv::Reader::from_string(data).has_headers(false);
 /// for row in rdr.decode() {
 ///     let (n1, n2, dist): (String, String, uint) = row.unwrap();
 ///     println!("{}, {}: {:u}", n1, n2, dist);
@@ -51,7 +51,7 @@ static ESCAPE: u8 = b'\\';
 /// chocolate\trefile\t7";
 ///
 /// let mut rdr = csv::Reader::from_string(data)
-///                           .no_headers()
+///                           .has_headers(false)
 ///                           .delimiter(b'\t')
 ///                           .flexible(true);
 /// for row in rdr.records() {
@@ -116,7 +116,8 @@ impl<R: io::Reader> Reader<R> {
     /// returned in this example include the first record:
     ///
     /// ```rust
-    /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3").no_headers();
+    /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3")
+    ///                           .has_headers(false);
     ///
     /// let headers1 = rdr.headers().unwrap();
     /// let rows = csv::collect(rdr.records()).unwrap();
@@ -166,7 +167,7 @@ impl<R: io::Reader> Reader<R> {
     /// }
     ///
     /// let mut rdr = csv::Reader::from_string("foo,bar,1\nfoo,baz,2")
-    ///                           .no_headers();
+    ///                           .has_headers(false);
     /// // Instantiating a specific type when decoding is usually necessary.
     /// let rows = csv::collect(rdr.decode::<Pair>()).unwrap();
     ///
@@ -199,7 +200,7 @@ impl<R: io::Reader> Reader<R> {
     /// }
     ///
     /// let mut rdr = csv::Reader::from_string("foo,bar,1,red\nfoo,baz,,green")
-    ///                           .no_headers();
+    ///                           .has_headers(false);
     /// let rows = csv::collect(rdr.decode::<Pair>()).unwrap();
     ///
     /// assert_eq!(rows[0].dist, Some(MyUint(1)));
@@ -226,7 +227,7 @@ impl<R: io::Reader> Reader<R> {
     /// }
     ///
     /// let mut rdr = csv::Reader::from_string("a,b,1,2,3,4\ny,z,5,6,7,8")
-    ///                           .no_headers();
+    ///                           .has_headers(false);
     /// let rows = csv::collect(rdr.decode::<Pair>()).unwrap();
     ///
     /// assert_eq!(rows[0].attrs, vec![1,2,3,4]);
@@ -259,7 +260,7 @@ impl<R: io::Reader> Reader<R> {
     /// interposed,emmett,9
     /// chocolate,refile,7";
     ///
-    /// let mut rdr = csv::Reader::from_string(data).no_headers();
+    /// let mut rdr = csv::Reader::from_string(data).has_headers(false);
     /// for row in rdr.records() {
     ///     let row = row.unwrap();
     ///     println!("{}", row);
@@ -324,16 +325,16 @@ impl<R: io::Reader> Reader<R> {
         self
     }
 
-    /// Do not treat the first row as a special header row.
+    /// Whether to treat the first row as a special header row.
     ///
     /// By default, the first row is treated as a special header row, which
     /// means it is excluded from iterators returned by the `decode`, `records`
-    /// or `byte_records` methods. When `no_headers` is called, the first row
+    /// or `byte_records` methods. When `yes` is set to `false`, the first row
     /// is included in those iterators.
     ///
     /// Note that the `headers` method is unaffected by whether this is set.
-    pub fn no_headers(mut self) -> Reader<R> {
-        self.has_headers = false;
+    pub fn has_headers(mut self, yes: bool) -> Reader<R> {
+        self.has_headers = yes;
         self
     }
 }
@@ -611,11 +612,11 @@ impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>> for Reader<R> {
         }
         if self.line_record == 1 {
             // This is only copying bytes for the first record.
-            let bytes = ByteString::from_bytes(pmachine.fieldbuf.as_slice());
+            let bytes = ByteString::from_bytes((*pmachine.fieldbuf)[]);
             self.first_record.push(bytes);
         }
         self.field_count += 1;
-        Some(Ok(pmachine.fieldbuf.as_slice()))
+        Some(Ok((*pmachine.fieldbuf)[]))
     }
 }
 
@@ -834,7 +835,7 @@ fn is_crlf(b: u8) -> bool { b == b'\n' || b == b'\r' }
 
 fn byte_record_to_utf8(record: Vec<ByteString>) -> CsvResult<Vec<String>> {
     for bytes in record.iter() {
-        if !::std::str::is_utf8(bytes.as_slice()) {
+        if !::std::str::is_utf8(bytes[]) {
             return Err(ErrDecode(format!(
                 "Could not decode the following bytes as UTF-8: {}", bytes)));
         }

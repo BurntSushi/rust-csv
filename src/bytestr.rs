@@ -1,5 +1,6 @@
 use std::fmt;
 use std::hash;
+use std::ops;
 
 /// A type that represents unadulterated byte strings.
 ///
@@ -39,7 +40,7 @@ impl ByteString {
     /// Returns this byte string as a slice of bytes.
     pub fn as_bytes<'a>(&'a self) -> &'a [u8] {
         let &ByteString(ref chars) = self;
-        chars.as_slice()
+        chars[]
     }
 
     /// Consumes the byte string and decodes it into a Unicode string. If the
@@ -52,30 +53,52 @@ impl ByteString {
 impl fmt::Show for ByteString {
     /// Writes the underlying bytes as a `&[u8]`.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let ByteString(ref chars) = *self;
         // XXX: Ideally, we could just do this:
         //
-        //    f.write(chars.as_slice())
+        //    f.write(chars[])
         //
         // and let the output device figure out how to render it. But it seems
         // the formatting infrastructure assumes that the data is UTF-8
         // encodable, which obviously doesn't work with raw byte strings.
         //
         // For now, we just show the bytes, e.g., `[255, 50, 48, 49, ...]`.
-        write!(f, "{}", chars.as_slice())
+        write!(f, "{}", self[])
     }
 }
 
 impl Slice<u8> for ByteString {
+    #[inline]
     fn as_slice<'a>(&'a self) -> &'a [u8] {
         let ByteString(ref chars) = *self;
         chars.as_slice()
     }
 }
 
+impl ops::Slice<uint, [u8]> for ByteString {
+    #[inline]
+    fn as_slice_<'a>(&'a self) -> &'a [u8] {
+        self.as_slice()
+    }
+
+    #[inline]
+    fn slice_from_<'a>(&'a self, start: &uint) -> &'a [u8] {
+        self.as_slice().slice_from_(start)
+    }
+
+    #[inline]
+    fn slice_to_<'a>(&'a self, end: &uint) -> &'a [u8] {
+        self.as_slice().slice_to_(end)
+    }
+
+    #[inline]
+    fn slice_<'a>(&'a self, start: &uint, end: &uint) -> &'a [u8] {
+        self.as_slice().slice_(start, end)
+    }
+}
+
 impl<H: hash::Writer> hash::Hash<H> for ByteString {
     fn hash(&self, hasher: &mut H) {
-        self.as_slice().hash(hasher);
+        self[].hash(hasher);
     }
 }
 
