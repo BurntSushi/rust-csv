@@ -73,7 +73,10 @@ pub struct Reader<R> {
     // When this is true, the first record is interpreted as a "header" row.
     // This is opaque to the raw iterator, but is used in any iterator that
     // allocates.
-    has_headers: bool,
+    //
+    // TODO: This is exposed for use in the `index` sub-module. Is that OK?
+    #[doc(hidden)]
+    pub has_headers: bool,
 
     // Various book-keeping counts.
     field_count: u64, // number of fields in current record
