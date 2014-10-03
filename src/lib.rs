@@ -116,8 +116,7 @@
 //! instead of records (unlike the other iterators). Each field is a `&[u8]`.
 //! No allocation is performed during parsing (unlike the other iterators,
 //! which at least allocate a `Vec<u8>` for each field and a `Vec<_>` for each
-//! record). Since no allocation is performed, this "iterator" doesn't actually
-//! implement the `Iterator` trait (since it cannot be done safely).
+//! record).
 //!
 //! This is the lowest level interface and should only be used when you need
 //! the performance.
@@ -132,11 +131,8 @@
 //!
 //! let mut rdr = csv::Reader::from_string(data);
 //! while !rdr.done() {
-//!     loop {
-//!         let field = match rdr.next_field() {
-//!             None => break,
-//!             Some(result) => result.unwrap(),
-//!         };
+//!     for field in rdr {
+//!         let field = field.unwrap();
 //!         print!("{}", field);
 //!     }
 //!     println!("");

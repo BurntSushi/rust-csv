@@ -365,12 +365,8 @@ impl<R: io::Reader> Reader<R> {
             Ok(self.first_record.clone())
         } else {
             let mut headers = vec![];
-            loop {
-                let field = match self.next_field() {
-                    None => break,
-                    Some(field) => try!(field),
-                };
-                headers.push(ByteString::from_bytes(field));
+            for field in self {
+                headers.push(ByteString::from_bytes(try!(field)));
             }
             assert!(headers.len() > 0 || self.done());
             Ok(headers)
@@ -407,12 +403,7 @@ impl<R: io::Reader> Reader<R> {
     /// let mut rdr = csv::Reader::from_string(data);
     /// let mut count = 0u;
     /// while !rdr.done() {
-    ///     loop {
-    ///         match rdr.next_field() {
-    ///             None => break,
-    ///             Some(r) => { r.unwrap(); }
-    ///         }
-    ///     }
+    ///     for field in rdr { let _ = field.unwrap(); }
     ///     count += 1;
     /// }
     ///
@@ -422,49 +413,84 @@ impl<R: io::Reader> Reader<R> {
         self.err.is_some()
     }
 
-    /// An iterator over fields in the current record.
+    /// Returns the line at which the current record started.
+    pub fn line(&self) -> u64 {
+        self.line_record
+    }
+
+    /// Returns the byte offset at which the current record started.
+    pub fn byte_offset(&self) -> u64 {
+        self.byte_offset
+    }
+
+    fn parse_err(&self, kind: ParseErrorKind) -> Error {
+        ErrParse(ParseError {
+            line: self.line_record,
+            column: self.column,
+            kind: kind,
+        })
+    }
+}
+
+impl<R: io::Reader + io::Seek> Reader<R> {
+    /// Seeks the underlying reader to the file cursor specified.
     ///
-    /// This provides low level access to CSV records as raw byte slices.
-    /// Namely, no allocation is performed. Unlike other iterators in this
-    /// crate, this yields *fields* instead of records. Notably, this cannot
-    /// implement the `Iterator` trait safely. As such, it cannot be used with
-    /// a `for` loop.
+    /// This comes with several caveats:
     ///
-    /// The semantics of this iterator are a little strange. The iterator will
-    /// produce `None` at the end of a record, but the next invocation of the
-    /// iterator will restart at the next record. Once all CSV data has been
-    /// parsed, `None` will be returned indefinitely.
+    /// * The existing buffer is dropped and a new one is created.
+    /// * If you seek to a position other than the start of a record, you'll
+    ///   probably get an incorrect parse. (This is *not* unsafe.)
     ///
-    /// This iterator always returns all records (i.e., it won't skip the
-    /// header row).
-    ///
-    /// ### Example
-    ///
-    /// Typically, once an iterator returns `None`, it will always return `None`.
-    /// Since this iterator varies from that behavior, it should be used in
-    /// conjunction with the `done` method to traverse records.
-    ///
-    /// ```rust
-    /// let data = "
-    /// sticker,mortals,7
-    /// bribed,personae,7
-    /// wobbling,poncing,4
-    /// interposed,emmett,9
-    /// chocolate,refile,7";
-    ///
-    /// let mut rdr = csv::Reader::from_string(data);
-    /// while !rdr.done() {
-    ///     loop {
-    ///         let field = match rdr.next_field() {
-    ///             None => break,
-    ///             Some(result) => result.unwrap(),
-    ///         };
-    ///         print!("{}", field);
-    ///     }
-    ///     println!("");
-    /// }
-    /// ```
-    pub fn next_field<'a>(&'a mut self) -> Option<CsvResult<&'a [u8]>> {
+    /// Mostly, this is intended for use with the `index` sub module.
+    pub fn seek(&mut self, pos: i64, style: io::SeekStyle) -> CsvResult<()> {
+        self.buffer.clear();
+        try!(self.buffer.get_mut_ref().seek(pos, style).map_err(ErrIo));
+        Ok(())
+    }
+}
+
+/// An iterator over fields in the current record.
+///
+/// This provides low level access to CSV records as raw byte slices. Namely,
+/// no allocation is performed. Unlike other iterators in this crate, this
+/// yields *fields* instead of records.
+///
+/// The semantics of this iterator are a little strange. The iterator will
+/// produce `None` at the end of a record, but the next invocation of the
+/// iterator will restart at the next record. Once all CSV data has been
+/// parsed, `None` will be returned indefinitely.
+///
+/// This iterator always returns all records (i.e., it won't skip the header
+/// row).
+///
+/// (N.B. I would love to find a way to turn this into an iterator of
+/// iterators.)
+///
+/// ### Example
+///
+/// Typically, once an iterator returns `None`, it will always return `None`.
+/// Since this iterator varies from that behavior, it should be used in
+/// conjunction with the `done` method to traverse records.
+///
+/// ```rust
+/// let data = "
+/// sticker,mortals,7
+/// bribed,personae,7
+/// wobbling,poncing,4
+/// interposed,emmett,9
+/// chocolate,refile,7";
+///
+/// let mut rdr = csv::Reader::from_string(data);
+/// while !rdr.done() {
+///     for field in rdr {
+///         let field = field.unwrap();
+///         print!("{}", field);
+///     }
+///     println!("");
+/// }
+/// ```
+impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>> for Reader<R> {
+    fn next(&mut self) -> Option<CsvResult<&'a [u8]>> {
         unsafe { self.fieldbuf.set_len(0); }
         
         // The EndRecord state indicates what you'd expect: stop the current
@@ -508,8 +534,8 @@ impl<R: io::Reader> Reader<R> {
         // the things we need to mutate during state transitions with
         // the ParseMachine type.
         let mut pmachine = ParseMachine {
-            fieldbuf: &mut self.fieldbuf,
-            state: &mut self.state,
+            fieldbuf: unsafe { transmute(&mut self.fieldbuf) },
+            state: unsafe { transmute(&mut self.state) },
             delimiter: self.delimiter,
         };
         let mut consumed = 0; // tells the buffer how much we consumed
@@ -594,42 +620,6 @@ impl<R: io::Reader> Reader<R> {
         }
         self.field_count += 1;
         Some(Ok((*pmachine.fieldbuf)[]))
-    }
-
-    /// Returns the line at which the current record started.
-    pub fn line(&self) -> u64 {
-        self.line_record
-    }
-
-    /// Returns the byte offset at which the current record started.
-    pub fn byte_offset(&self) -> u64 {
-        self.byte_offset
-    }
-
-    fn parse_err(&self, kind: ParseErrorKind) -> Error {
-        ErrParse(ParseError {
-            line: self.line_record,
-            column: self.column,
-            kind: kind,
-        })
-    }
-}
-
-impl<R: io::Reader + io::Seek> Reader<R> {
-    /// Seeks the underlying reader to the file cursor specified.
-    ///
-    /// This comes with several caveats:
-    ///
-    /// * The existing buffer is dropped and a new one is created.
-    /// * If you seek to a position other than the start of a record, you'll
-    ///   probably get an incorrect parse. (This is *not* unsafe.)
-    ///
-    /// Mostly, this is intended for use with the `index` sub module.
-    pub fn seek(&mut self, pos: i64, style: io::SeekStyle) -> CsvResult<()> {
-        self.buffer.clear();
-        self.err = None;
-        try!(self.buffer.get_mut_ref().seek(pos, style).map_err(ErrIo));
-        Ok(())
     }
 }
 
@@ -833,11 +823,7 @@ impl<'a, R: io::Reader> Iterator<CsvResult<Vec<ByteString>>>
         }
 
         let mut record = Vec::with_capacity(self.p.first_record.len());
-        loop {
-            let field = match self.p.next_field() {
-                None => break,
-                Some(field) => field,
-            };
+        for field in self.p {
             match field {
                 Err(err) => return Some(Err(err)),
                 Ok(bytes) => record.push(ByteString::from_bytes(bytes)),
