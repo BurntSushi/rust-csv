@@ -37,7 +37,12 @@ pub fn create<R: io::Reader + io::Seek, W: io::Writer>
     let mut rdr = csv_rdr.has_headers(false);
     while !rdr.done() {
         try!(idx_wtr.write_be_u64(rdr.byte_offset()).map_err(ErrIo));
-        for field in rdr { let _ = try!(field); }
+        loop {
+            match rdr.next_field() {
+                None => break,
+                Some(r) => { try!(r); }
+            }
+        }
     }
     Ok(())
 }
