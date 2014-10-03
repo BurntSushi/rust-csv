@@ -171,19 +171,19 @@ fn decoder_empties_headers() {
     let mut d = Reader::from_string("a,b,c\n\n\n\n");
     assert_eq!(ordie(d.headers()),
                vec!("a".to_string(), "b".to_string(), "c".to_string()));
-    assert!(d.next().is_none());
+    assert!(d.next_field().is_none());
 }
 
 #[test]
 fn decoder_all_empties() {
     let mut d = Reader::from_string("\n\n\n\n").has_headers(false);
-    assert!(d.next().is_none());
+    assert!(d.next_field().is_none());
 }
 
 #[test]
 fn decoder_all_empties_crlf() {
     let mut d = Reader::from_string("\r\n\r\n\r\n\r\n").has_headers(false);
-    assert!(d.next().is_none());
+    assert!(d.next_field().is_none());
 }
 
 #[test]
@@ -296,7 +296,12 @@ d,e,f
     let mut rdr = Reader::from_string(s);
     let mut count = 0u;
     while !rdr.done() {
-        for r in rdr { let _ = ordie(r); }
+        loop {
+            match rdr.next_field() {
+                None => break,
+                Some(r) => { ordie(r); }
+            }
+        }
         count += 1;
     }
     assert_eq!(count, 2);
@@ -362,4 +367,19 @@ fn decoder_reset() {
         let vals: Vec<(uint, uint)> = ordie(collect(d.decode()));
         assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
     }
+}
+
+#[test]
+fn raw_access_unsafe() {
+    let mut rdr = Reader::from_string("1,2");
+    // let fields = rdr.collect::<Result<Vec<_>, _>>(); 
+    let mut fields = vec![];
+    loop {
+        let field = match rdr.next_field() {
+            None => break,
+            Some(result) => result.unwrap(),
+        };
+        fields.push(field.to_vec());
+    }
+    assert_eq!(fields[0], b"1".to_vec());
 }
