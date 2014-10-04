@@ -205,8 +205,8 @@ impl<W: io::Writer> Writer<W> {
     }
 
     #[doc(hidden)]
-    pub fn write_result_bytes<S: Slice<u8>, I: Iterator<CsvResult<S>>>
-                             (&mut self, r: I) -> CsvResult<()> {
+    pub fn write_results<S: Slice<u8>, I: Iterator<CsvResult<S>>>
+                        (&mut self, r: I) -> CsvResult<()> {
         let mut count = 0;
         let delim = self.delimiter;
         for (i, field) in r.enumerate() {
