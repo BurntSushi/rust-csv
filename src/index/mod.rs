@@ -24,9 +24,6 @@ impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
         // Why does `seek` want an `i64`?
         try!(self.idx.seek((i * 8) as i64, io::SeekSet).map_err(ErrIo));
         let offset = try!(self.idx.read_be_u64().map_err(ErrIo));
-        if offset == self.rdr.byte_offset() {
-            return Ok(())
-        }
         self.rdr.seek(offset as i64, io::SeekSet)
     }
 

@@ -661,7 +661,13 @@ impl<R: io::Reader + io::Seek> Reader<R> {
     ///   probably get an incorrect parse. (This is *not* unsafe.)
     ///
     /// Mostly, this is intended for use with the `index` sub module.
+    ///
+    /// Note that if `pos` is equivalent to the current *parsed* byte offset,
+    /// then no seeking is performed. (In this case, `seek` is a no-op.)
     pub fn seek(&mut self, pos: i64, style: io::SeekStyle) -> CsvResult<()> {
+        if pos as u64 == self.byte_offset() {
+            return Ok(())
+        }
         self.buffer.clear();
         self.err = None;
         self.byte_offset = pos as u64;
