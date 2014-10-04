@@ -34,7 +34,6 @@ impl<R: Reader> BufferedReader<R> {
         BufferedReader::with_capacity(DEFAULT_BUF_SIZE, inner)
     }
 
-    pub fn get_ref<'a>(&'a self) -> &'a R { &self.inner }
     pub fn get_mut_ref<'a>(&'a mut self) -> &'a mut R { &mut self.inner }
     pub fn clear(&mut self) {
         let cap = self.buf.capacity();
