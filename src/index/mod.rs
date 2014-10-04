@@ -2,29 +2,41 @@
 
 use std::io;
 
-use {CsvResult, ErrIo, Reader};
+use {CsvResult, ErrIo, ErrIndex, Reader};
 
 pub struct Indexed<R, I> {
     rdr: Reader<R>,
     idx: I,
+    count: u64,
 }
 
 impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
-    pub fn new(rdr: Reader<R>, idx: I) -> Indexed<R, I> {
-        Indexed {
+    pub fn new(rdr: Reader<R>, mut idx: I) -> CsvResult<Indexed<R, I>> {
+        try!(idx.seek(-8, io::SeekEnd).map_err(ErrIo));
+        let count = try!(idx.read_be_u64().map_err(ErrIo));
+        Ok(Indexed {
             rdr: rdr,
             idx: idx,
-        }
+            count: count,
+        })
     }
 
     pub fn seek(&mut self, mut i: u64) -> CsvResult<()> {
+        if i >= self.count {
+            return Err(ErrIndex(format!(
+                "Record index {} is out of bounds. (There are {} records.)",
+                i, self.count)));
+        }
         if self.rdr.has_headers {
             i += 1;
         }
-        // Why does `seek` want an `i64`?
         try!(self.idx.seek((i * 8) as i64, io::SeekSet).map_err(ErrIo));
         let offset = try!(self.idx.read_be_u64().map_err(ErrIo));
         self.rdr.seek(offset as i64, io::SeekSet)
+    }
+
+    pub fn count(&self) -> u64 {
+        self.count
     }
 
     pub fn csv<'a>(&'a mut self) -> &'a mut Reader<R> {
@@ -35,6 +47,7 @@ impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
 pub fn create<R: io::Reader + io::Seek, W: io::Writer>
              (csv_rdr: Reader<R>, mut idx_wtr: W) -> CsvResult<()> {
     let mut rdr = csv_rdr.has_headers(false);
+    let mut count = 0u64;
     while !rdr.done() {
         try!(idx_wtr.write_be_u64(rdr.byte_offset()).map_err(ErrIo));
         loop {
@@ -43,6 +56,7 @@ pub fn create<R: io::Reader + io::Seek, W: io::Writer>
                 Some(r) => { try!(r); }
             }
         }
+        count += 1;
     }
-    Ok(())
+    idx_wtr.write_be_u64(count).map_err(ErrIo)
 }

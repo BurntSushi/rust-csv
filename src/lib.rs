@@ -5,7 +5,6 @@
 #![doc(html_root_url = "http://burntsushi.net/rustdoc/csv")]
 
 #![experimental]
-
 #![deny(missing_doc)]
 
 //! This crate provides a streaming CSV (comma separated values) writer and
@@ -259,6 +258,8 @@ pub enum Error {
     ErrParse(ParseError),
     /// An error originating from reading or writing to the underlying buffer.
     ErrIo(io::IoError),
+    /// An error originating from using a CSV index.
+    ErrIndex(String),
 }
 
 impl Error {
@@ -307,6 +308,7 @@ impl fmt::Show for Error {
             &ErrDecode(ref msg) => write!(f, "CSV decode error: {}", msg),
             &ErrParse(ref err) => write!(f, "{}", err),
             &ErrIo(ref err) => write!(f, "{}", err),
+            &ErrIndex(ref msg) => write!(f, "CSV index error: {}", msg),
         }
     }
 }
