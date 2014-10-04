@@ -370,9 +370,8 @@ fn decoder_reset() {
 }
 
 #[test]
-fn raw_access_unsafe() {
+fn raw_access() {
     let mut rdr = Reader::from_string("1,2");
-    // let fields = rdr.collect::<Result<Vec<_>, _>>(); 
     let mut fields = vec![];
     loop {
         let field = match rdr.next_field() {
@@ -382,4 +381,15 @@ fn raw_access_unsafe() {
         fields.push(field.to_vec());
     }
     assert_eq!(fields[0], b"1".to_vec());
+}
+
+// Please help me get this test to pass.
+#[test]
+#[ignore]
+fn raw_unsafe_access() {
+    let mut rdr = Reader::from_string("1,2");
+    let fields = unsafe {
+        rdr.byte_fields().collect::<Result<Vec<_>, _>>().unwrap()
+    };
+    assert_eq!(fields[0], b"1");
 }

@@ -596,6 +596,22 @@ impl<R: io::Reader> Reader<R> {
         Some(Ok((*pmachine.fieldbuf)[]))
     }
 
+    /// An unsafe iterator over byte fields.
+    ///
+    /// This iterator calls `next_field` at each step.
+    ///
+    /// It is (wildly) unsafe because the lifetime yielded for each element
+    /// is incorrect. It refers to the lifetime of the CSV reader instead of
+    /// the lifetime of the internal buffer. Which means you can `collect`
+    /// it into a vector and obliterate memory safety.
+    ///
+    /// The reason it exists is because it appears extremely difficult to write
+    /// a fast streaming iterator.
+    #[doc(hidden)]
+    pub unsafe fn byte_fields<'a>(&'a mut self) -> UnsafeByteFields<'a, R> {
+        UnsafeByteFields { rdr: self }
+    }
+
     /// Returns the line at which the current record started.
     pub fn line(&self) -> u64 {
         self.line_record
@@ -612,6 +628,26 @@ impl<R: io::Reader> Reader<R> {
             column: self.column,
             kind: kind,
         })
+    }
+}
+
+#[doc(hidden)]
+pub struct UnsafeByteFields<'a, R: 'a> {
+    rdr: &'a mut Reader<R>,
+}
+
+#[doc(hidden)]
+impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>>
+    for UnsafeByteFields<'a, R> {
+    fn next(&mut self) -> Option<CsvResult<&'a [u8]>> {
+        unsafe { transmute(self.rdr.next_field()) }
+    }
+}
+
+#[doc(hidden)]
+impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>> for Reader<R> {
+    fn next(&mut self) -> Option<CsvResult<&'a [u8]>> {
+        unsafe { transmute(self.next_field()) }
     }
 }
 

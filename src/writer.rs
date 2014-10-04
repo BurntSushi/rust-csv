@@ -203,6 +203,23 @@ impl<W: io::Writer> Writer<W> {
         try!(self.w_lineterm());
         self.set_first_len(count)
     }
+
+    #[doc(hidden)]
+    pub fn write_result_bytes<S: Slice<u8>, I: Iterator<CsvResult<S>>>
+                             (&mut self, r: I) -> CsvResult<()> {
+        let mut count = 0;
+        let delim = self.delimiter;
+        for (i, field) in r.enumerate() {
+            let field = try!(field);
+            count += 1;
+            if i > 0 {
+                try!(self.w_bytes([delim]));
+            }
+            try!(self.w_user_bytes(field.as_slice()));
+        }
+        try!(self.w_lineterm());
+        self.set_first_len(count)
+    }
 }
 
 impl<W: io::Writer> Writer<W> {
