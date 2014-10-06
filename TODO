@@ -1,0 +1,10 @@
+A claim that Python handedly beats rust-csv. Please investigate:
+
+[20:17] <mitsuhiko> burntsushi: i literally just ran for line in csv.reader(open('worldcitiespop_utf8.txt', encoding='utf-8'))
+[20:17] <mitsuhiko> (python 3 because in 2.x it does not do unicode)
+[20:18] <mitsuhiko> where worldcitiespop is that maxmind huge csv
+[20:18] <dperny_> "rust is now haskell"
+[20:18] <dperny_> heard it on IRC
+[20:18] <mitsuhiko> in the rust version i did a convert of the field.unwrap() to String
+[20:18] <dperny_> gonna write a blog post and submit to hackernews
+[20:18] <mitsuhiko> gotta go to sleep now :)
