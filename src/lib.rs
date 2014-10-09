@@ -7,6 +7,8 @@
 #![experimental]
 #![deny(missing_doc)]
 
+#![feature(default_type_params, slicing_syntax)]
+
 //! This crate provides a streaming CSV (comma separated values) writer and
 //! reader that works with the `serialize` crate to do type based encoding
 //! and decoding. There are two primary goals of this project:
@@ -183,8 +185,6 @@
 //!     means that CSV data that is not UTF-8 encoded can be parsed. In
 //!     general, the writer and reader API biases toward using Unicode strings
 //!     while providing an outlet to use byte strings.
-
-#![feature(default_type_params, phase)]
 
 extern crate rand;
 extern crate serialize;

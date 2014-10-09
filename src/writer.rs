@@ -189,7 +189,7 @@ impl<W: io::Writer> Writer<W> {
     ///
     /// assert_eq!(wtr.as_bytes(), b"\xff,\x00\n");
     /// ```
-    pub fn write_bytes<S: Slice<u8>, I: Iterator<S>>
+    pub fn write_bytes<S: AsSlice<u8>, I: Iterator<S>>
                       (&mut self, r: I) -> CsvResult<()> {
         let mut count = 0;
         let delim = self.delimiter;
@@ -205,7 +205,7 @@ impl<W: io::Writer> Writer<W> {
     }
 
     #[doc(hidden)]
-    pub fn write_results<S: Slice<u8>, I: Iterator<CsvResult<S>>>
+    pub fn write_results<S: AsSlice<u8>, I: Iterator<CsvResult<S>>>
                         (&mut self, r: I) -> CsvResult<()> {
         let mut count = 0;
         let delim = self.delimiter;

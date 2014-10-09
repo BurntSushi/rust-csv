@@ -66,7 +66,7 @@ impl fmt::Show for ByteString {
     }
 }
 
-impl Slice<u8> for ByteString {
+impl AsSlice<u8> for ByteString {
     #[inline]
     fn as_slice<'a>(&'a self) -> &'a [u8] {
         let ByteString(ref chars) = *self;
@@ -81,18 +81,18 @@ impl ops::Slice<uint, [u8]> for ByteString {
     }
 
     #[inline]
-    fn slice_from_<'a>(&'a self, start: &uint) -> &'a [u8] {
-        self.as_slice().slice_from_(start)
+    fn slice_from_or_fail<'a>(&'a self, start: &uint) -> &'a [u8] {
+        self.as_slice().slice_from_or_fail(start)
     }
 
     #[inline]
-    fn slice_to_<'a>(&'a self, end: &uint) -> &'a [u8] {
-        self.as_slice().slice_to_(end)
+    fn slice_to_or_fail<'a>(&'a self, end: &uint) -> &'a [u8] {
+        self.as_slice().slice_to_or_fail(end)
     }
 
     #[inline]
-    fn slice_<'a>(&'a self, start: &uint, end: &uint) -> &'a [u8] {
-        self.as_slice().slice_(start, end)
+    fn slice_or_fail<'a>(&'a self, start: &uint, end: &uint) -> &'a [u8] {
+        self.as_slice().slice_or_fail(start, end)
     }
 }
 
