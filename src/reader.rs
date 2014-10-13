@@ -349,8 +349,8 @@ impl Reader<MemReader> {
     }
 
     /// Creates a CSV reader for an in memory buffer of bytes.
-    pub fn from_bytes<V: CloneableVector<u8>>(bytes: V) -> Reader<MemReader> {
-        Reader::from_reader(MemReader::new(bytes.into_vec()))
+    pub fn from_bytes<V: AsSlice<u8>>(bytes: V) -> Reader<MemReader> {
+        Reader::from_reader(MemReader::new(bytes.as_slice().to_vec()))
     }
 }
 
