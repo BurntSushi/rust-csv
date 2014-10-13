@@ -9,7 +9,7 @@ fn ordie<T, E: ::std::fmt::Show>(res: Result<T, E>) -> T {
     }
 }
 
-fn bytes<S: CloneableVector<u8>>(bs: S) -> ByteString {
+fn bytes<S: AsSlice<u8>>(bs: S) -> ByteString {
     ByteString::from_bytes(bs)
 }
 

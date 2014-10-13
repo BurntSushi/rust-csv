@@ -27,8 +27,8 @@ pub struct ByteString(Vec<u8>);
 
 impl ByteString {
     /// Create a new byte string from a vector or slice of bytes.
-    pub fn from_bytes<S: CloneableVector<u8>>(bs: S) -> ByteString {
-        ByteString(bs.into_vec())
+    pub fn from_bytes<S: AsSlice<u8>>(bs: S) -> ByteString {
+        ByteString(bs.as_slice().to_vec())
     }
 
     /// Consumes this byte string into a vector of bytes.
