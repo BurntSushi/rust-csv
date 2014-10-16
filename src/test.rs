@@ -1,6 +1,6 @@
 use std::io::Reader as IoReader;
 use std::io::Writer as IoWriter;
-use {Reader, Writer, ByteString, CsvResult, collect};
+use {Reader, Writer, ByteString, CsvResult, collect, IntoVector};
 
 fn ordie<T, E: ::std::fmt::Show>(res: Result<T, E>) -> T {
     match res {
@@ -9,7 +9,7 @@ fn ordie<T, E: ::std::fmt::Show>(res: Result<T, E>) -> T {
     }
 }
 
-fn bytes<S: CloneableVector<u8>>(bs: S) -> ByteString {
+fn bytes<S: IntoVector<u8>>(bs: S) -> ByteString {
     ByteString::from_bytes(bs)
 }
 

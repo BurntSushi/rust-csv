@@ -2,7 +2,7 @@ use std::fmt;
 
 use serialize;
 
-use {ByteString, CsvResult, Error, ErrEncode};
+use {ByteString, CsvResult, Error, ErrEncode, IntoVector};
 
 /// A record to be encoded.
 ///
@@ -24,7 +24,7 @@ impl Encoded {
     /// to access the raw CSV record.
     pub fn unwrap(self) -> Vec<ByteString> { self.record }
 
-    fn push_bytes<S: CloneableVector<u8>>(&mut self, s: S) -> CsvResult<()> {
+    fn push_bytes<S: IntoVector<u8>>(&mut self, s: S) -> CsvResult<()> {
         self.record.push(ByteString::from_bytes(s));
         Ok(())
     }

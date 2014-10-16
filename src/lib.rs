@@ -193,7 +193,7 @@ extern crate "test" as stdtest;
 use std::fmt;
 use std::io;
 
-pub use bytestr::ByteString;
+pub use bytestr::{ByteString, IntoVector};
 pub use encoder::Encoded;
 pub use decoder::Decoded;
 pub use reader::{Reader, DecodedRecords, StringRecords, ByteRecords};

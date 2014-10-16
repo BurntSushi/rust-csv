@@ -2,6 +2,20 @@ use std::fmt;
 use std::hash;
 use std::ops;
 
+/// A trait that encapsulates a `Vec<T>` or a `&[T]`.
+pub trait IntoVector<T> {
+    /// Convert the underlying value to a vector.
+    fn into_vec(self) -> Vec<T>;
+}
+
+impl<T> IntoVector<T> for Vec<T> {
+    fn into_vec(self) -> Vec<T> { self }
+}
+
+impl<'a, T: Clone> IntoVector<T> for &'a [T] {
+    fn into_vec(self) -> Vec<T> { self.to_vec() }
+}
+
 /// A type that represents unadulterated byte strings.
 ///
 /// Byte strings represent *any* 8 bit character encoding. There are no
@@ -27,7 +41,7 @@ pub struct ByteString(Vec<u8>);
 
 impl ByteString {
     /// Create a new byte string from a vector or slice of bytes.
-    pub fn from_bytes<S: CloneableVector<u8>>(bs: S) -> ByteString {
+    pub fn from_bytes<S: IntoVector<u8>>(bs: S) -> ByteString {
         ByteString(bs.into_vec())
     }
 
