@@ -843,9 +843,11 @@ pub struct ByteRecords<'a, R: 'a> {
 impl<'a, R: io::Reader> Iterator<CsvResult<Vec<ByteString>>>
     for ByteRecords<'a, R> {
     fn next(&mut self) -> Option<CsvResult<Vec<ByteString>>> {
-        if self.p.done() {
-            return None;
-        }
+        // We check this before checking `done` because the parser could
+        // be done after a call to `byte_headers` but before any iterator
+        // traversal. Once we start the iterator, we must allow the first
+        // row to be returned if the caller has said that this CSV data
+        // has no headers.
         if !self.first {
             // Never do this special first record processing again.
             self.first = true;
@@ -874,7 +876,10 @@ impl<'a, R: io::Reader> Iterator<CsvResult<Vec<ByteString>>>
                 return Some(headers);
             }
         }
-
+        // OK, we're done checking the weird first-record-corner-case.
+        if self.p.done() {
+            return None;
+        }
         let mut record = Vec::with_capacity(self.p.first_record.len());
         loop {
             let field = match self.p.next_field() {

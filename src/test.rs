@@ -224,6 +224,14 @@ fn decoder_no_headers_no_skip() {
 }
 
 #[test]
+fn decoder_no_headers_no_skip_one_record() {
+    let mut d = Reader::from_string("a,b").has_headers(false);
+    let _ = ordie(d.headers());
+    let rows: Vec<CsvResult<Vec<String>>> = d.records().collect();
+    assert_eq!(rows.len(), 1);
+}
+
+#[test]
 fn decoder_empty_string() {
     let mut d = Reader::from_string("");
     let rows: Vec<CsvResult<Vec<String>>> = d.records().collect();
