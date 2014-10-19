@@ -125,3 +125,9 @@ impl<S: Str> Equiv<S> for ByteString {
 impl Collection for ByteString {
     fn len(&self) -> uint { self.as_bytes().len() }
 }
+
+impl FromIterator<u8> for ByteString {
+    fn from_iter<I: Iterator<u8>>(mut it: I) -> ByteString {
+        ByteString::from_bytes(it.collect::<Vec<_>>())
+    }
+}
