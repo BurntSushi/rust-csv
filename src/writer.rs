@@ -111,7 +111,8 @@ impl<W: io::Writer> Writer<W> {
     /// That is, it writes a record of strings---no more and no less.
     ///
     /// This method accepts an iterator of *fields* for a single record. Each
-    /// field must be a `&str`, which allows the caller to control allocation.
+    /// field must satisfy `Str`, which allows the caller to control
+    /// allocation.
     ///
     /// ### Example
     ///
@@ -132,38 +133,9 @@ impl<W: io::Writer> Writer<W> {
     ///     assert!(result.is_ok());
     /// }
     /// ```
-    ///
-    /// Here's a similar example, but with `String` values instead of `&str`.
-    ///
-    /// ```rust
-    /// let records: Vec<Vec<String>> = vec![
-    ///     vec!["sticker", "mortals", "7"],
-    ///     vec!["bribed", "personae", "7"],
-    ///     vec!["wobbling", "poncing", "4"],
-    ///     vec!["interposed", "emmett", "9"],
-    ///     vec!["chocolate", "refile", "7"],
-    /// ].into_iter()
-    ///  .map(|r| r.into_iter().map(|f| f.to_string()).collect())
-    ///  .collect();
-    ///
-    /// let mut wtr = csv::Writer::from_memory();
-    /// for record in records.into_iter() {
-    ///     // It is important to use `iter()` here instead of `into_iter()`.
-    ///     // Capturing the strings by reference requires that they live
-    ///     // long enough!
-    ///     let result = wtr.write(record.iter().map(|f| f.as_slice()));
-    ///     assert!(result.is_ok());
-    /// }
-    /// ```
-    ///
-    /// If you think this is stupidly inconvenient for such a simple thing, then
-    /// you're right. You should just use the `encode` method. Generally, you
-    /// should reach for these raw `write` and `write_bytes` methods only when
-    /// you need the performance. (i.e., The iterator may let you avoid
-    /// allocating intermediate data.)
-    pub fn write<'a, I: Iterator<&'a str>>
+    pub fn write<S: Str, I: Iterator<S>>
                 (&mut self, r: I) -> CsvResult<()> {
-        self.write_bytes(r.map(|r| r.as_bytes()))
+        self.write_iter(r, |f| Ok(f.as_slice().as_bytes()))
     }
 
     /// Writes a record of *byte strings*.
@@ -191,31 +163,26 @@ impl<W: io::Writer> Writer<W> {
     /// ```
     pub fn write_bytes<S: AsSlice<u8>, I: Iterator<S>>
                       (&mut self, r: I) -> CsvResult<()> {
-        let mut count = 0;
-        let delim = self.delimiter;
-        for (i, field) in r.enumerate() {
-            count += 1;
-            if i > 0 {
-                try!(self.w_bytes([delim]));
-            }
-            try!(self.w_user_bytes(field.as_slice()));
-        }
-        try!(self.w_lineterm());
-        self.set_first_len(count)
+        self.write_iter(r, |f| Ok(f))
     }
 
     #[doc(hidden)]
     pub fn write_results<S: AsSlice<u8>, I: Iterator<CsvResult<S>>>
                         (&mut self, r: I) -> CsvResult<()> {
+        self.write_iter(r, |f| f)
+    }
+
+    fn write_iter<T, R: AsSlice<u8>, I: Iterator<T>>
+                 (&mut self, r: I, as_sliceable: |T| -> CsvResult<R>)
+                 -> CsvResult<()> {
         let mut count = 0;
         let delim = self.delimiter;
         for (i, field) in r.enumerate() {
-            let field = try!(field);
             count += 1;
             if i > 0 {
                 try!(self.w_bytes([delim]));
             }
-            try!(self.w_user_bytes(field.as_slice()));
+            try!(self.w_user_bytes(try!(as_sliceable(field)).as_slice()));
         }
         try!(self.w_lineterm());
         self.set_first_len(count)
