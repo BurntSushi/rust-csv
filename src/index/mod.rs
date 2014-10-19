@@ -13,7 +13,10 @@ pub struct Indexed<R, I> {
 impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
     pub fn new(rdr: Reader<R>, mut idx: I) -> CsvResult<Indexed<R, I>> {
         try!(idx.seek(-8, io::SeekEnd).map_err(ErrIo));
-        let count = try!(idx.read_be_u64().map_err(ErrIo));
+        let mut count = try!(idx.read_be_u64().map_err(ErrIo));
+        if rdr.has_headers {
+            count -= 1;
+        }
         Ok(Indexed {
             rdr: rdr,
             idx: idx,
