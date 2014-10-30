@@ -26,7 +26,7 @@ fn main() {
 
     let mut dec = csv::Reader::from_file(fp);
     match csv::collect(dec.decode::<Play>()) {
-        Err(err) => fail!("{}", err),
+        Err(err) => panic!("{}", err),
         Ok(plays) => {
             println!("Found {} plays.", plays.len());
 

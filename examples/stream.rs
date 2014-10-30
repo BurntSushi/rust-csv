@@ -13,7 +13,7 @@ fn main() {
         for x in range(1u, 6) {
             match enc.encode((x, x * x)) {
                 Ok(_) => {},
-                Err(err) => fail!("Failed encoding: {}", err),
+                Err(err) => panic!("Failed encoding: {}", err),
             }
             io::timer::sleep(Duration::milliseconds(500));
         }

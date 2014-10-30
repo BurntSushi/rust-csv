@@ -9,7 +9,7 @@ use Reader;
 static CSV_DATA: &'static str = "./examples/data/bench.csv";
 
 fn ordie<T, E: Show>(r: Result<T, E>) -> T {
-    r.or_else(|e: E| -> Result<T, E> fail!(e.to_string())).unwrap()
+    r.or_else(|e: E| -> Result<T, E> panic!(e.to_string())).unwrap()
 }
 
 fn file_to_mem(fp: &str) -> io::MemReader {

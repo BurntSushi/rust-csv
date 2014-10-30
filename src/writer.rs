@@ -260,8 +260,8 @@ impl Writer<io::MemWriter> {
     /// Returns the written CSV data as a string.
     pub fn as_string<'r>(&'r mut self) -> &'r str {
         match self.buf.flush() {
-            // shouldn't fail with MemWriter
-            Err(err) => fail!("Error flushing to MemWriter: {}", err),
+            // shouldn't panic with MemWriter
+            Err(err) => panic!("Error flushing to MemWriter: {}", err),
             // This seems suspicious. If the client only writes `String`
             // values, then this can never fail. If the client is writing
             // byte strings, then they should be calling `to_bytes` instead.
@@ -272,8 +272,8 @@ impl Writer<io::MemWriter> {
     /// Returns the encoded CSV data as raw bytes.
     pub fn as_bytes<'r>(&'r mut self) -> &'r [u8] {
         match self.buf.flush() {
-            // shouldn't fail with MemWriter
-            Err(err) => fail!("Error flushing to MemWriter: {}", err),
+            // shouldn't panic with MemWriter
+            Err(err) => panic!("Error flushing to MemWriter: {}", err),
             Ok(()) => self.buf.get_ref().get_ref(),
         }
     }
