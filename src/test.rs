@@ -5,7 +5,7 @@ use {Reader, Writer, ByteString, CsvResult, collect, IntoVector};
 fn ordie<T, E: ::std::fmt::Show>(res: Result<T, E>) -> T {
     match res {
         Ok(t) => t,
-        Err(err) => fail!("{}", err),
+        Err(err) => panic!("{}", err),
     }
 }
 
@@ -39,9 +39,9 @@ fn encoder_same_length_records() {
     let mut senc = Writer::from_memory().flexible(false);
     ordie(senc.encode(vec!('a')));
     match senc.encode(vec!('a', 'b')) {
-        Ok(_) => fail!("Writer should report an error when records of \
-                        varying length are added and records of same \
-                        length is enabled."),
+        Ok(_) => panic!("Writer should report an error when records of \
+                         varying length are added and records of same \
+                         length is enabled."),
         Err(_) => {}
     }
 }
@@ -71,8 +71,8 @@ fn encoder_quoted_newlines() {
 fn encoder_zero() {
     let mut senc = Writer::from_memory();
     match senc.encode::<Vec<int>>(vec!()) {
-        Ok(_) => fail!("Writer should report an error when trying to \
-                        encode records of length 0."),
+        Ok(_) => panic!("Writer should report an error when trying to \
+                         encode records of length 0."),
         Err(_) => {}
     }
 }
@@ -123,9 +123,9 @@ fn decoder_same_length_records() {
                        .has_headers(false)
                        .flexible(false);
     match collect(d.decode::<Vec<String>>()) {
-        Ok(_) => fail!("Decoder should report an error when records of \
-                        varying length are decoded and records of same \
-                        length if enabled."),
+        Ok(_) => panic!("Decoder should report an error when records of \
+                         varying length are decoded and records of same \
+                         length if enabled."),
         Err(_) => {}
     }
 }
