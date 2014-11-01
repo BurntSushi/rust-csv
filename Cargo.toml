@@ -5,6 +5,3 @@ authors = ["Andrew Gallant <jamslam@gmail.com>"]
 
 [lib]
 name = "csv"
-path = "src/lib.rs"
-crate_type = ["dylib", "rlib"]
-
