@@ -1,7 +1,6 @@
 use std::fmt::Show;
-use std::io;
+use std::io::{mod, AsRefReader};
 use std::io::Reader as IoReader;
-use std::io::Writer as IoWriter;
 use stdtest::Bencher;
 
 use Reader;

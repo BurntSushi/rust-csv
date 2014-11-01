@@ -5,7 +5,7 @@
 #![doc(html_root_url = "http://burntsushi.net/rustdoc/csv")]
 
 #![experimental]
-#![deny(missing_doc)]
+#![deny(missing_docs)]
 
 #![feature(default_type_params, slicing_syntax)]
 
