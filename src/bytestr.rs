@@ -62,6 +62,16 @@ impl ByteString {
     pub fn as_utf8_string(self) -> Result<String, ByteString> {
         String::from_utf8(self.into_bytes()).map_err(ByteString)
     }
+
+    /// Return the number of bytes in the string.
+    pub fn len(&self) -> uint {
+        self.as_bytes().len()
+    }
+
+    /// Returns whether the byte string is empty or not.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl fmt::Show for ByteString {
@@ -120,10 +130,6 @@ impl<S: Str> Equiv<S> for ByteString {
     fn equiv(&self, other: &S) -> bool {
         self.as_bytes() == other.as_slice().as_bytes()
     }
-}
-
-impl Collection for ByteString {
-    fn len(&self) -> uint { self.as_bytes().len() }
 }
 
 impl FromIterator<u8> for ByteString {

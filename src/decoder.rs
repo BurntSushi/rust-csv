@@ -23,10 +23,10 @@ impl Decoded {
         bytes.reverse();
         Decoded { stack: bytes, popped: 0 }
     }
-}
 
-impl Collection for Decoded {
-    fn len(&self) -> uint { self.stack.len() }
+    fn len(&self) -> uint {
+        self.stack.len()
+    }
 }
 
 impl Decoded {
@@ -168,18 +168,17 @@ impl serialize::Decoder<Error> for Decoded {
                            -> CsvResult<T> {
         f(self)
     }
-    fn read_tuple<T>(&mut self, f: |&mut Decoded, uint| -> CsvResult<T>)
+    fn read_tuple<T>(&mut self, _: uint, f: |&mut Decoded| -> CsvResult<T>)
                     -> CsvResult<T> {
-        let len = self.len();
-        f(self, len)
+        f(self)
     }
     fn read_tuple_arg<T>(&mut self, _: uint,
                          f: |&mut Decoded| -> CsvResult<T>)
                         -> CsvResult<T> {
         f(self)
     }
-    fn read_tuple_struct<T>(&mut self, _: &str,
-                            _: |&mut Decoded, uint| -> CsvResult<T>)
+    fn read_tuple_struct<T>(&mut self, _: &str, _: uint,
+                            _: |&mut Decoded| -> CsvResult<T>)
                            -> CsvResult<T> {
         unimplemented!()
     }
