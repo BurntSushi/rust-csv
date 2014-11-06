@@ -40,7 +40,7 @@
 //! ```
 //!
 //! If you just want a `Vec` of all the records, then you can use the
-//! convenience `collect` function:
+//! `collect` method defined on iterators:
 //!
 //! ```rust
 //! let data = "
@@ -51,7 +51,9 @@
 //! chocolate,refile,7";
 //!
 //! let mut rdr = csv::Reader::from_string(data).has_headers(false);
-//! let rows = csv::collect(rdr.decode::<(String, String, uint)>()).unwrap();
+//! let rows = rdr.decode::<(String, String, uint)>()
+//!               .collect::<Result<Vec<_>, _>>()
+//!               .unwrap();
 //! assert_eq!(rows.len(), 5);
 //! ```
 //!
@@ -219,35 +221,6 @@ mod test;
 /// A convenience type for representing the result of most CSV reader/writer
 /// operations.
 pub type CsvResult<T> = Result<T, Error>;
-
-/// Collects an iterator of result records into a single vector.
-///
-/// If you just want to put all the records from CSV data into memory, this
-/// function is useful for lifting the error reporting from each individual
-/// record to the entire collection of records.
-///
-/// ### Example
-///
-/// Put all records from CSV data into a single vector:
-///
-/// ```rust
-/// let data = "
-/// sticker,mortals,7
-/// bribed,personae,7
-/// wobbling,poncing,4
-/// interposed,emmett,9
-/// chocolate,refile,7";
-///
-/// let mut rdr = csv::Reader::from_string(data).has_headers(false);
-/// let rows = csv::collect(rdr.records()).unwrap();
-///
-/// assert_eq!(rows[2][2], "4".to_string());
-/// ```
-pub fn collect<T, I: Iterator<CsvResult<T>>>(mut it: I) -> CsvResult<Vec<T>> {
-    let mut records = vec![];
-    for r in it { records.push(try!(r)); }
-    Ok(records)
-}
 
 /// An error produced by an operation on CSV data.
 #[deriving(Clone)]

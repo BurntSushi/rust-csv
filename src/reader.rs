@@ -105,7 +105,7 @@ impl<R: io::Reader> Reader<R> {
     /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3");
     ///
     /// let headers1 = rdr.headers().unwrap();
-    /// let rows = csv::collect(rdr.records()).unwrap();
+    /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
     /// let headers2 = rdr.headers().unwrap();
     ///
     /// let s = |s: &'static str| s.to_string();
@@ -123,7 +123,7 @@ impl<R: io::Reader> Reader<R> {
     ///                           .has_headers(false);
     ///
     /// let headers1 = rdr.headers().unwrap();
-    /// let rows = csv::collect(rdr.records()).unwrap();
+    /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
     /// let headers2 = rdr.headers().unwrap();
     ///
     /// let s = |s: &'static str| s.to_string();
@@ -172,7 +172,7 @@ impl<R: io::Reader> Reader<R> {
     /// let mut rdr = csv::Reader::from_string("foo,bar,1\nfoo,baz,2")
     ///                           .has_headers(false);
     /// // Instantiating a specific type when decoding is usually necessary.
-    /// let rows = csv::collect(rdr.decode::<Pair>()).unwrap();
+    /// let rows = rdr.decode::<Pair>().collect::<Result<Vec<_>, _>>().unwrap();
     ///
     /// assert_eq!(rows[0].dist, 1);
     /// assert_eq!(rows[1].dist, 2);
@@ -204,7 +204,7 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// let mut rdr = csv::Reader::from_string("foo,bar,1,red\nfoo,baz,,green")
     ///                           .has_headers(false);
-    /// let rows = csv::collect(rdr.decode::<Pair>()).unwrap();
+    /// let rows = rdr.decode::<Pair>().collect::<Result<Vec<_>, _>>().unwrap();
     ///
     /// assert_eq!(rows[0].dist, Some(MyUint(1)));
     /// assert_eq!(rows[1].dist, None);
@@ -231,7 +231,7 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// let mut rdr = csv::Reader::from_string("a,b,1,2,3,4\ny,z,5,6,7,8")
     ///                           .has_headers(false);
-    /// let rows = csv::collect(rdr.decode::<Pair>()).unwrap();
+    /// let rows = rdr.decode::<Pair>().collect::<Result<Vec<_>, _>>().unwrap();
     ///
     /// assert_eq!(rows[0].attrs, vec![1,2,3,4]);
     /// assert_eq!(rows[1].attrs, vec![5,6,7,8]);

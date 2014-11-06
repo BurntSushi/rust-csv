@@ -25,7 +25,7 @@ fn main() {
     let fp = &Path::new("./data/2012_nfl_pbp_data.csv");
 
     let mut dec = csv::Reader::from_file(fp);
-    match csv::collect(dec.decode::<Play>()) {
+    match dec.decode::<Play>().collect::<Result<Vec<_>, _>>() {
         Err(err) => panic!("{}", err),
         Ok(plays) => {
             println!("Found {} plays.", plays.len());
