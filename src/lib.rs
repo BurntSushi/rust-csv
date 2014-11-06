@@ -190,6 +190,8 @@ extern crate rand;
 extern crate serialize;
 extern crate "test" as stdtest;
 
+use std::error::Error as StdError;
+use std::error::FromError;
 use std::fmt;
 use std::io;
 
@@ -265,8 +267,8 @@ pub enum Error {
 impl Error {
     /// Returns true if this is an IO error corresponding to `EndOfFile`.
     pub fn is_eof(&self) -> bool {
-        match self {
-            &ErrIo(io::IoError { kind: io::EndOfFile, .. }) => true,
+        match *self {
+            ErrIo(io::IoError { kind: io::EndOfFile, .. }) => true,
             _ => false,
         }
     }
@@ -303,12 +305,12 @@ pub enum ParseErrorKind {
 
 impl fmt::Show for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &ErrEncode(ref msg) => write!(f, "CSV encode error: {}", msg),
-            &ErrDecode(ref msg) => write!(f, "CSV decode error: {}", msg),
-            &ErrParse(ref err) => write!(f, "{}", err),
-            &ErrIo(ref err) => write!(f, "{}", err),
-            &ErrIndex(ref msg) => write!(f, "CSV index error: {}", msg),
+        match *self {
+            ErrEncode(ref msg) => write!(f, "CSV encode error: {}", msg),
+            ErrDecode(ref msg) => write!(f, "CSV decode error: {}", msg),
+            ErrParse(ref err) => write!(f, "{}", err),
+            ErrIo(ref err) => write!(f, "{}", err),
+            ErrIndex(ref msg) => write!(f, "CSV index error: {}", msg),
         }
     }
 }
@@ -322,12 +324,37 @@ impl fmt::Show for ParseError {
 
 impl fmt::Show for ParseErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &UnequalLengths(first, cur) =>
+        match *self {
+            UnequalLengths(first, cur) =>
                 write!(f, "First record has length {:u}, but found record \
                            with length {:u}.", first, cur),
-            &InvalidUTF8 =>
+            InvalidUTF8 =>
                 write!(f, "Invalid UTF8 encoding."),
         }
     }
+}
+
+impl StdError for Error {
+    fn description(&self) -> &str {
+        match *self {
+            ErrEncode(..) => "CSV encoding error",
+            ErrDecode(..) => "CSV decoding error",
+            ErrParse(..) => "CSV parse error",
+            ErrIo(..) => "CSV IO error",
+            ErrIndex(..) => "CSV indexing error",
+        }
+    }
+
+    fn detail(&self) -> Option<String> { Some(self.to_string()) }
+
+    fn cause(&self) -> Option<&StdError> {
+        match *self {
+            ErrIo(ref err) => Some(err as &StdError),
+            _ => None,
+        }
+    }
+}
+
+impl FromError<Error> for Box<StdError> {
+    fn from_error(err: Error) -> Box<StdError> { box err }
 }
