@@ -14,7 +14,7 @@ impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
     pub fn new(rdr: Reader<R>, mut idx: I) -> CsvResult<Indexed<R, I>> {
         try!(idx.seek(-8, io::SeekEnd).map_err(ErrIo));
         let mut count = try!(idx.read_be_u64().map_err(ErrIo));
-        if rdr.has_headers {
+        if rdr.has_headers && count > 0 {
             count -= 1;
         }
         Ok(Indexed {
@@ -51,15 +51,16 @@ pub fn create<R: io::Reader + io::Seek, W: io::Writer>
              (csv_rdr: Reader<R>, mut idx_wtr: W) -> CsvResult<()> {
     let mut rdr = csv_rdr.has_headers(false);
     let mut count = 0u64;
+    let mut seen_field = false;
     while !rdr.done() {
         try!(idx_wtr.write_be_u64(rdr.byte_offset()).map_err(ErrIo));
         loop {
             match rdr.next_field() {
                 None => break,
-                Some(r) => { try!(r); }
+                Some(r) => { seen_field = true; try!(r); }
             }
         }
-        count += 1;
+        if seen_field { count += 1; }
     }
     idx_wtr.write_be_u64(count).map_err(ErrIo)
 }
