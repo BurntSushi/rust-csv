@@ -73,6 +73,13 @@ fn encoder_quoted_newlines() {
 }
 
 #[test]
+fn encoder_empty() {
+    let mut senc = Writer::from_memory();
+    ordie(senc.encode(vec!("")));
+    assert_eq!("\"\"\n", senc.as_string());
+}
+
+#[test]
 fn encoder_zero() {
     let mut senc = Writer::from_memory();
     match senc.encode::<Vec<int>>(vec!()) {
@@ -243,6 +250,27 @@ fn decoder_empty_string() {
     assert!(rows.len() == 0);
 }
 
+#[test]
+fn decoder_empty_string_no_headers() {
+    let mut d = Reader::from_string("").has_headers(false);
+    let rows: Vec<CsvResult<Vec<String>>> = d.records().collect();
+    assert!(rows.len() == 0);
+}
+
+#[test]
+fn decoder_one_char() {
+    let mut d = Reader::from_string(" ").has_headers(false);
+    let rows: Vec<CsvResult<Vec<String>>> = d.records().collect();
+    assert_eq!(rows.len(), 1);
+}
+
+#[test]
+fn decoder_one_nl() {
+    let mut d = Reader::from_string("\"\"\n").has_headers(false);
+    let rows: Vec<CsvResult<Vec<String>>> = d.records().collect();
+    assert_eq!(rows.len(), 1);
+}
+
 #[deriving(Decodable, Encodable, Show, PartialEq, Eq)]
 enum Val {
     Unsigned(uint),
@@ -297,7 +325,7 @@ fn encoder_option() {
     let r: (Option<bool>, uint) = (None, 1);
     let mut senc = Writer::from_memory();
     ordie(senc.encode(r));
-    assert_eq!(",1\n", senc.as_string());
+    assert_eq!("\"\",1\n", senc.as_string());
 }
 
 #[test]

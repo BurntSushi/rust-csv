@@ -95,7 +95,8 @@ impl<W: io::Writer> Writer<W> {
     ///     let result = wtr.encode(record);
     ///     assert!(result.is_ok());
     /// }
-    /// assert_eq!(wtr.as_string(), "sticker,mortals,\nbribed,personae,7\n");
+    /// assert_eq!(wtr.as_string(),
+    ///            "sticker,mortals,\"\"\nbribed,personae,7\n");
     /// # }
     /// ```
     pub fn encode<E: Encodable<Encoded, Error>>
@@ -293,7 +294,7 @@ impl<W: io::Writer> Writer<W> {
         let quotable = |&c: &u8| {
             c == delim || c == b'\n' || c == b'\r' || c == b'"'
         };
-        if s.iter().any(quotable) {
+        if s.is_empty() || s.iter().any(quotable) {
             self.w_bytes(quote(s)[])
         } else {
             self.w_bytes(s)
