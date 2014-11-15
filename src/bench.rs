@@ -1,5 +1,5 @@
 use std::fmt::Show;
-use std::io::{mod, AsRefReader};
+use std::io::{mod, ByRefReader};
 use std::io::Reader as IoReader;
 use stdtest::Bencher;
 

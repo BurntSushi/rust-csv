@@ -1,4 +1,4 @@
-use std::io::AsRefReader;
+use std::io::ByRefReader;
 use std::io::Reader as IoReader;
 use std::io::Writer as IoWriter;
 use {Reader, Writer, ByteString, CsvResult, IntoVector};
