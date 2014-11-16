@@ -70,6 +70,12 @@ pub struct Reader<R> {
     // Keep a copy of the first record parsed.
     first_record: Vec<ByteString>,
 
+    // Is set if `seek` is ever called.
+    // This subtlely modifies the behavior of iterators so that there is
+    // no special handling of headers. (After you seek, iterators should
+    // just give whatever records are being parsed.)
+    has_seeked: bool,
+
     // When this is true, the first record is interpreted as a "header" row.
     // This is opaque to the raw iterator, but is used in any iterator that
     // allocates.
@@ -296,6 +302,7 @@ impl<R: io::Reader> Reader<R> {
             state: StartRecord,
             err: None,
             first_record: vec![],
+            has_seeked: false,
             has_headers: true,
             field_count: 0,
             column: 1,
@@ -380,7 +387,8 @@ impl<R: io::Reader> Reader<R> {
     /// This is just like `records`, except fields are `ByteString`s instead
     /// of `String`s.
     pub fn byte_records<'a>(&'a mut self) -> ByteRecords<'a, R> {
-        ByteRecords { p: self, first: false }
+        let first = self.has_seeked;
+        ByteRecords { p: self, first: first }
     }
 
     /// Returns `true` if the CSV parser has reached its final state. When
@@ -665,6 +673,7 @@ impl<R: io::Reader + io::Seek> Reader<R> {
     /// Note that if `pos` is equivalent to the current *parsed* byte offset,
     /// then no seeking is performed. (In this case, `seek` is a no-op.)
     pub fn seek(&mut self, pos: i64, style: io::SeekStyle) -> CsvResult<()> {
+        self.has_seeked = true;
         if pos as u64 == self.byte_offset() {
             return Ok(())
         }
