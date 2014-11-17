@@ -1,5 +1,5 @@
 use std::default::Default;
-use std::from_str::FromStr;
+use std::str::FromStr;
 
 use serialize;
 
