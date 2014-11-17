@@ -489,6 +489,11 @@ impl<R: io::Reader> Reader<R> {
             // After processing an EndRecord (and determined there are no
             // errors), we should always start parsing the next record.
             self.state = StartRecord;
+            // If the record has ended, but the line_current didn't increment (possible if we have \r line endings) then increment it here.
+            if self.line_record == self.line_current {
+                self.line_current += 1;
+                self.column = 1;
+            }
             self.line_record = self.line_current;
             self.field_count = 0;
             return None;

@@ -121,6 +121,14 @@ fn decoder_simple_crlf() {
 }
 
 #[test]
+fn decoder_simple_cr() {
+    let mut d = Reader::from_string("springsteen,s,1,0.1,false\rreevolver,b,0,1.0,true\r")
+                       .has_headers(false);
+    let r: Vec<(String, char, int, f64, bool)> = collect(d.decode());
+    assert_eq!(r, vec![("springsteen".to_string(), 's', 1, 0.1, false), ("reevolver".to_string(), 'b', 0, 1.0, true)]);
+}
+
+#[test]
 fn decoder_simple_tabbed() {
     let mut d = Reader::from_string("springsteen\ts\t1\t0.14\tfalse\r\n")
                        .has_headers(false)
