@@ -122,10 +122,14 @@ fn decoder_simple_crlf() {
 
 #[test]
 fn decoder_simple_cr() {
-    let mut d = Reader::from_string("springsteen,s,1,0.1,false\rreevolver,b,0,1.0,true\r")
+    let mut d = Reader::from_string("springsteen,s,1,0.1,false\r\
+                                     reevolver,b,0,1.0,true\r")
                        .has_headers(false);
     let r: Vec<(String, char, int, f64, bool)> = collect(d.decode());
-    assert_eq!(r, vec![("springsteen".to_string(), 's', 1, 0.1, false), ("reevolver".to_string(), 'b', 0, 1.0, true)]);
+    assert_eq!(r, vec![
+        ("springsteen".to_string(), 's', 1, 0.1, false),
+        ("reevolver".to_string(), 'b', 0, 1.0, true),
+    ]);
 }
 
 #[test]
@@ -180,7 +184,8 @@ fn decoder_empty_lines() {
 
 #[test]
 fn decoder_empty_lines_crlf() {
-    let mut d = Reader::from_string("1,2\r\n\r\n3,4\r\n\r\n\r\n\r\n5,6\r\n\r\n")
+    let mut d = Reader::from_string("1,2\r\n\r\n3,4\
+                                     \r\n\r\n\r\n\r\n5,6\r\n\r\n")
                         .has_headers(false);
     let vals: Vec<(uint, uint)> = collect(d.decode());
     assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));

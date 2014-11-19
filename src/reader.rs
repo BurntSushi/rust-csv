@@ -181,7 +181,9 @@ impl<R: io::Reader> Reader<R> {
     /// let mut rdr = csv::Reader::from_string("foo,bar,1\nfoo,baz,2")
     ///                           .has_headers(false);
     /// // Instantiating a specific type when decoding is usually necessary.
-    /// let rows = rdr.decode::<Pair>().collect::<Result<Vec<_>, _>>().unwrap();
+    /// let rows = rdr.decode::<Pair>()
+    ///               .collect::<Result<Vec<_>, _>>()
+    ///               .unwrap();
     ///
     /// assert_eq!(rows[0].dist, 1);
     /// assert_eq!(rows[1].dist, 2);
@@ -213,7 +215,9 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// let mut rdr = csv::Reader::from_string("foo,bar,1,red\nfoo,baz,,green")
     ///                           .has_headers(false);
-    /// let rows = rdr.decode::<Pair>().collect::<Result<Vec<_>, _>>().unwrap();
+    /// let rows = rdr.decode::<Pair>()
+    ///               .collect::<Result<Vec<_>, _>>()
+    ///               .unwrap();
     ///
     /// assert_eq!(rows[0].dist, Some(MyUint(1)));
     /// assert_eq!(rows[1].dist, None);
@@ -240,7 +244,9 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// let mut rdr = csv::Reader::from_string("a,b,1,2,3,4\ny,z,5,6,7,8")
     ///                           .has_headers(false);
-    /// let rows = rdr.decode::<Pair>().collect::<Result<Vec<_>, _>>().unwrap();
+    /// let rows = rdr.decode::<Pair>()
+    ///               .collect::<Result<Vec<_>, _>>()
+    ///               .unwrap();
     ///
     /// assert_eq!(rows[0].attrs, vec![1,2,3,4]);
     /// assert_eq!(rows[1].attrs, vec![5,6,7,8]);
@@ -451,9 +457,9 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// ### Example
     ///
-    /// Typically, once an iterator returns `None`, it will always return `None`.
-    /// Since this iterator varies from that behavior, it should be used in
-    /// conjunction with the `done` method to traverse records.
+    /// Typically, once an iterator returns `None`, it will always return
+    /// `None`.  Since this iterator varies from that behavior, it should be
+    /// used in conjunction with the `done` method to traverse records.
     ///
     /// ```rust
     /// let data = "

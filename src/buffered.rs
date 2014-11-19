@@ -17,9 +17,9 @@ impl<R: Reader> BufferedReader<R> {
         // It's *much* faster to create an uninitialized buffer than it is to
         // fill everything in with 0. This buffer is entirely an implementation
         // detail and is never exposed, so we're safe to not initialize
-        // everything up-front. This allows creation of BufferedReader instances
-        // to be very cheap (large mallocs are not nearly as expensive as large
-        // callocs).
+        // everything up-front. This allows creation of BufferedReader
+        // instances to be very cheap (large mallocs are not nearly as
+        // expensive as large callocs).
         let mut buf = Vec::with_capacity(cap);
         unsafe { buf.set_len(cap); }
         BufferedReader {

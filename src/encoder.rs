@@ -40,7 +40,9 @@ impl Encoded {
 
 impl serialize::Encoder<Error> for Encoded {
     fn emit_nil(&mut self) -> CsvResult<()> { unimplemented!() }
-    fn emit_uint(&mut self, v: uint) -> CsvResult<()> { self.push_to_string(v) }
+    fn emit_uint(&mut self, v: uint) -> CsvResult<()> {
+        self.push_to_string(v)
+    }
     fn emit_u64(&mut self, v: u64) -> CsvResult<()> { self.push_to_string(v) }
     fn emit_u32(&mut self, v: u32) -> CsvResult<()> { self.push_to_string(v) }
     fn emit_u16(&mut self, v: u16) -> CsvResult<()> { self.push_to_string(v) }
@@ -50,7 +52,9 @@ impl serialize::Encoder<Error> for Encoded {
     fn emit_i32(&mut self, v: i32) -> CsvResult<()> { self.push_to_string(v) }
     fn emit_i16(&mut self, v: i16) -> CsvResult<()> { self.push_to_string(v) }
     fn emit_i8(&mut self, v: i8) -> CsvResult<()> { self.push_to_string(v) }
-    fn emit_bool(&mut self, v: bool) -> CsvResult<()> { self.push_to_string(v) }
+    fn emit_bool(&mut self, v: bool) -> CsvResult<()> {
+        self.push_to_string(v)
+    }
     fn emit_f64(&mut self, v: f64) -> CsvResult<()> {
         self.push_string(::std::f64::to_str_digits(v, 10))
     }
@@ -75,8 +79,9 @@ impl serialize::Encoder<Error> for Encoded {
         match len {
             0 => self.push_string(v_name),
             1 => f(self),
-            _ => Err(Error::Encode("Cannot encode enum variants \
-                                    with more than one argument.".to_string())),
+            _ => Err(
+                Error::Encode("Cannot encode enum variants \
+                               with more than one argument.".to_string())),
         }
     }
     fn emit_enum_variant_arg(&mut self, _: uint,
