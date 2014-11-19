@@ -295,14 +295,14 @@ enum Color {
 fn decoder_enum() {
     let mut d = Reader::from_string("ReD").has_headers(false);
     let r: Vec<(Color,)> = collect(d.decode());
-    assert_eq!(r, vec![(Red,)]);
+    assert_eq!(r, vec![(Color::Red,)]);
 }
 
 #[test]
 fn decoder_enum_arg() {
     let mut d = Reader::from_string("false,-5,5").has_headers(false);
     let r: Vec<(Val, Val, Val)> = collect(d.decode());
-    assert_eq!(r, vec![(Bool(false), Signed(-5), Unsigned(5))]);
+    assert_eq!(r, vec![(Val::Bool(false), Val::Signed(-5), Val::Unsigned(5))]);
 }
 
 #[test]
@@ -314,7 +314,7 @@ fn decoder_option() {
 
 #[test]
 fn encoder_enum() {
-    let r = (Red,);
+    let r = (Color::Red,);
     let mut senc = Writer::from_memory();
     ordie(senc.encode(r));
     assert_eq!("Red\n", senc.as_string());
@@ -322,7 +322,7 @@ fn encoder_enum() {
 
 #[test]
 fn encoder_enum_arg() {
-    let r = (Bool(false), Signed(-5), Unsigned(5));
+    let r = (Val::Bool(false), Val::Signed(-5), Val::Unsigned(5));
     let mut senc = Writer::from_memory();
     ordie(senc.encode(r));
     assert_eq!("false,-5,5\n", senc.as_string());

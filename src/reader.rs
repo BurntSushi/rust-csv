@@ -6,9 +6,12 @@ use serialize::Decodable;
 use buffered::BufferedReader;
 use {
     ByteString, CsvResult, Decoded, IntoVector,
-    Error, ErrDecode, ErrIo, ErrParse,
-    ParseError,
-    ParseErrorKind, UnequalLengths,
+    Error, ParseError, ParseErrorKind,
+};
+
+use self::ParseState::{
+    StartRecord, EndRecord, StartField, EatCRLF,
+    InField, InQuotedField, InQuotedFieldEscape, InQuotedFieldQuote,
 };
 
 // TODO: Make these parameters?
@@ -215,8 +218,8 @@ impl<R: io::Reader> Reader<R> {
     /// assert_eq!(rows[0].dist, Some(MyUint(1)));
     /// assert_eq!(rows[1].dist, None);
     ///
-    /// assert_eq!(rows[0].color, Red);
-    /// assert_eq!(rows[1].color, Green);
+    /// assert_eq!(rows[0].color, Color::Red);
+    /// assert_eq!(rows[1].color, Color::Green);
     /// # }
     /// ```
     ///
@@ -481,7 +484,7 @@ impl<R: io::Reader> Reader<R> {
         if self.state == EndRecord {
             let first_len = self.first_record.len() as u64;
             if !self.flexible && first_len != self.field_count {
-                let err = self.parse_err(UnequalLengths(
+                let err = self.parse_err(ParseErrorKind::UnequalLengths(
                     self.first_record.len() as u64, self.field_count));
                 self.err = Some(err.clone());
                 return Some(Err(err));
@@ -489,7 +492,9 @@ impl<R: io::Reader> Reader<R> {
             // After processing an EndRecord (and determined there are no
             // errors), we should always start parsing the next record.
             self.state = StartRecord;
-            // If the record has ended, but the line_current didn't increment (possible if we have \r line endings) then increment it here.
+
+            // If the record has ended, but the line_current didn't increment
+            // (possible if we have \r line endings) then increment it here.
             if self.line_record == self.line_current {
                 self.line_current += 1;
                 self.column = 1;
@@ -540,7 +545,7 @@ impl<R: io::Reader> Reader<R> {
                     // The error is processed below.
                     // We don't handle it here because we need to do some
                     // book keeping first.
-                    self.err = Some(ErrIo(err));
+                    self.err = Some(Error::Io(err));
                     break 'TOPLOOP;
                 }
                 Ok(bs) => {
@@ -580,7 +585,7 @@ impl<R: io::Reader> Reader<R> {
         // the parser cold.
         match self.err {
             None => {}
-            Some(ErrIo(io::IoError { kind: io::EndOfFile, .. })) => {
+            Some(Error::Io(io::IoError { kind: io::EndOfFile, .. })) => {
                 // If we get EOF while we're trying to parse a new record
                 // but haven't actually seen any fields yet (i.e., trailing
                 // new lines in a file), then we should immediately stop the
@@ -636,7 +641,7 @@ impl<R: io::Reader> Reader<R> {
     }
 
     fn parse_err(&self, kind: ParseErrorKind) -> Error {
-        ErrParse(ParseError {
+        Error::Parse(ParseError {
             line: self.line_record,
             column: self.column,
             kind: kind,
@@ -685,7 +690,7 @@ impl<R: io::Reader + io::Seek> Reader<R> {
         self.buffer.clear();
         self.err = None;
         self.byte_offset = pos as u64;
-        try!(self.buffer.get_mut_ref().seek(pos, style).map_err(ErrIo));
+        try!(self.buffer.get_mut_ref().seek(pos, style).map_err(Error::Io));
         Ok(())
     }
 }
@@ -915,7 +920,7 @@ fn is_crlf(b: u8) -> bool { b == b'\n' || b == b'\r' }
 fn byte_record_to_utf8(record: Vec<ByteString>) -> CsvResult<Vec<String>> {
     for bytes in record.iter() {
         if !::std::str::is_utf8(bytes[]) {
-            return Err(ErrDecode(format!(
+            return Err(Error::Decode(format!(
                 "Could not decode the following bytes as UTF-8: {}", bytes)));
         }
     }

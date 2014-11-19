@@ -201,7 +201,7 @@ pub use bytestr::{ByteString, IntoVector};
 pub use encoder::Encoded;
 pub use decoder::Decoded;
 pub use reader::{Reader, DecodedRecords, StringRecords, ByteRecords};
-pub use writer::{Writer};
+pub use writer::Writer;
 
 /// An experimental module for processing CSV data in parallel.
 pub mod index;
@@ -226,22 +226,22 @@ pub type CsvResult<T> = Result<T, Error>;
 #[deriving(Clone)]
 pub enum Error {
     /// An error reported by the type-based encoder.
-    ErrEncode(String),
+    Encode(String),
     /// An error reported by the type-based decoder.
-    ErrDecode(String),
+    Decode(String),
     /// An error reported by the CSV parser.
-    ErrParse(ParseError),
+    Parse(ParseError),
     /// An error originating from reading or writing to the underlying buffer.
-    ErrIo(io::IoError),
+    Io(io::IoError),
     /// An error originating from using a CSV index.
-    ErrIndex(String),
+    Index(String),
 }
 
 impl Error {
     /// Returns true if this is an IO error corresponding to `EndOfFile`.
     pub fn is_eof(&self) -> bool {
         match *self {
-            ErrIo(io::IoError { kind: io::EndOfFile, .. }) => true,
+            Error::Io(io::IoError { kind: io::EndOfFile, .. }) => true,
             _ => false,
         }
     }
@@ -279,11 +279,11 @@ pub enum ParseErrorKind {
 impl fmt::Show for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ErrEncode(ref msg) => write!(f, "CSV encode error: {}", msg),
-            ErrDecode(ref msg) => write!(f, "CSV decode error: {}", msg),
-            ErrParse(ref err) => write!(f, "{}", err),
-            ErrIo(ref err) => write!(f, "{}", err),
-            ErrIndex(ref msg) => write!(f, "CSV index error: {}", msg),
+            Error::Encode(ref msg) => write!(f, "CSV encode error: {}", msg),
+            Error::Decode(ref msg) => write!(f, "CSV decode error: {}", msg),
+            Error::Parse(ref err) => write!(f, "{}", err),
+            Error::Io(ref err) => write!(f, "{}", err),
+            Error::Index(ref msg) => write!(f, "CSV index error: {}", msg),
         }
     }
 }
@@ -298,10 +298,10 @@ impl fmt::Show for ParseError {
 impl fmt::Show for ParseErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            UnequalLengths(first, cur) =>
+            ParseErrorKind::UnequalLengths(first, cur) =>
                 write!(f, "First record has length {:u}, but found record \
                            with length {:u}.", first, cur),
-            InvalidUTF8 =>
+            ParseErrorKind::InvalidUTF8 =>
                 write!(f, "Invalid UTF8 encoding."),
         }
     }
@@ -310,11 +310,11 @@ impl fmt::Show for ParseErrorKind {
 impl StdError for Error {
     fn description(&self) -> &str {
         match *self {
-            ErrEncode(..) => "CSV encoding error",
-            ErrDecode(..) => "CSV decoding error",
-            ErrParse(..) => "CSV parse error",
-            ErrIo(..) => "CSV IO error",
-            ErrIndex(..) => "CSV indexing error",
+            Error::Encode(..) => "CSV encoding error",
+            Error::Decode(..) => "CSV decoding error",
+            Error::Parse(..) => "CSV parse error",
+            Error::Io(..) => "CSV IO error",
+            Error::Index(..) => "CSV indexing error",
         }
     }
 
@@ -322,7 +322,7 @@ impl StdError for Error {
 
     fn cause(&self) -> Option<&StdError> {
         match *self {
-            ErrIo(ref err) => Some(err as &StdError),
+            Error::Io(ref err) => Some(err as &StdError),
             _ => None,
         }
     }

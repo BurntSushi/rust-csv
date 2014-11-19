@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use serialize;
 
-use {ByteString, CsvResult, Error, ErrDecode};
+use {ByteString, CsvResult, Error};
 
 /// A record to be decoded.
 ///
@@ -43,7 +43,8 @@ impl Decoded {
 
     fn pop_string(&mut self) -> CsvResult<String> {
         {try!(self.pop())}.as_utf8_string().map_err(|bytes| {
-            ErrDecode(format!("Could not convert bytes '{}' to UTF-8.", bytes))
+            Error::Decode(
+                format!("Could not convert bytes '{}' to UTF-8.", bytes))
         })
     }
 
@@ -65,13 +66,13 @@ impl Decoded {
     }
 
     fn err<T, S: StrAllocating>(&self, msg: S) -> CsvResult<T> {
-        Err(ErrDecode(msg.into_string()))
+        Err(Error::Decode(msg.into_string()))
     }
 }
 
 impl serialize::Decoder<Error> for Decoded {
     fn error(&mut self, err: &str) -> Error {
-        ErrDecode(err.into_string())
+        Error::Decode(err.into_string())
     }
     fn read_nil(&mut self) -> CsvResult<()> { unimplemented!() }
     fn read_uint(&mut self) -> CsvResult<uint> { self.pop_from_str() }

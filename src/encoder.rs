@@ -2,7 +2,7 @@ use std::fmt;
 
 use serialize;
 
-use {ByteString, CsvResult, Error, ErrEncode, IntoVector};
+use {ByteString, CsvResult, Error, IntoVector};
 
 /// A record to be encoded.
 ///
@@ -75,8 +75,8 @@ impl serialize::Encoder<Error> for Encoded {
         match len {
             0 => self.push_string(v_name),
             1 => f(self),
-            _ => Err(ErrEncode("Cannot encode enum variants \
-                                with more than one argument.".to_string())),
+            _ => Err(Error::Encode("Cannot encode enum variants \
+                                    with more than one argument.".to_string())),
         }
     }
     fn emit_enum_variant_arg(&mut self, _: uint,
@@ -92,8 +92,8 @@ impl serialize::Encoder<Error> for Encoded {
     fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
                                       _: |&mut Encoded| -> CsvResult<()>)
                                      -> CsvResult<()> {
-        Err(ErrEncode("Cannot encode enum \
-                       variants with arguments.".to_string()))
+        Err(Error::Encode("Cannot encode enum \
+                           variants with arguments.".to_string()))
     }
     fn emit_struct(&mut self, _: &str, len: uint,
                    f: |&mut Encoded| -> CsvResult<()>) -> CsvResult<()> {

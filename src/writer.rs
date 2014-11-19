@@ -4,8 +4,7 @@ use std::str;
 use serialize::Encodable;
 
 use {
-    ByteString, CsvResult, Encoded,
-    Error, ErrEncode, ErrIo,
+    ByteString, CsvResult, Encoded, Error,
 };
 
 /// A CSV writer.
@@ -246,7 +245,7 @@ impl<W: io::Writer> Writer<W> {
 
     /// Flushes the underlying buffer.
     pub fn flush(&mut self) -> CsvResult<()> {
-        self.buf.flush().map_err(ErrIo)
+        self.buf.flush().map_err(Error::Io)
     }
 }
 
@@ -282,11 +281,11 @@ impl Writer<io::MemWriter> {
 
 impl<W: io::Writer> Writer<W> {
     fn err<S: StrAllocating>(&self, msg: S) -> CsvResult<()> {
-        Err(ErrEncode(msg.into_string()))
+        Err(Error::Encode(msg.into_string()))
     }
 
     fn w_bytes(&mut self, s: &[u8]) -> CsvResult<()> {
-        self.buf.write(s).map_err(ErrIo)
+        self.buf.write(s).map_err(Error::Io)
     }
 
     fn w_user_bytes(&mut self, s: &[u8]) -> CsvResult<()> {

@@ -2,7 +2,7 @@
 
 use std::io;
 
-use {CsvResult, ErrIo, ErrIndex, Reader};
+use {CsvResult, Error, Reader};
 
 pub struct Indexed<R, I> {
     rdr: Reader<R>,
@@ -12,8 +12,8 @@ pub struct Indexed<R, I> {
 
 impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
     pub fn new(mut rdr: Reader<R>, mut idx: I) -> CsvResult<Indexed<R, I>> {
-        try!(idx.seek(-8, io::SeekEnd).map_err(ErrIo));
-        let mut count = try!(idx.read_be_u64().map_err(ErrIo));
+        try!(idx.seek(-8, io::SeekEnd).map_err(Error::Io));
+        let mut count = try!(idx.read_be_u64().map_err(Error::Io));
         if rdr.has_headers && count > 0 {
             count -= 1;
             let _ = try!(rdr.byte_headers());
@@ -27,15 +27,15 @@ impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
 
     pub fn seek(&mut self, mut i: u64) -> CsvResult<()> {
         if i >= self.count {
-            return Err(ErrIndex(format!(
+            return Err(Error::Index(format!(
                 "Record index {} is out of bounds. (There are {} records.)",
                 i, self.count)));
         }
         if self.rdr.has_headers {
             i += 1;
         }
-        try!(self.idx.seek((i * 8) as i64, io::SeekSet).map_err(ErrIo));
-        let offset = try!(self.idx.read_be_u64().map_err(ErrIo));
+        try!(self.idx.seek((i * 8) as i64, io::SeekSet).map_err(Error::Io));
+        let offset = try!(self.idx.read_be_u64().map_err(Error::Io));
         self.rdr.seek(offset as i64, io::SeekSet)
     }
 
@@ -54,7 +54,7 @@ pub fn create<R: io::Reader + io::Seek, W: io::Writer>
     let mut count = 0u64;
     let mut seen_field = false;
     while !rdr.done() {
-        try!(idx_wtr.write_be_u64(rdr.byte_offset()).map_err(ErrIo));
+        try!(idx_wtr.write_be_u64(rdr.byte_offset()).map_err(Error::Io));
         loop {
             match rdr.next_field() {
                 None => break,
@@ -63,5 +63,5 @@ pub fn create<R: io::Reader + io::Seek, W: io::Writer>
         }
         if seen_field { count += 1; }
     }
-    idx_wtr.write_be_u64(count).map_err(ErrIo)
+    idx_wtr.write_be_u64(count).map_err(Error::Io)
 }
