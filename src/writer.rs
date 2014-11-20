@@ -178,7 +178,7 @@ impl<W: io::Writer> Writer<W> {
         for (i, field) in r.enumerate() {
             count += 1;
             if i > 0 {
-                try!(self.w_bytes([delim]));
+                try!(self.w_bytes(&[delim]));
             }
             try!(self.w_user_bytes(try!(as_sliceable(field)).as_slice()));
         }
