@@ -3,9 +3,7 @@ use std::str;
 
 use serialize::Encodable;
 
-use {
-    ByteString, CsvResult, Encoded, Error,
-};
+use {ByteString, CsvResult, Encoded, Error};
 
 /// A CSV writer.
 ///
