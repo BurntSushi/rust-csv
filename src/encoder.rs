@@ -133,7 +133,7 @@ impl serialize::Encoder<Error> for Encoded {
         f(self)
     }
     fn emit_option_none(&mut self) -> CsvResult<()> {
-        self.push_bytes::<&[u8]>([])
+        self.push_bytes::<&[u8]>(&[])
     }
     fn emit_option_some(&mut self, f: |&mut Encoded| -> CsvResult<()>)
                        -> CsvResult<()> {
