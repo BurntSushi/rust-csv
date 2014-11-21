@@ -35,7 +35,7 @@
 //! let mut rdr = csv::Reader::from_string(data).has_headers(false);
 //! for row in rdr.decode() {
 //!     let (n1, n2, dist): (String, String, uint) = row.unwrap();
-//!     println!("{}, {}: {:u}", n1, n2, dist);
+//!     println!("{}, {}: {}", n1, n2, dist);
 //! }
 //! ```
 //!
@@ -290,7 +290,7 @@ impl fmt::Show for Error {
 
 impl fmt::Show for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CSV parse error:{:u}:{:u}: {}",
+        write!(f, "CSV parse error:{}:{}: {}",
                self.line, self.column, self.kind)
     }
 }
@@ -299,8 +299,8 @@ impl fmt::Show for ParseErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ParseErrorKind::UnequalLengths(first, cur) =>
-                write!(f, "First record has length {:u}, but found record \
-                           with length {:u}.", first, cur),
+                write!(f, "First record has length {}, but found record \
+                           with length {}.", first, cur),
             ParseErrorKind::InvalidUTF8 =>
                 write!(f, "Invalid UTF8 encoding."),
         }

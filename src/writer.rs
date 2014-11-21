@@ -45,6 +45,21 @@ pub struct Writer<W> {
     first_len: uint,
 }
 
+/// This is a (hopefully) temporary trait until the standard library gets
+/// its act together.
+pub trait SizedStr for Sized? {
+    /// Just like `str::Str::as_slice`.
+    fn as_str_slice<'a>(&'a self) -> &'a str;
+}
+
+impl SizedStr for str {
+    fn as_str_slice<'a>(&'a self) -> &'a str { self }
+}
+
+impl SizedStr for String {
+    fn as_str_slice<'a>(&'a self) -> &'a str { self.as_slice() }
+}
+
 impl Writer<io::IoResult<io::File>> {
     /// Creates a new `Writer` that writes CSV data to the file path given.
     ///
@@ -131,9 +146,9 @@ impl<W: io::Writer> Writer<W> {
     ///     assert!(result.is_ok());
     /// }
     /// ```
-    pub fn write<S: Str, I: Iterator<S>>
+    pub fn write<'a, Sized? S: 'a + SizedStr, I: Iterator<&'a S>>
                 (&mut self, r: I) -> CsvResult<()> {
-        self.write_iter(r, |f| Ok(f.as_slice().as_bytes()))
+        self.write_iter(r, |f| Ok(f.as_str_slice().as_bytes()))
     }
 
     /// Writes a record of *byte strings*.

@@ -38,7 +38,7 @@ static ESCAPE: u8 = b'\\';
 /// let mut rdr = csv::Reader::from_string(data).has_headers(false);
 /// for row in rdr.decode() {
 ///     let (n1, n2, dist): (String, String, uint) = row.unwrap();
-///     println!("{}, {}: {:u}", n1, n2, dist);
+///     println!("{}, {}: {}", n1, n2, dist);
 /// }
 /// ```
 ///
