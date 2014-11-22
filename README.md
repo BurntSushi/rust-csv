@@ -95,24 +95,27 @@ cd rust-csv
 cargo test
 ```
 
-You can also add `rust-csv` as a dependency to your project's `Cargo.toml`:
+You can also add `csv` as a dependency to your project's `Cargo.toml` using 
+this git repo:
 
 ```toml
-[dependencies.rust-csv]
+[dependencies.csv]
 git = "git://github.com/BurntSushi/rust-csv"
 ```
+
+Or, you can use `csv` from [crates.io](https://crates.io/crates/csv):
+
+```toml
+[dependencies]
+csv = "*"
+```
+
+For now, I'd probably recommend that you use the git repository while we're all 
+still tracking nightly, but I'll try to keep the `crates.io` package updated.
 
 
 ### Benchmarks
 
 There are some rough benchmarks (compared with Go) here:
 https://github.com/BurntSushi/rust-csv/tree/master/bench
-
-
-### Related work
-
-The only other one I know is
-[arjantop/rust-tabular](https://github.com/arjantop/rust-tabular),
-which does not support the `Encoder` or `Decoder` API. However, it does support 
-parsing fixed-width tables.
 
