@@ -2,7 +2,7 @@
 
 use std::io;
 
-use {CsvResult, Error, Reader};
+use {CsvResult, Error, Reader, NextField};
 
 pub struct Indexed<R, I> {
     rdr: Reader<R>,
@@ -52,16 +52,16 @@ pub fn create<R: io::Reader + io::Seek, W: io::Writer>
              (csv_rdr: Reader<R>, mut idx_wtr: W) -> CsvResult<()> {
     let mut rdr = csv_rdr.has_headers(false);
     let mut count = 0u64;
-    let mut seen_field = false;
     while !rdr.done() {
         try!(idx_wtr.write_be_u64(rdr.byte_offset()).map_err(Error::Io));
         loop {
             match rdr.next_field() {
-                None => break,
-                Some(r) => { seen_field = true; try!(r); }
+                NextField::EndOfCsv => break,
+                NextField::EndOfRecord => { count += 1; break; },
+                NextField::Error(err) => return Err(err),
+                NextField::Data(_) => {}
             }
         }
-        if seen_field { count += 1; }
     }
     idx_wtr.write_be_u64(count).map_err(Error::Io)
 }

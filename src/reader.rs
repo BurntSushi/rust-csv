@@ -370,6 +370,48 @@ impl Reader<MemReader> {
     }
 }
 
+/// NextField is the result of parsing a single CSV field.
+///
+/// This is only useful if you're using the low level `next_field` method.
+pub enum NextField<'a> {
+    /// A single CSV field as a borrow slice of bytes from the
+    /// parser's internal buffer.
+    Data(&'a [u8]),
+
+    /// A CSV error found during parsing. When an error is found, it is
+    /// first returned. All subsequent calls of `next_field` will return
+    /// `EndOfCsv`. (EOF is exempt from this. Depending on the state of the
+    /// parser, an EOF could trigger `Data`, `EndOfRecord` and `EndOfCsv`,
+    /// all in succession.)
+    ///
+    /// In general, once `EndOfCsv` is returned, no other return value is
+    /// possible on subsequent calls.
+    Error(Error),
+
+    /// Indicates the end of a record.
+    EndOfRecord,
+
+    /// Indicates the end of the CSV data. Once this state is entered, the
+    /// parser can never leave it.
+    EndOfCsv,
+}
+
+impl<'a> NextField<'a> {
+    /// Transform NextField into an iterator result.
+    pub fn into_iter_result(self) -> Option<CsvResult<&'a [u8]>> {
+        match self {
+            NextField::EndOfRecord | NextField::EndOfCsv => None,
+            NextField::Error(err) => Some(Err(err)),
+            NextField::Data(field) => Some(Ok(field)),
+        }
+    }
+
+    /// Returns true if and only if the end of CSV data has been reached.
+    pub fn is_end(&self) -> bool {
+        if let NextField::EndOfCsv = *self { true } else { false }
+    }
+}
+
 /// These are low level methods for dealing with the raw bytes of CSV records.
 /// You should only need to use these when you need the performance or if
 /// your CSV data isn't UTF-8 encoded.
@@ -383,8 +425,9 @@ impl<R: io::Reader> Reader<R> {
             let mut headers = vec![];
             loop {
                 let field = match self.next_field() {
-                    None => break,
-                    Some(field) => try!(field),
+                    NextField::EndOfRecord | NextField::EndOfCsv => break,
+                    NextField::Error(err) => return Err(err),
+                    NextField::Data(field) => field,
                 };
                 headers.push(ByteString::from_bytes(field));
             }
@@ -425,7 +468,7 @@ impl<R: io::Reader> Reader<R> {
     /// let mut count = 0u;
     /// while !rdr.done() {
     ///     loop {
-    ///         match rdr.next_field() {
+    ///         match rdr.next_field().into_iter_result() {
     ///             None => break,
     ///             Some(r) => { r.unwrap(); }
     ///         }
@@ -447,19 +490,16 @@ impl<R: io::Reader> Reader<R> {
     /// implement the `Iterator` trait safely. As such, it cannot be used with
     /// a `for` loop.
     ///
-    /// The semantics of this iterator are a little strange. The iterator will
-    /// produce `None` at the end of a record, but the next invocation of the
-    /// iterator will restart at the next record. Once all CSV data has been
-    /// parsed, `None` will be returned indefinitely.
+    /// See the documentation for the `NextField` type on how the iterator
+    /// works.
     ///
     /// This iterator always returns all records (i.e., it won't skip the
     /// header row).
     ///
     /// ### Example
     ///
-    /// Typically, once an iterator returns `None`, it will always return
-    /// `None`.  Since this iterator varies from that behavior, it should be
-    /// used in conjunction with the `done` method to traverse records.
+    /// This method is most useful when used in conjunction with the the
+    /// `done` method:
     ///
     /// ```rust
     /// let data = "
@@ -472,7 +512,7 @@ impl<R: io::Reader> Reader<R> {
     /// let mut rdr = csv::Reader::from_string(data);
     /// while !rdr.done() {
     ///     loop {
-    ///         let field = match rdr.next_field() {
+    ///         let field = match rdr.next_field().into_iter_result() {
     ///             None => break,
     ///             Some(result) => result.unwrap(),
     ///         };
@@ -481,7 +521,7 @@ impl<R: io::Reader> Reader<R> {
     ///     println!("");
     /// }
     /// ```
-    pub fn next_field<'a>(&'a mut self) -> Option<CsvResult<&'a [u8]>> {
+    pub fn next_field<'a>(&'a mut self) -> NextField<'a> {
         unsafe { self.fieldbuf.set_len(0); }
         
         // The EndRecord state indicates what you'd expect: stop the current
@@ -493,7 +533,7 @@ impl<R: io::Reader> Reader<R> {
                 let err = self.parse_err(ParseErrorKind::UnequalLengths(
                     self.first_record.len() as u64, self.field_count));
                 self.err = Some(err.clone());
-                return Some(Err(err));
+                return NextField::Error(err);
             }
             // After processing an EndRecord (and determined there are no
             // errors), we should always start parsing the next record.
@@ -507,7 +547,7 @@ impl<R: io::Reader> Reader<R> {
             }
             self.line_record = self.line_current;
             self.field_count = 0;
-            return None;
+            return NextField::EndOfRecord;
         }
 
         // Check to see if we've recorded an error and quit parsing if we have.
@@ -518,12 +558,11 @@ impl<R: io::Reader> Reader<R> {
         // 2) EOF errors are handled specially and can be returned "lazily".
         //    e.g., EOF in the middle of parsing a field. First we have to
         //    return the field and then return EOF on the next call.
-        match self.err {
-            None => {},
+        if let Some(_) = self.err {
             // We don't return the error here because it is always returned
             // immediately when it is first found (unless it's EOF, but if it's
             // EOF, we just want to stop the iteration anyway).
-            Some(_) => return None,
+            return NextField::EndOfCsv;
         }
 
         // A parser machine encapsulates the main parsing state transitions.
@@ -597,7 +636,7 @@ impl<R: io::Reader> Reader<R> {
                 // new lines in a file), then we should immediately stop the
                 // parser.
                 if *pmachine.state == StartRecord {
-                    return None;
+                    return NextField::EndOfCsv;
                 }
                 *pmachine.state = EndRecord;
                 // fallthrough to return current field.
@@ -608,7 +647,7 @@ impl<R: io::Reader> Reader<R> {
                 // are always reported. (i.e., Don't let an EndRecord state
                 // slip in here.)
                 *pmachine.state = StartRecord;
-                return Some(Err(err.clone()));
+                return NextField::Error(err.clone());
             }
         }
         if self.line_record == 1 {
@@ -617,7 +656,7 @@ impl<R: io::Reader> Reader<R> {
             self.first_record.push(bytes);
         }
         self.field_count += 1;
-        Some(Ok((*pmachine.fieldbuf)[]))
+        NextField::Data((*pmachine.fieldbuf)[])
     }
 
     /// An unsafe iterator over byte fields.
@@ -664,14 +703,8 @@ pub struct UnsafeByteFields<'a, R: 'a> {
 impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>>
     for UnsafeByteFields<'a, R> {
     fn next(&mut self) -> Option<CsvResult<&'a [u8]>> {
-        unsafe { transmute(self.rdr.next_field()) }
-    }
-}
-
-#[doc(hidden)]
-impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>> for Reader<R> {
-    fn next(&mut self) -> Option<CsvResult<&'a [u8]>> {
-        unsafe { transmute(self.next_field()) }
+        // whoa... why is this allowed!?
+        self.rdr.next_field().into_iter_result()
     }
 }
 
@@ -907,13 +940,11 @@ impl<'a, R: io::Reader> Iterator<CsvResult<Vec<ByteString>>>
         }
         let mut record = Vec::with_capacity(self.p.first_record.len());
         loop {
-            let field = match self.p.next_field() {
-                None => break,
-                Some(field) => field,
-            };
-            match field {
-                Err(err) => return Some(Err(err)),
-                Ok(bytes) => record.push(ByteString::from_bytes(bytes)),
+            match self.p.next_field() {
+                NextField::EndOfRecord | NextField::EndOfCsv => break,
+                NextField::Error(err) => return Some(Err(err)),
+                NextField::Data(field) =>
+                    record.push(ByteString::from_bytes(field)),
             }
         }
         Some(Ok(record))

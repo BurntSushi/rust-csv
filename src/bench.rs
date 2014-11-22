@@ -33,7 +33,7 @@ fn raw_records(b: &mut Bencher) {
         let mut dec = reader(&mut data);
         while !dec.done() {
             loop {
-                match dec.next_field() {
+                match dec.next_field().into_iter_result() {
                     None => break,
                     Some(r) => { r.unwrap(); }
                 }

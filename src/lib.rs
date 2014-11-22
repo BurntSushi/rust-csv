@@ -7,7 +7,7 @@
 #![experimental]
 #![deny(missing_docs)]
 
-#![feature(default_type_params, slicing_syntax)]
+#![feature(default_type_params, if_let, slicing_syntax)]
 
 //! This crate provides a streaming CSV (comma separated values) writer and
 //! reader that works with the `serialize` crate to do type based encoding
@@ -136,7 +136,7 @@
 //! let mut rdr = csv::Reader::from_string(data);
 //! while !rdr.done() {
 //!     loop {
-//!         let field = match rdr.next_field() {
+//!         let field = match rdr.next_field().into_iter_result() {
 //!             None => break,
 //!             Some(result) => result.unwrap(),
 //!         };
@@ -200,7 +200,9 @@ use std::io;
 pub use bytestr::{ByteString, IntoVector};
 pub use encoder::Encoded;
 pub use decoder::Decoded;
-pub use reader::{Reader, DecodedRecords, StringRecords, ByteRecords};
+pub use reader::{
+    Reader, DecodedRecords, StringRecords, ByteRecords, NextField,
+};
 pub use writer::Writer;
 
 /// An experimental module for processing CSV data in parallel.
