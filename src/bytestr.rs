@@ -125,7 +125,16 @@ impl ops::Slice<uint, [u8]> for ByteString {
 
 impl<H: hash::Writer> hash::Hash<H> for ByteString {
     fn hash(&self, hasher: &mut H) {
-        (&*self).hash(hasher);
+        // WHOA. This used to be `(&*self).hash(hasher);`, but it introduced
+        // a *major* performance regression that got fixed by using
+        // `self.as_slice().hash(hasher);` instead. I didn't do any profiling,
+        // but maybe the `(&*self)` was causing a copy somehow through the
+        // `Deref` trait? No clue. ---AG
+        //
+        // TODO: Try `(&*self)` again (maybe when 1.0 hits). If the regression
+        // remains, create a smaller reproducible example and report it as a
+        // bug.
+        self.as_slice().hash(hasher);
     }
 }
 
