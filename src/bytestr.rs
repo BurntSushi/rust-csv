@@ -47,14 +47,12 @@ impl ByteString {
 
     /// Consumes this byte string into a vector of bytes.
     pub fn into_bytes(self) -> Vec<u8> {
-        let ByteString(chars) = self;
-        chars
+        self.0
     }
 
     /// Returns this byte string as a slice of bytes.
     pub fn as_bytes<'a>(&'a self) -> &'a [u8] {
-        let &ByteString(ref chars) = self;
-        chars[]
+        &**self
     }
 
     /// Consumes the byte string and decodes it into a Unicode string. If the
@@ -93,8 +91,13 @@ impl fmt::Show for ByteString {
 impl AsSlice<u8> for ByteString {
     #[inline]
     fn as_slice<'a>(&'a self) -> &'a [u8] {
-        let ByteString(ref chars) = *self;
-        chars.as_slice()
+        self.as_bytes()
+    }
+}
+
+impl Deref<[u8]> for ByteString {
+    fn deref<'a>(&'a self) -> &'a [u8] {
+        &*self.0
     }
 }
 
@@ -122,7 +125,7 @@ impl ops::Slice<uint, [u8]> for ByteString {
 
 impl<H: hash::Writer> hash::Hash<H> for ByteString {
     fn hash(&self, hasher: &mut H) {
-        self[].hash(hasher);
+        (&*self).hash(hasher);
     }
 }
 
