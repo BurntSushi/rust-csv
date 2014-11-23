@@ -57,7 +57,7 @@ impl ByteString {
 
     /// Consumes the byte string and decodes it into a Unicode string. If the
     /// decoding fails, then the original ByteString is returned.
-    pub fn as_utf8_string(self) -> Result<String, ByteString> {
+    pub fn into_utf8_string(self) -> Result<String, ByteString> {
         String::from_utf8(self.into_bytes()).map_err(ByteString)
     }
 

@@ -42,7 +42,7 @@ impl Decoded {
     }
 
     fn pop_string(&mut self) -> CsvResult<String> {
-        {try!(self.pop())}.as_utf8_string().map_err(|bytes| {
+        {try!(self.pop())}.into_utf8_string().map_err(|bytes| {
             Error::Decode(
                 format!("Could not convert bytes '{}' to UTF-8.", bytes))
         })
