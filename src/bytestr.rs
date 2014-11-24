@@ -16,6 +16,14 @@ impl<'a, T: Clone> IntoVector<T> for &'a [T] {
     fn into_vec(self) -> Vec<T> { self.to_vec() }
 }
 
+impl<'a> IntoVector<u8> for &'a str {
+    fn into_vec(self) -> Vec<u8> { self.into_string().into_bytes() }
+}
+
+impl<'a> IntoVector<u8> for String {
+    fn into_vec(self) -> Vec<u8> { self.into_bytes() }
+}
+
 /// A type that represents unadulterated byte strings.
 ///
 /// Byte strings represent *any* 8 bit character encoding. There are no
