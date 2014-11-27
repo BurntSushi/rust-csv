@@ -95,6 +95,39 @@ pub struct Reader<R> {
     byte_offset: u64, // current byte offset
 }
 
+impl<R: io::Reader> Reader<R> {
+    /// Creates a new CSV reader from an arbitrary `io::Reader`.
+    ///
+    /// The reader is buffered for you automatically.
+    pub fn from_reader(rdr: R) -> Reader<R> {
+        Reader::from_buffer(BufferedReader::new(rdr))
+    }
+
+    /// Creates a new CSV reader from a buffer.
+    ///
+    /// This allows you to create your own buffer with a capacity of your
+    /// choosing. In all other constructors, a buffer with default capacity
+    /// is created for you.
+    fn from_buffer(buf: BufferedReader<R>) -> Reader<R> {
+        Reader {
+            delimiter: b',',
+            flexible: false,
+            buffer: buf,
+            fieldbuf: Vec::with_capacity(1024),
+            state: StartRecord,
+            err: None,
+            first_record: vec![],
+            has_seeked: false,
+            has_headers: true,
+            field_count: 0,
+            column: 1,
+            line_record: 1,
+            line_current: 1,
+            byte_offset: 0,
+        }
+    }
+}
+
 impl Reader<io::IoResult<io::File>> {
     /// Creates a new CSV reader for the data at the file path given.
     pub fn from_file(path: &Path) -> Reader<io::IoResult<io::File>> {
@@ -102,52 +135,19 @@ impl Reader<io::IoResult<io::File>> {
     }
 }
 
-impl<R: io::Reader> Reader<R> {
-    /// Returns a *copy* of the first record in the CSV data as strings.
-    ///
-    /// This method may be called at any time and regardless of whether
-    /// `no_headers` is set or not.
-    ///
-    /// ### Example
-    ///
-    /// ```rust
-    /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3");
-    ///
-    /// let headers1 = rdr.headers().unwrap();
-    /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
-    /// let headers2 = rdr.headers().unwrap();
-    ///
-    /// let s = |s: &'static str| s.to_string();
-    /// assert_eq!(headers1, headers2);
-    /// assert_eq!(headers1, vec![s("a"), s("b"), s("c")]);
-    /// assert_eq!(rows.len(), 1);
-    /// assert_eq!(rows[0], vec![s("1"), s("2"), s("3")]);
-    /// ```
-    ///
-    /// Note that if `no_headers` is called on the CSV reader, the rows
-    /// returned in this example include the first record:
-    ///
-    /// ```rust
-    /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3")
-    ///                           .has_headers(false);
-    ///
-    /// let headers1 = rdr.headers().unwrap();
-    /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
-    /// let headers2 = rdr.headers().unwrap();
-    ///
-    /// let s = |s: &'static str| s.to_string();
-    /// assert_eq!(headers1, headers2);
-    /// assert_eq!(headers1, vec![s("a"), s("b"), s("c")]);
-    ///
-    /// // The header rows are now part of the record iterators.
-    /// assert_eq!(rows.len(), 2);
-    /// assert_eq!(rows[0], headers1);
-    /// assert_eq!(rows[1], vec![s("1"), s("2"), s("3")]);
-    /// ```
-    pub fn headers(&mut self) -> CsvResult<Vec<String>> {
-        byte_record_to_utf8(try!(self.byte_headers()))
+impl Reader<MemReader> {
+    /// Creates a CSV reader for an in memory string buffer.
+    pub fn from_string<S: StrAllocating>(s: S) -> Reader<MemReader> {
+        Reader::from_bytes(s.into_string().into_bytes())
     }
 
+    /// Creates a CSV reader for an in memory buffer of bytes.
+    pub fn from_bytes<V: IntoVector<u8>>(bytes: V) -> Reader<MemReader> {
+        Reader::from_reader(MemReader::new(bytes.into_vec()))
+    }
+}
+
+impl<R: io::Reader> Reader<R> {
     /// Uses type-based decoding to read a single record from CSV data.
     ///
     /// The type that is being decoded into should correspond to *one full
@@ -202,15 +202,12 @@ impl<R: io::Reader> Reader<R> {
     /// #[deriving(Decodable, PartialEq, Show)]
     /// struct MyUint(uint);
     ///
-    /// #[deriving(Decodable, PartialEq, Show)]
-    /// enum Color { Red, Green, Blue };
-    ///
     /// #[deriving(Decodable)]
     /// struct Pair {
     ///     name1: String,
     ///     name2: String,
     ///     dist: Option<MyUint>,
-    ///     color: Color,
+    ///     color: String,
     /// }
     ///
     /// let mut rdr = csv::Reader::from_string("foo,bar,1,red\nfoo,baz,,green")
@@ -221,9 +218,6 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// assert_eq!(rows[0].dist, Some(MyUint(1)));
     /// assert_eq!(rows[1].dist, None);
-    ///
-    /// assert_eq!(rows[0].color, Color::Red);
-    /// assert_eq!(rows[1].color, Color::Green);
     /// # }
     /// ```
     ///
@@ -287,40 +281,54 @@ impl<R: io::Reader> Reader<R> {
     pub fn records<'a>(&'a mut self) -> StringRecords<'a, R> {
         StringRecords { p: self.byte_records() }
     }
+
+    /// Returns a *copy* of the first record in the CSV data as strings.
+    ///
+    /// This method may be called at any time and regardless of whether
+    /// `no_headers` is set or not.
+    ///
+    /// ### Example
+    ///
+    /// ```rust
+    /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3");
+    ///
+    /// let headers1 = rdr.headers().unwrap();
+    /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
+    /// let headers2 = rdr.headers().unwrap();
+    ///
+    /// let s = |s: &'static str| s.to_string();
+    /// assert_eq!(headers1, headers2);
+    /// assert_eq!(headers1, vec![s("a"), s("b"), s("c")]);
+    /// assert_eq!(rows.len(), 1);
+    /// assert_eq!(rows[0], vec![s("1"), s("2"), s("3")]);
+    /// ```
+    ///
+    /// Note that if `no_headers` is called on the CSV reader, the rows
+    /// returned in this example include the first record:
+    ///
+    /// ```rust
+    /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3")
+    ///                           .has_headers(false);
+    ///
+    /// let headers1 = rdr.headers().unwrap();
+    /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
+    /// let headers2 = rdr.headers().unwrap();
+    ///
+    /// let s = |s: &'static str| s.to_string();
+    /// assert_eq!(headers1, headers2);
+    /// assert_eq!(headers1, vec![s("a"), s("b"), s("c")]);
+    ///
+    /// // The header rows are now part of the record iterators.
+    /// assert_eq!(rows.len(), 2);
+    /// assert_eq!(rows[0], headers1);
+    /// assert_eq!(rows[1], vec![s("1"), s("2"), s("3")]);
+    /// ```
+    pub fn headers(&mut self) -> CsvResult<Vec<String>> {
+        byte_record_to_utf8(try!(self.byte_headers()))
+    }
 }
 
 impl<R: io::Reader> Reader<R> {
-    /// Creates a new CSV reader from an arbitrary `io::Reader`.
-    ///
-    /// The reader is buffered for you automatically.
-    pub fn from_reader(rdr: R) -> Reader<R> {
-        Reader::from_buffer(BufferedReader::new(rdr))
-    }
-
-    /// Creates a new CSV reader from a buffer.
-    ///
-    /// This allows you to create your own buffer with a capacity of your
-    /// choosing. In all other constructors, a buffer with default capacity
-    /// is created for you.
-    fn from_buffer(buf: BufferedReader<R>) -> Reader<R> {
-        Reader {
-            delimiter: b',',
-            flexible: false,
-            buffer: buf,
-            fieldbuf: Vec::with_capacity(1024),
-            state: StartRecord,
-            err: None,
-            first_record: vec![],
-            has_seeked: false,
-            has_headers: true,
-            field_count: 0,
-            column: 1,
-            line_record: 1,
-            line_current: 1,
-            byte_offset: 0,
-        }
-    }
-
     /// The delimiter to use when reading CSV data.
     ///
     /// Since the CSV reader is meant to be mostly encoding agnostic, you must
@@ -355,18 +363,6 @@ impl<R: io::Reader> Reader<R> {
     pub fn has_headers(mut self, yes: bool) -> Reader<R> {
         self.has_headers = yes;
         self
-    }
-}
-
-impl Reader<MemReader> {
-    /// Creates a CSV reader for an in memory string buffer.
-    pub fn from_string<S: StrAllocating>(s: S) -> Reader<MemReader> {
-        Reader::from_bytes(s.into_string().into_bytes())
-    }
-
-    /// Creates a CSV reader for an in memory buffer of bytes.
-    pub fn from_bytes<V: IntoVector<u8>>(bytes: V) -> Reader<MemReader> {
-        Reader::from_reader(MemReader::new(bytes.into_vec()))
     }
 }
 
@@ -523,7 +519,7 @@ impl<R: io::Reader> Reader<R> {
     /// ```
     pub fn next_field<'a>(&'a mut self) -> NextField<'a> {
         unsafe { self.fieldbuf.set_len(0); }
-        
+
         // The EndRecord state indicates what you'd expect: stop the current
         // iteration, check for same-length records and reset a little
         // record-based book keeping.

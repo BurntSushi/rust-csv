@@ -109,10 +109,15 @@ impl serialize::Decoder<Error> for Decoded {
                             f: |&mut Decoded, uint| -> CsvResult<T>)
                            -> CsvResult<T> {
         let variant = to_lower(try!(self.pop_string()).as_slice());
-        match names.iter().position(|&name| to_lower(name) == variant) {
-            Some(idx) => return f(self, idx),
-            None => {}
-        }
+
+        // This is subtly broken. Supporting both zero-parameter and
+        // one-parameter enum variants, I think, is impossible right now.
+        // The issue is, we don't know how many parameters each variant
+        // takes, so we can't detect all possible failures.
+        // match names.iter().position(|&name| to_lower(name) == variant) {
+            // Some(idx) => return f(self, idx),
+            // None => {}
+        // }
 
         // At this point, we couldn't find a verbatim Enum variant, so let's
         // assume we're trying to load enum variants of one argument.

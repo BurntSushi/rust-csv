@@ -7,7 +7,8 @@
 #![experimental]
 #![deny(missing_docs)]
 
-#![feature(default_type_params, if_let, slicing_syntax, tuple_indexing)]
+#![feature(default_type_params, if_let, macro_rules,
+           slicing_syntax, tuple_indexing)]
 
 //! This crate provides a streaming CSV (comma separated values) writer and
 //! reader that works with the `serialize` crate to do type based encoding
