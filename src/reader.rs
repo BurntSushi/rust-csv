@@ -10,13 +10,33 @@ use {
 };
 
 use self::ParseState::{
-    StartRecord, EndRecord, StartField, EatCRLF,
+    StartRecord, EndRecord, StartField,
+    RecordTermCR, RecordTermLF, RecordTermAny,
     InField, InQuotedField, InQuotedFieldEscape, InQuotedFieldQuote,
 };
 
-// TODO: Make these parameters?
-static QUOTE: u8 = b'"';
-static ESCAPE: u8 = b'\\';
+/// A record terminator.
+///
+/// Ideally, this would just be a `u8` like any other delimiter, but a useful
+/// CSV parser must special case CRLF handling. Hence, this enum.
+///
+/// Generally, you won't need to use this type because `CRLF` is the default,
+/// which is by far the most widely used record terminator.
+pub enum RecordTerminator {
+    /// Parses `\r`, `\n` or `\r\n` as a single record terminator.
+    CRLF,
+    /// Parses the byte given as a record terminator.
+    Any(u8),
+}
+
+impl Equiv<u8> for RecordTerminator {
+    fn equiv(&self, other: &u8) -> bool {
+        match *self {
+            RecordTerminator::CRLF => *other == b'\r' || *other == b'\n',
+            RecordTerminator::Any(b) => *other == b
+        }
+    }
+}
 
 /// A CSV reader.
 ///
@@ -64,6 +84,10 @@ static ESCAPE: u8 = b'\\';
 /// ```
 pub struct Reader<R> {
     delimiter: u8,
+    record_terminator: RecordTerminator,
+    quote: u8,
+    escape: u8,
+    double_quote: bool, // false => use escape character instead
     flexible: bool, // true => records of varying length are allowed
     buffer: BufferedReader<R>,
     fieldbuf: Vec<u8>, // reusable buffer used to store fields
@@ -72,6 +96,7 @@ pub struct Reader<R> {
 
     // Keep a copy of the first record parsed.
     first_record: Vec<ByteString>,
+    parsing_first_record: bool, // true only before first EndRecord state
 
     // Is set if `seek` is ever called.
     // This subtlely modifies the behavior of iterators so that there is
@@ -111,12 +136,17 @@ impl<R: io::Reader> Reader<R> {
     fn from_buffer(buf: BufferedReader<R>) -> Reader<R> {
         Reader {
             delimiter: b',',
+            record_terminator: RecordTerminator::CRLF,
+            quote: b'"',
+            escape: b'\\',
+            double_quote: true,
             flexible: false,
             buffer: buf,
             fieldbuf: Vec::with_capacity(1024),
             state: StartRecord,
             err: None,
             first_record: vec![],
+            parsing_first_record: true,
             has_seeked: false,
             has_headers: true,
             field_count: 0,
@@ -341,6 +371,19 @@ impl<R: io::Reader> Reader<R> {
         self
     }
 
+    /// Whether to treat the first row as a special header row.
+    ///
+    /// By default, the first row is treated as a special header row, which
+    /// means it is excluded from iterators returned by the `decode`, `records`
+    /// or `byte_records` methods. When `yes` is set to `false`, the first row
+    /// is included in those iterators.
+    ///
+    /// Note that the `headers` method is unaffected by whether this is set.
+    pub fn has_headers(mut self, yes: bool) -> Reader<R> {
+        self.has_headers = yes;
+        self
+    }
+
     /// Whether to allow flexible length records when reading CSV data.
     ///
     /// When this is set to `true`, records in the CSV data can have different
@@ -352,16 +395,56 @@ impl<R: io::Reader> Reader<R> {
         self
     }
 
-    /// Whether to treat the first row as a special header row.
+    /// Set the record terminator to use when reading CSV data.
     ///
-    /// By default, the first row is treated as a special header row, which
-    /// means it is excluded from iterators returned by the `decode`, `records`
-    /// or `byte_records` methods. When `yes` is set to `false`, the first row
-    /// is included in those iterators.
+    /// In the vast majority of situations, you'll want to use the default
+    /// value, `RecordTerminator::CRLF`, which automatically handles `\r`,
+    /// `\n` or `\r\n` as record terminators. (Notably, this is a special
+    /// case since two characters can correspond to a single terminator token.)
     ///
-    /// Note that the `headers` method is unaffected by whether this is set.
-    pub fn has_headers(mut self, yes: bool) -> Reader<R> {
-        self.has_headers = yes;
+    /// However, you may use `RecordTerminator::Any` to specify any ASCII
+    /// character to use as the record terminator. For example, you could
+    /// use `RecordTerminator::Any(b'\n')` to only accept line feeds as
+    /// record terminators, or `b'\x1e'` for the ASCII record separator.
+    pub fn record_terminator(mut self, term: RecordTerminator) -> Reader<R> {
+        self.record_terminator = term;
+        self
+    }
+
+    /// Set the quote character to use when reading CSV data.
+    ///
+    /// Since the CSV reader is meant to be mostly encoding agnostic, you must
+    /// specify the quote as a single ASCII byte. For example, to read
+    /// single quoted data, you would use `b'\''`.
+    ///
+    /// The default value is `b'"'`.
+    pub fn quote(mut self, quote: u8) -> Reader<R> {
+        self.quote = quote;
+        self
+    }
+
+    /// Set the escape character to use when reading CSV data.
+    ///
+    /// This is only used when `double_quote` is set to false.
+    ///
+    /// Since the CSV reader is meant to be mostly encoding agnostic, you must
+    /// specify the escape as a single ASCII byte.
+    ///
+    /// The default value is `b'\\'`.
+    pub fn escape(mut self, escape: u8) -> Reader<R> {
+        self.escape = escape;
+        self
+    }
+
+    /// Set the quoting escape mechanism.
+    ///
+    /// When enabled (which is the default), quotes are escaped by doubling
+    /// them. e.g., `""` resolves to a single `"`.
+    ///
+    /// When disabled, double quotes have no significance. Instead, they can
+    /// be escaped with the escape character (which is `\\` by default).
+    pub fn double_quote(mut self, yes: bool) -> Reader<R> {
+        self.double_quote = yes;
         self
     }
 }
@@ -534,13 +617,7 @@ impl<R: io::Reader> Reader<R> {
             // After processing an EndRecord (and determined there are no
             // errors), we should always start parsing the next record.
             self.state = StartRecord;
-
-            // If the record has ended, but the line_current didn't increment
-            // (possible if we have \r line endings) then increment it here.
-            if self.line_record == self.line_current {
-                self.line_current += 1;
-                self.column = 1;
-            }
+            self.parsing_first_record = false;
             self.line_record = self.line_current;
             self.field_count = 0;
             return NextField::EndOfRecord;
@@ -570,6 +647,10 @@ impl<R: io::Reader> Reader<R> {
             fieldbuf: &mut self.fieldbuf,
             state: &mut self.state,
             delimiter: self.delimiter,
+            record_terminator: self.record_terminator,
+            quote: self.quote,
+            escape: self.escape,
+            double_quote: self.double_quote,
         };
         let mut consumed = 0; // tells the buffer how much we consumed
         'TOPLOOP: loop {
@@ -602,10 +683,8 @@ impl<R: io::Reader> Reader<R> {
                             consumed += 1;
                             self.column += 1;
                             self.byte_offset += 1;
-                            if is_crlf(b) {
-                                if b == b'\n' {
-                                    self.line_current += 1;
-                                }
+                            if b == b'\n' {
+                                self.line_current += 1;
                                 self.column = 1;
                             }
                             if *pmachine.state == StartField {
@@ -646,7 +725,7 @@ impl<R: io::Reader> Reader<R> {
                 return NextField::Error(err.clone());
             }
         }
-        if self.line_record == 1 {
+        if self.parsing_first_record {
             // This is only copying bytes for the first record.
             let bytes = ByteString::from_bytes((*pmachine.fieldbuf)[]);
             self.first_record.push(bytes);
@@ -690,20 +769,6 @@ impl<R: io::Reader> Reader<R> {
     }
 }
 
-#[doc(hidden)]
-pub struct UnsafeByteFields<'a, R: 'a> {
-    rdr: &'a mut Reader<R>,
-}
-
-#[doc(hidden)]
-impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>>
-    for UnsafeByteFields<'a, R> {
-    fn next(&mut self) -> Option<CsvResult<&'a [u8]>> {
-        // whoa... why is this allowed!?
-        self.rdr.next_field().into_iter_result()
-    }
-}
-
 impl<R: io::Reader + io::Seek> Reader<R> {
     /// Seeks the underlying reader to the file cursor specified.
     ///
@@ -725,9 +790,19 @@ impl<R: io::Reader + io::Seek> Reader<R> {
         self.buffer.clear();
         self.err = None;
         self.byte_offset = pos as u64;
-        try!(self.buffer.get_mut_ref().seek(pos, style).map_err(Error::Io));
+        try!(self.buffer.get_mut_ref().seek(pos, style));
         Ok(())
     }
+}
+
+struct ParseMachine<'a> {
+    fieldbuf: &'a mut Vec<u8>,
+    state: &'a mut ParseState,
+    delimiter: u8,
+    record_terminator: RecordTerminator,
+    quote: u8,
+    escape: u8,
+    double_quote: bool,
 }
 
 #[deriving(Eq, PartialEq, Show)]
@@ -735,17 +810,13 @@ enum ParseState {
     StartRecord,
     EndRecord,
     StartField,
-    EatCRLF,
+    RecordTermCR,
+    RecordTermLF,
+    RecordTermAny,
     InField,
     InQuotedField,
     InQuotedFieldEscape,
     InQuotedFieldQuote,
-}
-
-struct ParseMachine<'a> {
-    fieldbuf: &'a mut Vec<u8>,
-    state: &'a mut ParseState,
-    delimiter: u8,
 }
 
 impl<'a> ParseMachine<'a> {
@@ -755,7 +826,9 @@ impl<'a> ParseMachine<'a> {
             StartRecord => self.parse_start_record(b),
             EndRecord => unreachable!(),
             StartField => self.parse_start_field(b),
-            EatCRLF => self.parse_eat_crlf(b),
+            RecordTermCR => self.parse_record_term_cr(b),
+            RecordTermLF => self.parse_record_term_lf(b),
+            RecordTermAny => self.parse_record_term_any(b),
             InField => self.parse_in_field(b),
             InQuotedField => self.parse_in_quoted_field(b),
             InQuotedFieldEscape => self.parse_in_quoted_field_escape(b),
@@ -765,7 +838,7 @@ impl<'a> ParseMachine<'a> {
 
     #[inline]
     fn parse_start_record(&mut self, b: u8) {
-        if !is_crlf(b) {
+        if !self.is_record_term(b) {
             *self.state = StartField;
             self.parse_start_field(b);
         }
@@ -773,9 +846,9 @@ impl<'a> ParseMachine<'a> {
 
     #[inline]
     fn parse_start_field(&mut self, b: u8) {
-        if is_crlf(b) {
-            *self.state = EatCRLF;
-        } else if b == QUOTE {
+        if self.is_record_term(b) {
+            *self.state = self.record_term_next_state(b);
+        } else if b == self.quote {
             *self.state = InQuotedField;
         } else if b == self.delimiter {
             // empty field, so return in StartField state,
@@ -787,16 +860,39 @@ impl<'a> ParseMachine<'a> {
     }
 
     #[inline]
-    fn parse_eat_crlf(&mut self, b: u8) {
-        if !is_crlf(b) {
+    fn parse_record_term_cr(&mut self, b: u8) {
+        if b == b'\n' {
+            *self.state = RecordTermLF;
+        } else if b != b'\r' {
             *self.state = EndRecord;
         }
     }
 
     #[inline]
+    fn parse_record_term_lf(&mut self, b: u8) {
+        if b == b'\r' {
+            *self.state = RecordTermCR;
+        } else if b != b'\n' {
+            *self.state = EndRecord;
+        }
+    }
+
+    #[inline]
+    fn parse_record_term_any(&mut self, b: u8) {
+        match self.record_terminator {
+            RecordTerminator::CRLF => unreachable!(),
+            RecordTerminator::Any(bb) => {
+                if b != bb {
+                    *self.state = EndRecord;
+                }
+            }
+        }
+    }
+
+    #[inline]
     fn parse_in_field(&mut self, b: u8) {
-        if is_crlf(b) {
-            *self.state = EatCRLF;
+        if self.is_record_term(b) {
+            *self.state = self.record_term_next_state(b);
         } else if b == self.delimiter {
             *self.state = StartField;
         } else {
@@ -806,10 +902,10 @@ impl<'a> ParseMachine<'a> {
 
     #[inline]
     fn parse_in_quoted_field(&mut self, b: u8) {
-        if b == ESCAPE {
-            *self.state = InQuotedFieldEscape;
-        } else if b == QUOTE {
+        if b == self.quote {
             *self.state = InQuotedFieldQuote;
+        } else if !self.double_quote && b == self.escape {
+            *self.state = InQuotedFieldEscape;
         } else {
             self.fieldbuf.push(b);
         }
@@ -823,19 +919,55 @@ impl<'a> ParseMachine<'a> {
 
     #[inline]
     fn parse_in_quoted_field_quote(&mut self, b: u8) {
-        if b == QUOTE {
+        if self.double_quote && b == self.quote {
             *self.state = InQuotedField;
             self.fieldbuf.push(b);
         } else if b == self.delimiter {
             *self.state = StartField;
-        } else if is_crlf(b) {
-            *self.state = EatCRLF;
+        } else if self.is_record_term(b) {
+            *self.state = self.record_term_next_state(b);
         } else {
             // Should we provide a strict variant that disallows
             // random chars after a quote?
             *self.state = InField;
             self.fieldbuf.push(b);
         }
+    }
+
+    #[inline]
+    fn is_record_term(&self, b: u8) -> bool {
+        self.record_terminator.equiv(&b)
+    }
+
+    #[inline]
+    fn record_term_next_state(&self, b: u8) -> ParseState {
+        match self.record_terminator {
+            RecordTerminator::CRLF => {
+                if b == b'\r' {
+                    RecordTermCR
+                } else if b == b'\n' {
+                    RecordTermLF
+                } else {
+                    unreachable!()
+                }
+            }
+            RecordTerminator::Any(_) => RecordTermAny,
+        }
+    }
+}
+
+#[doc(hidden)]
+pub struct UnsafeByteFields<'a, R: 'a> {
+    rdr: &'a mut Reader<R>,
+}
+
+#[doc(hidden)]
+impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>>
+    for UnsafeByteFields<'a, R> {
+    fn next(&mut self) -> Option<CsvResult<&'a [u8]>> {
+        // whoa... why is this allowed!?
+        // TODO: Construct a minimal example and submit a bug report. ---AG
+        self.rdr.next_field().into_iter_result()
     }
 }
 
@@ -946,9 +1078,6 @@ impl<'a, R: io::Reader> Iterator<CsvResult<Vec<ByteString>>>
         Some(Ok(record))
     }
 }
-
-#[inline]
-fn is_crlf(b: u8) -> bool { b == b'\n' || b == b'\r' }
 
 fn byte_record_to_utf8(record: Vec<ByteString>) -> CsvResult<Vec<String>> {
     for bytes in record.iter() {

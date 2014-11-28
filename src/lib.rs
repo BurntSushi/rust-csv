@@ -203,8 +203,9 @@ pub use encoder::Encoded;
 pub use decoder::Decoded;
 pub use reader::{
     Reader, DecodedRecords, StringRecords, ByteRecords, NextField,
+    RecordTerminator,
 };
-pub use writer::Writer;
+pub use writer::{Writer, QuoteStyle};
 
 /// An experimental module for processing CSV data in parallel.
 pub mod index;
@@ -333,4 +334,8 @@ impl StdError for Error {
 
 impl FromError<Error> for Box<StdError> {
     fn from_error(err: Error) -> Box<StdError> { box err }
+}
+
+impl FromError<io::IoError> for Error {
+    fn from_error(err: io::IoError) -> Error { Error::Io(err) }
 }

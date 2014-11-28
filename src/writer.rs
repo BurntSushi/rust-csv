@@ -1,9 +1,23 @@
+use std::error::FromError;
 use std::io;
 use std::str;
 
 use serialize::Encodable;
 
-use {ByteString, CsvResult, Encoded, Error};
+use {ByteString, CsvResult, Encoded, Error, RecordTerminator};
+
+/// The quoting style to use when writing CSV data.
+pub enum QuoteStyle {
+    /// This puts quotes around every field. Always.
+    Always,
+    /// This puts quotes around fields only when necessary.
+    ///
+    /// They are necessary when fields are empty or contain a quote, delimiter
+    /// or record terminator.
+    ///
+    /// This is the default.
+    Necessary,
+}
 
 /// A CSV writer.
 ///
@@ -40,8 +54,12 @@ use {ByteString, CsvResult, Encoded, Error};
 pub struct Writer<W> {
     buf: io::BufferedWriter<W>,
     delimiter: u8,
+    record_terminator: RecordTerminator,
     flexible: bool,
-    crlf: bool,
+    quote: u8,
+    escape: u8,
+    double_quote: bool,
+    quote_style: QuoteStyle,
     first_len: uint,
 }
 
@@ -67,6 +85,65 @@ impl Writer<io::IoResult<io::File>> {
     /// otherwise.
     pub fn from_file(path: &Path) -> Writer<io::IoResult<io::File>> {
         Writer::from_writer(io::File::create(path))
+    }
+}
+
+
+impl<W: io::Writer> Writer<W> {
+    /// Creates a new CSV writer that writes to the `io::Writer` given.
+    ///
+    /// Note that the writer is buffered for you automatically.
+    pub fn from_writer(w: W) -> Writer<W> {
+        Writer::from_buffer(io::BufferedWriter::new(w))
+    }
+
+    /// Creates a new CSV writer that writes to the buffer given.
+    ///
+    /// This lets you specify your own buffered writer (e.g., use a different
+    /// capacity). All other constructors wrap the writer given in a buffer
+    /// with default capacity.
+    pub fn from_buffer(buf: io::BufferedWriter<W>) -> Writer<W> {
+        Writer {
+            buf: buf,
+            delimiter: b',',
+            record_terminator: RecordTerminator::Any(b'\n'),
+            flexible: false,
+            quote: b'"',
+            escape: b'\\',
+            double_quote: true,
+            quote_style: QuoteStyle::Necessary,
+            first_len: 0,
+        }
+    }
+}
+
+impl Writer<io::MemWriter> {
+    /// Creates a new CSV writer that writes to an in memory buffer. At any
+    /// time, `to_string` or `to_bytes` can be called to retrieve the
+    /// cumulative CSV data.
+    pub fn from_memory() -> Writer<io::MemWriter> {
+        Writer::from_writer(io::MemWriter::new())
+    }
+
+    /// Returns the written CSV data as a string.
+    pub fn as_string<'r>(&'r mut self) -> &'r str {
+        match self.buf.flush() {
+            // shouldn't panic with MemWriter
+            Err(err) => panic!("Error flushing to MemWriter: {}", err),
+            // This seems suspicious. If the client only writes `String`
+            // values, then this can never fail. If the client is writing
+            // byte strings, then they should be calling `to_bytes` instead.
+            Ok(()) => str::from_utf8(self.buf.get_ref().get_ref()).unwrap(),
+        }
+    }
+
+    /// Returns the encoded CSV data as raw bytes.
+    pub fn as_bytes<'r>(&'r mut self) -> &'r [u8] {
+        match self.buf.flush() {
+            // shouldn't panic with MemWriter
+            Err(err) => panic!("Error flushing to MemWriter: {}", err),
+            Ok(()) => self.buf.get_ref().get_ref(),
+        }
     }
 }
 
@@ -186,45 +263,39 @@ impl<W: io::Writer> Writer<W> {
     }
 
     fn write_iter<T, R: AsSlice<u8>, I: Iterator<T>>
-                 (&mut self, r: I, as_sliceable: |T| -> CsvResult<R>)
+                 (&mut self, mut r: I, as_sliceable: |T| -> CsvResult<R>)
                  -> CsvResult<()> {
-        let mut count = 0;
         let delim = self.delimiter;
-        for (i, field) in r.enumerate() {
-            count += 1;
-            if i > 0 {
+        let mut count = 0;
+        let mut last_len = 0;
+        for field in r {
+            if count > 0 {
                 try!(self.w_bytes(&[delim]));
             }
-            try!(self.w_user_bytes(try!(as_sliceable(field)).as_slice()));
+            count += 1;
+            let field = try!(as_sliceable(field));
+            last_len = field.as_slice().len();
+            try!(self.w_user_bytes(field.as_slice()));
+        }
+        // This tomfoolery makes sure that a record with a single empty field
+        // is encoded as `""`. Otherwise, you end up with a run of consecutive
+        // record terminators, which are ignored by some CSV parsers (such
+        // as the one in this library).
+        if count == 1 && last_len == 0 {
+            let q = self.quote;
+            try!(self.w_bytes(&[q, q]));
         }
         try!(self.w_lineterm());
         self.set_first_len(count)
     }
+
+    /// Flushes the underlying buffer.
+    pub fn flush(&mut self) -> CsvResult<()> {
+        self.buf.flush().map_err(FromError::from_error)
+    }
 }
 
 impl<W: io::Writer> Writer<W> {
-    /// Creates a new CSV writer that writes to the `io::Writer` given.
-    ///
-    /// Note that the writer is buffered for you automatically.
-    pub fn from_writer(w: W) -> Writer<W> {
-        Writer::from_buffer(io::BufferedWriter::new(w))
-    }
-
-    /// Creates a new CSV writer that writes to the buffer given.
-    ///
-    /// This lets you specify your own buffered writer (e.g., use a different
-    /// capacity). All other constructors wrap the writer given in a buffer
-    /// with default capacity.
-    pub fn from_buffer(buf: io::BufferedWriter<W>) -> Writer<W> {
-        Writer {
-            buf: buf,
-            delimiter: b',',
-            flexible: false,
-            crlf: false,
-            first_len: 0,
-        }
-    }
-
     /// The delimiter to use when writing CSV data.
     ///
     /// Since the CSV writer is meant to be mostly encoding agnostic, you must
@@ -248,47 +319,59 @@ impl<W: io::Writer> Writer<W> {
         self
     }
 
-    /// Whether to use CRLF (i.e., `\r\n`) line endings or not.
+    /// Sets the record terminator to use when writing CSV data.
     ///
-    /// By default, this is disabled. LF (`\n`) line endings are used.
-    pub fn crlf(mut self, yes: bool) -> Writer<W> {
-        self.crlf = yes;
+    /// By default, this is `RecordTerminator::Any(b'\n')`. If you want to
+    /// use CRLF (`\r\n`) line endings, then use `RecordTerminator:CRLF`.
+    pub fn record_terminator(mut self, term: RecordTerminator) -> Writer<W> {
+        self.record_terminator = term;
         self
     }
 
-    /// Flushes the underlying buffer.
-    pub fn flush(&mut self) -> CsvResult<()> {
-        self.buf.flush().map_err(Error::Io)
-    }
-}
-
-impl Writer<io::MemWriter> {
-    /// Creates a new CSV writer that writes to an in memory buffer. At any
-    /// time, `to_string` or `to_bytes` can be called to retrieve the
-    /// cumulative CSV data.
-    pub fn from_memory() -> Writer<io::MemWriter> {
-        Writer::from_writer(io::MemWriter::new())
+    /// Set the quoting style to use when writing CSV data.
+    ///
+    /// By default, this is set to `QuoteStyle::Necessary`, which will only
+    /// use quotes when they are necessary to preserve the integrity of data.
+    pub fn quote_style(mut self, style: QuoteStyle) -> Writer<W> {
+        self.quote_style = style;
+        self
     }
 
-    /// Returns the written CSV data as a string.
-    pub fn as_string<'r>(&'r mut self) -> &'r str {
-        match self.buf.flush() {
-            // shouldn't panic with MemWriter
-            Err(err) => panic!("Error flushing to MemWriter: {}", err),
-            // This seems suspicious. If the client only writes `String`
-            // values, then this can never fail. If the client is writing
-            // byte strings, then they should be calling `to_bytes` instead.
-            Ok(()) => str::from_utf8(self.buf.get_ref().get_ref()).unwrap(),
-        }
+    /// Set the quote character to use when writing CSV data.
+    ///
+    /// Since the CSV parser is meant to be mostly encoding agnostic, you must
+    /// specify the quote as a single ASCII byte. For example, to write
+    /// single quoted data, you would use `b'\''`.
+    ///
+    /// The default value is `b'"'`.
+    pub fn quote(mut self, quote: u8) -> Writer<W> {
+        self.quote = quote;
+        self
     }
 
-    /// Returns the encoded CSV data as raw bytes.
-    pub fn as_bytes<'r>(&'r mut self) -> &'r [u8] {
-        match self.buf.flush() {
-            // shouldn't panic with MemWriter
-            Err(err) => panic!("Error flushing to MemWriter: {}", err),
-            Ok(()) => self.buf.get_ref().get_ref(),
-        }
+    /// Set the escape character to use when writing CSV data.
+    ///
+    /// This is only used when `double_quote` is set to `false`.
+    ///
+    /// Since the CSV parser is meant to be mostly encoding agnostic, you must
+    /// specify the escape as a single ASCII byte.
+    ///
+    /// The default value is `b'\\'`.
+    pub fn escape(mut self, escape: u8) -> Writer<W> {
+        self.escape = escape;
+        self
+    }
+
+    /// Set the quoting escape mechanism.
+    ///
+    /// When enabled (which is the default), quotes are escaped by doubling
+    /// them. e.g., `"` escapes to `""`.
+    ///
+    /// When disabled, quotes are escaped with the escape character (which
+    /// is `\\` by default).
+    pub fn double_quote(mut self, yes: bool) -> Writer<W> {
+        self.double_quote = yes;
+        self
     }
 }
 
@@ -302,22 +385,18 @@ impl<W: io::Writer> Writer<W> {
     }
 
     fn w_user_bytes(&mut self, s: &[u8]) -> CsvResult<()> {
-        let delim = self.delimiter;
-        let quotable = |&c: &u8| {
-            c == delim || c == b'\n' || c == b'\r' || c == b'"'
-        };
-        if s.is_empty() || s.iter().any(quotable) {
-            self.w_bytes(quote(s)[])
+        if self.should_quote(s) {
+            let quoted = self.quote_field(s);
+            self.w_bytes(quoted.as_slice())
         } else {
             self.w_bytes(s)
         }
     }
 
     fn w_lineterm(&mut self) -> CsvResult<()> {
-        if self.crlf {
-            self.w_bytes(b"\r\n")
-        } else {
-            self.w_bytes(b"\n")
+        match self.record_terminator {
+            RecordTerminator::CRLF => self.w_bytes(b"\r\n"),
+            RecordTerminator::Any(b) => self.w_bytes(&[b]),
         }
     }
 
@@ -336,25 +415,49 @@ impl<W: io::Writer> Writer<W> {
         }
         Ok(())
     }
-}
 
-fn quote(mut s: &[u8]) -> ByteString {
-    let mut buf = Vec::with_capacity(s.len() + 2);
-
-    buf.push(b'"');
-    loop {
-        match s.position_elem(&b'"') {
-            None => {
-                buf.push_all(s);
-                break
-            }
-            Some(next_quote) => {
-                buf.push_all(s.slice_to(next_quote + 1));
-                buf.push(b'"');
-                s = s.slice_from(next_quote + 1);
-            }
+    fn should_quote(&self, field: &[u8]) -> bool {
+        match self.quote_style {
+            QuoteStyle::Always => true,
+            QuoteStyle::Necessary =>
+                field.iter().any(|&b| self.byte_needs_quotes(b)),
         }
     }
-    buf.push(b'"');
-    ByteString::from_bytes(buf)
+
+    fn byte_needs_quotes(&self, b: u8) -> bool {
+        b == self.delimiter
+        || self.record_terminator.equiv(&b)
+        || b == self.quote
+        // This is a bit hokey. By default, the record terminator is
+        // '\n', but we still need to quote '\r' because the reader
+        // interprets '\r' as a record terminator by default.
+        || b == b'\r' || b == b'\n'
+    }
+
+    fn quote_field(&self, mut s: &[u8]) -> ByteString {
+        let mut buf = Vec::with_capacity(s.len() + 2);
+
+        buf.push(self.quote);
+        loop {
+            match s.position_elem(&self.quote) {
+                None => {
+                    buf.push_all(s);
+                    break
+                }
+                Some(next_quote) => {
+                    buf.push_all(s.slice_to(next_quote));
+                    if self.double_quote {
+                        buf.push(self.quote);
+                        buf.push(self.quote);
+                    } else {
+                        buf.push(self.escape);
+                        buf.push(self.quote);
+                    }
+                    s = s.slice_from(next_quote + 1);
+                }
+            }
+        }
+        buf.push(self.quote);
+        ByteString::from_bytes(buf)
+    }
 }
