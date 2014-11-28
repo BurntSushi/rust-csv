@@ -1,6 +1,6 @@
 [package]
 name = "csv"
-version = "0.6.3"
+version = "0.7.0"
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 description = "CSV parsing with automatic type based decoding and encoding."
 documentation = "http://burntsushi.net/rustdoc/csv/"
