@@ -32,6 +32,11 @@ pub enum QuoteStyle {
 /// flexible record lengths are enabled, then compliance with RFC 4180 cannot
 /// be guaranteed.)
 ///
+/// One slight deviation is that records with a single empty field are always
+/// encoded as `""`. This ensures that the record is not skipped since some
+/// CSV parsers will ignore consecutive record terminators (like the one in
+/// this crate).
+///
 /// ### Example
 ///
 /// Here's an example that encodes word pairs and their edit distances:
@@ -185,7 +190,7 @@ impl<W: io::Writer> Writer<W> {
     ///     assert!(result.is_ok());
     /// }
     /// assert_eq!(wtr.as_string(),
-    ///            "sticker,mortals,\"\"\nbribed,personae,7\n");
+    ///            "sticker,mortals,\nbribed,personae,7\n");
     /// # }
     /// ```
     pub fn encode<E: Encodable<Encoded, Error>>
