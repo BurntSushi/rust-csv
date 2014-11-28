@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 
+use std::error::FromError;
 use std::io;
 
 use {CsvResult, Error, Reader, NextField};
@@ -12,8 +13,8 @@ pub struct Indexed<R, I> {
 
 impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
     pub fn new(mut rdr: Reader<R>, mut idx: I) -> CsvResult<Indexed<R, I>> {
-        try!(idx.seek(-8, io::SeekEnd).map_err(Error::Io));
-        let mut count = try!(idx.read_be_u64().map_err(Error::Io));
+        try!(idx.seek(-8, io::SeekEnd));
+        let mut count = try!(idx.read_be_u64());
         if rdr.has_headers && count > 0 {
             count -= 1;
             let _ = try!(rdr.byte_headers());
@@ -34,8 +35,8 @@ impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
         if self.rdr.has_headers {
             i += 1;
         }
-        try!(self.idx.seek((i * 8) as i64, io::SeekSet).map_err(Error::Io));
-        let offset = try!(self.idx.read_be_u64().map_err(Error::Io));
+        try!(self.idx.seek((i * 8) as i64, io::SeekSet));
+        let offset = try!(self.idx.read_be_u64());
         self.rdr.seek(offset as i64, io::SeekSet)
     }
 
@@ -49,13 +50,14 @@ impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
 }
 
 pub fn create<R: io::Reader + io::Seek, W: io::Writer>
-             (csv_rdr: Reader<R>, mut idx_wtr: W) -> CsvResult<()> {
-    let mut rdr = csv_rdr.has_headers(false);
+             (mut csv_rdr: Reader<R>, mut idx_wtr: W) -> CsvResult<()> {
+    // Seek to the beginning so that we get everything.
+    try!(csv_rdr.seek(0, ::std::io::SeekSet));
     let mut count = 0u64;
-    while !rdr.done() {
-        try!(idx_wtr.write_be_u64(rdr.byte_offset()).map_err(Error::Io));
+    while !csv_rdr.done() {
+        try!(idx_wtr.write_be_u64(csv_rdr.byte_offset()));
         loop {
-            match rdr.next_field() {
+            match csv_rdr.next_field() {
                 NextField::EndOfCsv => break,
                 NextField::EndOfRecord => { count += 1; break; },
                 NextField::Error(err) => return Err(err),
@@ -63,5 +65,5 @@ pub fn create<R: io::Reader + io::Seek, W: io::Writer>
             }
         }
     }
-    idx_wtr.write_be_u64(count).map_err(Error::Io)
+    idx_wtr.write_be_u64(count).map_err(FromError::from_error)
 }
