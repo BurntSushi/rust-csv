@@ -1,7 +1,4 @@
 #![crate_name = "csv"]
-#![crate_type = "rlib"]
-#![crate_type = "dylib"]
-#![license = "UNLICENSE"]
 #![doc(html_root_url = "http://burntsushi.net/rustdoc/csv")]
 
 #![experimental]
