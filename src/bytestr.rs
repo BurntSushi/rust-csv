@@ -153,7 +153,7 @@ impl<S: Str> Equiv<S> for ByteString {
 }
 
 impl FromIterator<u8> for ByteString {
-    fn from_iter<I: Iterator<u8>>(mut it: I) -> ByteString {
+    fn from_iter<I: Iterator<u8>>(it: I) -> ByteString {
         ByteString::from_bytes(it.collect::<Vec<_>>())
     }
 }
