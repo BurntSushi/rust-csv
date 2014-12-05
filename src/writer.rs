@@ -431,7 +431,7 @@ impl<W: io::Writer> Writer<W> {
 
     fn byte_needs_quotes(&self, b: u8) -> bool {
         b == self.delimiter
-        || self.record_terminator.equiv(&b)
+        || self.record_terminator == b
         || b == self.quote
         // This is a bit hokey. By default, the record terminator is
         // '\n', but we still need to quote '\r' because the reader

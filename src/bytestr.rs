@@ -146,8 +146,8 @@ impl<H: hash::Writer> hash::Hash<H> for ByteString {
     }
 }
 
-impl<S: Str> Equiv<S> for ByteString {
-    fn equiv(&self, other: &S) -> bool {
+impl<S: Str> PartialEq<S> for ByteString {
+    fn eq(&self, other: &S) -> bool {
         self.as_bytes() == other.as_slice().as_bytes()
     }
 }

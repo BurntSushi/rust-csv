@@ -29,8 +29,8 @@ pub enum RecordTerminator {
     Any(u8),
 }
 
-impl Equiv<u8> for RecordTerminator {
-    fn equiv(&self, other: &u8) -> bool {
+impl PartialEq<u8> for RecordTerminator {
+    fn eq(&self, other: &u8) -> bool {
         match *self {
             RecordTerminator::CRLF => *other == b'\r' || *other == b'\n',
             RecordTerminator::Any(b) => *other == b
@@ -936,7 +936,7 @@ impl<'a> ParseMachine<'a> {
 
     #[inline]
     fn is_record_term(&self, b: u8) -> bool {
-        self.record_terminator.equiv(&b)
+        self.record_terminator == b
     }
 
     #[inline]
