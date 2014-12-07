@@ -122,32 +122,32 @@ impl<W: io::Writer> Writer<W> {
     }
 }
 
-impl Writer<io::MemWriter> {
+impl Writer<Vec<u8>> {
     /// Creates a new CSV writer that writes to an in memory buffer. At any
     /// time, `to_string` or `to_bytes` can be called to retrieve the
     /// cumulative CSV data.
-    pub fn from_memory() -> Writer<io::MemWriter> {
-        Writer::from_writer(io::MemWriter::new())
+    pub fn from_memory() -> Writer<Vec<u8>> {
+        Writer::from_writer(Vec::with_capacity(1024 * 64))
     }
 
     /// Returns the written CSV data as a string.
     pub fn as_string<'r>(&'r mut self) -> &'r str {
         match self.buf.flush() {
-            // shouldn't panic with MemWriter
-            Err(err) => panic!("Error flushing to MemWriter: {}", err),
+            // shouldn't panic with Vec<u8>
+            Err(err) => panic!("Error flushing to Vec<u8>: {}", err),
             // This seems suspicious. If the client only writes `String`
             // values, then this can never fail. If the client is writing
             // byte strings, then they should be calling `to_bytes` instead.
-            Ok(()) => str::from_utf8(self.buf.get_ref().get_ref()).unwrap(),
+            Ok(()) => str::from_utf8(self.buf.get_ref()[]).unwrap(),
         }
     }
 
     /// Returns the encoded CSV data as raw bytes.
     pub fn as_bytes<'r>(&'r mut self) -> &'r [u8] {
         match self.buf.flush() {
-            // shouldn't panic with MemWriter
-            Err(err) => panic!("Error flushing to MemWriter: {}", err),
-            Ok(()) => self.buf.get_ref().get_ref(),
+            // shouldn't panic with Vec<u8>
+            Err(err) => panic!("Error flushing to Vec<u8>: {}", err),
+            Ok(()) => self.buf.get_ref()[],
         }
     }
 }
