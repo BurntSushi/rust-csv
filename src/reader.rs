@@ -1,5 +1,4 @@
 use std::io::{mod, MemReader};
-use std::mem::transmute;
 
 use serialize::Decodable;
 
@@ -1086,5 +1085,5 @@ fn byte_record_to_utf8(record: Vec<ByteString>) -> CsvResult<Vec<String>> {
                 "Could not decode the following bytes as UTF-8: {}", bytes)));
         }
     }
-    Ok(unsafe { transmute(record) })
+    Ok(unsafe { ::std::mem::transmute(record) })
 }
