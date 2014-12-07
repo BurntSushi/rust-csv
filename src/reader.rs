@@ -790,7 +790,7 @@ impl<R: io::Reader + io::Seek> Reader<R> {
         self.buffer.clear();
         self.err = None;
         self.byte_offset = pos as u64;
-        try!(self.buffer.get_mut_ref().seek(pos, style));
+        try!(self.buffer.get_mut().seek(pos, style));
         Ok(())
     }
 }
