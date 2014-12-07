@@ -246,6 +246,8 @@ impl<W: io::Writer> Writer<W> {
         self.write_iter(r, |f| Ok(f))
     }
 
+    /// Writes a record of results. If any of the results resolve to an error,
+    /// then writing stops and that error is returned.
     #[doc(hidden)]
     pub fn write_results<S: AsSlice<u8>, I: Iterator<CsvResult<S>>>
                         (&mut self, r: I) -> CsvResult<()> {
