@@ -1,3 +1,6 @@
+// This is a copy of the `std::io::BufferedReader` with one additional
+// method: `clear`. It resets the buffer to be empty (thereby losing any
+// unread data).
 use std::cmp;
 use std::io::{Reader, Buffer, IoResult};
 use std::slice;
@@ -47,10 +50,10 @@ impl<R: Reader> BufferedReader<R> {
 impl<R: Reader> Buffer for BufferedReader<R> {
     fn fill_buf<'a>(&'a mut self) -> IoResult<&'a [u8]> {
         if self.pos == self.cap {
-            self.cap = try!(self.inner.read(self.buf.as_mut_slice()));
+            self.cap = try!(self.inner.read(self.buf[mut]));
             self.pos = 0;
         }
-        Ok(self.buf.slice(self.pos, self.cap))
+        Ok(self.buf[self.pos..self.cap])
     }
 
     fn consume(&mut self, amt: uint) {
@@ -61,10 +64,13 @@ impl<R: Reader> Buffer for BufferedReader<R> {
 
 impl<R: Reader> Reader for BufferedReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+        if self.pos == self.cap && buf.len() >= self.buf.capacity() {
+            return self.inner.read(buf);
+        }
         let nread = {
             let available = try!(self.fill_buf());
             let nread = cmp::min(available.len(), buf.len());
-            slice::bytes::copy_memory(buf, available.slice_to(nread));
+            slice::bytes::copy_memory(buf, available[..nread]);
             nread
         };
         self.pos += nread;
