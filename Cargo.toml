@@ -12,3 +12,7 @@ license = "Unlicense"
 
 [lib]
 name = "csv"
+
+[profile.bench]
+opt-level = 3
+lto = true  # this doesn't seem to work... why?
