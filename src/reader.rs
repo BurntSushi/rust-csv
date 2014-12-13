@@ -966,7 +966,9 @@ impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>>
     fn next(&mut self) -> Option<CsvResult<&'a [u8]>> {
         // whoa... why is this allowed!?
         // TODO: Construct a minimal example and submit a bug report. ---AG
-        self.rdr.next_field().into_iter_result()
+        unsafe {
+            ::std::mem::transmute(self.rdr.next_field().into_iter_result())
+        }
     }
 }
 
