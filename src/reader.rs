@@ -21,6 +21,7 @@ use self::ParseState::{
 ///
 /// Generally, you won't need to use this type because `CRLF` is the default,
 /// which is by far the most widely used record terminator.
+#[deriving(Copy)]
 pub enum RecordTerminator {
     /// Parses `\r`, `\n` or `\r\n` as a single record terminator.
     CRLF,

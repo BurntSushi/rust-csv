@@ -248,7 +248,7 @@ impl Error {
 }
 
 /// A description of a CSV parse error.
-#[deriving(Clone)]
+#[deriving(Clone, Copy)]
 pub struct ParseError {
     /// The line number of the parse error.
     pub line: u64,
@@ -266,7 +266,7 @@ pub struct ParseError {
 ///
 /// If and when a "strict" mode is added to this crate, this list of errors
 /// will expand.
-#[deriving(Clone)]
+#[deriving(Clone, Copy)]
 pub enum ParseErrorKind {
     /// This error occurs when a record has a different number of fields
     /// than the first record parsed.
