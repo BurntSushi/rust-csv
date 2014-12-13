@@ -7,6 +7,7 @@ use serialize::Encodable;
 use {ByteString, CsvResult, Encoded, Error, RecordTerminator};
 
 /// The quoting style to use when writing CSV data.
+#[deriving(Copy)]
 pub enum QuoteStyle {
     /// This puts quotes around every field. Always.
     Always,
