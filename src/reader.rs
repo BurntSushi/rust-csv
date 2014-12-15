@@ -83,11 +83,7 @@ impl PartialEq<u8> for RecordTerminator {
 /// }
 /// ```
 pub struct Reader<R> {
-    delimiter: u8,
-    record_terminator: RecordTerminator,
-    quote: u8,
-    escape: u8,
-    double_quote: bool, // false => use escape character instead
+    pmachine: ParseMachine, // various parsing settings
     flexible: bool, // true => records of varying length are allowed
     buffer: BufferedReader<R>,
     fieldbuf: Vec<u8>, // reusable buffer used to store fields
@@ -135,11 +131,13 @@ impl<R: io::Reader> Reader<R> {
     /// is created for you.
     fn from_buffer(buf: BufferedReader<R>) -> Reader<R> {
         Reader {
-            delimiter: b',',
-            record_terminator: RecordTerminator::CRLF,
-            quote: b'"',
-            escape: b'\\',
-            double_quote: true,
+            pmachine: ParseMachine {
+                delimiter: b',',
+                record_terminator: RecordTerminator::CRLF,
+                quote: b'"',
+                escape: b'\\',
+                double_quote: true,
+            },
             flexible: false,
             buffer: buf,
             fieldbuf: Vec::with_capacity(1024),
@@ -367,7 +365,7 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// The default value is `b','`.
     pub fn delimiter(mut self, delimiter: u8) -> Reader<R> {
-        self.delimiter = delimiter;
+        self.pmachine.delimiter = delimiter;
         self
     }
 
@@ -407,7 +405,7 @@ impl<R: io::Reader> Reader<R> {
     /// use `RecordTerminator::Any(b'\n')` to only accept line feeds as
     /// record terminators, or `b'\x1e'` for the ASCII record separator.
     pub fn record_terminator(mut self, term: RecordTerminator) -> Reader<R> {
-        self.record_terminator = term;
+        self.pmachine.record_terminator = term;
         self
     }
 
@@ -419,7 +417,7 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// The default value is `b'"'`.
     pub fn quote(mut self, quote: u8) -> Reader<R> {
-        self.quote = quote;
+        self.pmachine.quote = quote;
         self
     }
 
@@ -432,7 +430,7 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// The default value is `b'\\'`.
     pub fn escape(mut self, escape: u8) -> Reader<R> {
-        self.escape = escape;
+        self.pmachine.escape = escape;
         self
     }
 
@@ -444,7 +442,7 @@ impl<R: io::Reader> Reader<R> {
     /// When disabled, double quotes have no significance. Instead, they can
     /// be escaped with the escape character (which is `\\` by default).
     pub fn double_quote(mut self, yes: bool) -> Reader<R> {
-        self.double_quote = yes;
+        self.pmachine.double_quote = yes;
         self
     }
 }
@@ -638,20 +636,6 @@ impl<R: io::Reader> Reader<R> {
             return NextField::EndOfCsv;
         }
 
-        // A parser machine encapsulates the main parsing state transitions.
-        // Normally, the state machine would be written as methods on the
-        // Reader type, but mutable borrows become troublesome. So we isolate
-        // the things we need to mutate during state transitions with
-        // the ParseMachine type.
-        let mut pmachine = ParseMachine {
-            fieldbuf: &mut self.fieldbuf,
-            state: &mut self.state,
-            delimiter: self.delimiter,
-            record_terminator: self.record_terminator,
-            quote: self.quote,
-            escape: self.escape,
-            double_quote: self.double_quote,
-        };
         let mut consumed = 0; // tells the buffer how much we consumed
         'TOPLOOP: loop {
             // The following code is basically, "fill a buffer with data from
@@ -674,8 +658,11 @@ impl<R: io::Reader> Reader<R> {
                     // This "batch" processing of bytes is critical for
                     // performance.
                     for &b in bs.iter() {
-                        pmachine.parse_byte(b);
-                        if *pmachine.state == EndRecord {
+                        let (accept, next) =
+                            self.pmachine.parse_byte(self.state, b);
+                        self.state = next;
+                        if accept { self.fieldbuf.push(b); }
+                        if self.state == EndRecord {
                             // Don't consume the byte we just read, because
                             // it is the first byte of the next record.
                             break 'TOPLOOP;
@@ -687,7 +674,7 @@ impl<R: io::Reader> Reader<R> {
                                 self.line_current += 1;
                                 self.column = 1;
                             }
-                            if *pmachine.state == StartField {
+                            if self.state == StartField {
                                 break 'TOPLOOP
                             }
                         }
@@ -710,10 +697,10 @@ impl<R: io::Reader> Reader<R> {
                 // but haven't actually seen any fields yet (i.e., trailing
                 // new lines in a file), then we should immediately stop the
                 // parser.
-                if *pmachine.state == StartRecord {
+                if self.state == StartRecord {
                     return NextField::EndOfCsv;
                 }
-                *pmachine.state = EndRecord;
+                self.state = EndRecord;
                 // fallthrough to return current field.
                 // On the next call, `None` will be returned.
             }
@@ -721,17 +708,17 @@ impl<R: io::Reader> Reader<R> {
                 // Reset the state to the beginning so that bad errors
                 // are always reported. (i.e., Don't let an EndRecord state
                 // slip in here.)
-                *pmachine.state = StartRecord;
+                self.state = StartRecord;
                 return NextField::Error(err.clone());
             }
         }
         if self.parsing_first_record {
             // This is only copying bytes for the first record.
-            let bytes = ByteString::from_bytes((*pmachine.fieldbuf)[]);
+            let bytes = ByteString::from_bytes(self.fieldbuf.as_slice());
             self.first_record.push(bytes);
         }
         self.field_count += 1;
-        NextField::Data((*pmachine.fieldbuf)[])
+        NextField::Data(self.fieldbuf.as_slice())
     }
 
     /// An unsafe iterator over byte fields.
@@ -795,9 +782,8 @@ impl<R: io::Reader + io::Seek> Reader<R> {
     }
 }
 
-struct ParseMachine<'a> {
-    fieldbuf: &'a mut Vec<u8>,
-    state: &'a mut ParseState,
+#[deriving(Copy)]
+struct ParseMachine {
     delimiter: u8,
     record_terminator: RecordTerminator,
     quote: u8,
@@ -805,7 +791,7 @@ struct ParseMachine<'a> {
     double_quote: bool,
 }
 
-#[deriving(Eq, PartialEq, Show)]
+#[deriving(Copy, Eq, PartialEq, Show)]
 enum ParseState {
     StartRecord,
     EndRecord,
@@ -819,10 +805,12 @@ enum ParseState {
     InQuotedFieldQuote,
 }
 
-impl<'a> ParseMachine<'a> {
+type NextState = (bool, ParseState);
+
+impl ParseMachine {
     #[inline]
-    fn parse_byte(&mut self, b: u8) {
-        match *self.state {
+    fn parse_byte(&self, state: ParseState, b: u8) -> NextState {
+        match state {
             StartRecord => self.parse_start_record(b),
             EndRecord => unreachable!(),
             StartField => self.parse_start_field(b),
@@ -837,110 +825,115 @@ impl<'a> ParseMachine<'a> {
     }
 
     #[inline]
-    fn parse_start_record(&mut self, b: u8) {
-        if !self.is_record_term(b) {
-            *self.state = StartField;
-            self.parse_start_field(b);
+    fn parse_start_record(&self, b: u8) -> NextState {
+        if self.is_record_term(b) {
+            // Skip empty new lines.
+            (false, StartRecord)
+        } else {
+            self.parse_start_field(b)
         }
     }
 
     #[inline]
-    fn parse_start_field(&mut self, b: u8) {
+    fn parse_start_field(&self, b: u8) -> NextState {
         if self.is_record_term(b) {
-            *self.state = self.record_term_next_state(b);
+            (false, self.record_term_next_state(b))
         } else if b == self.quote {
-            *self.state = InQuotedField;
+            (false, InQuotedField)
         } else if b == self.delimiter {
             // empty field, so return in StartField state,
             // which causes a new empty field to be returned
+            (false, StartField)
         } else {
-            *self.state = InField;
-            self.fieldbuf.push(b);
+            (true, InField)
         }
     }
 
     #[inline]
-    fn parse_record_term_cr(&mut self, b: u8) {
+    fn parse_record_term_cr(&self, b: u8) -> NextState {
         if b == b'\n' {
-            *self.state = RecordTermLF;
-        } else if b != b'\r' {
-            *self.state = EndRecord;
+            (false, RecordTermLF)
+        } else if b == b'\r' {
+            (false, RecordTermCR)
+        } else {
+            (false, EndRecord)
         }
     }
 
     #[inline]
-    fn parse_record_term_lf(&mut self, b: u8) {
+    fn parse_record_term_lf(&self, b: u8) -> NextState {
         if b == b'\r' {
-            *self.state = RecordTermCR;
-        } else if b != b'\n' {
-            *self.state = EndRecord;
+            (false, RecordTermCR)
+        } else if b == b'\n' {
+            (false, RecordTermLF)
+        } else {
+            (false, EndRecord)
         }
     }
 
     #[inline]
-    fn parse_record_term_any(&mut self, b: u8) {
+    fn parse_record_term_any(&self, b: u8) -> NextState {
         match self.record_terminator {
             RecordTerminator::CRLF => unreachable!(),
             RecordTerminator::Any(bb) => {
-                if b != bb {
-                    *self.state = EndRecord;
+                if b == bb {
+                    (false, RecordTermAny)
+                } else {
+                    (false, EndRecord)
                 }
             }
         }
     }
 
     #[inline]
-    fn parse_in_field(&mut self, b: u8) {
+    fn parse_in_field(&self, b: u8) -> NextState {
         if self.is_record_term(b) {
-            *self.state = self.record_term_next_state(b);
+            (false, self.record_term_next_state(b))
         } else if b == self.delimiter {
-            *self.state = StartField;
+            (false, StartField)
         } else {
-            self.fieldbuf.push(b);
+            (true, InField)
         }
     }
 
     #[inline]
-    fn parse_in_quoted_field(&mut self, b: u8) {
+    fn parse_in_quoted_field(&self, b: u8) -> NextState {
         if b == self.quote {
-            *self.state = InQuotedFieldQuote;
+            (false, InQuotedFieldQuote)
         } else if !self.double_quote && b == self.escape {
-            *self.state = InQuotedFieldEscape;
+            (false, InQuotedFieldEscape)
         } else {
-            self.fieldbuf.push(b);
+            (true, InQuotedField)
         }
     }
 
     #[inline]
-    fn parse_in_quoted_field_escape(&mut self, b: u8) {
-        *self.state = InQuotedField;
-        self.fieldbuf.push(b);
+    fn parse_in_quoted_field_escape(&self, _: u8) -> NextState {
+        (true, InQuotedField)
     }
 
     #[inline]
-    fn parse_in_quoted_field_quote(&mut self, b: u8) {
+    fn parse_in_quoted_field_quote(self, b: u8) -> NextState {
         if self.double_quote && b == self.quote {
-            *self.state = InQuotedField;
-            self.fieldbuf.push(b);
+            (true, InQuotedField)
         } else if b == self.delimiter {
-            *self.state = StartField;
+            (false, StartField)
         } else if self.is_record_term(b) {
-            *self.state = self.record_term_next_state(b);
+            (false, self.record_term_next_state(b))
         } else {
             // Should we provide a strict variant that disallows
             // random chars after a quote?
-            *self.state = InField;
-            self.fieldbuf.push(b);
+            (true, InField)
         }
     }
 
     #[inline]
-    fn is_record_term(&self, b: u8) -> bool {
+    fn is_record_term(self, b: u8) -> bool {
         self.record_terminator == b
     }
 
     #[inline]
-    fn record_term_next_state(&self, b: u8) -> ParseState {
+    fn record_term_next_state(self, b: u8) -> ParseState {
         match self.record_terminator {
             RecordTerminator::CRLF => {
                 if b == b'\r' {
