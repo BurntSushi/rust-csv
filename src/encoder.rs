@@ -69,13 +69,13 @@ impl serialize::Encoder<Error> for Encoded {
     fn emit_str(&mut self, v: &str) -> CsvResult<()> {
         self.push_string(v)
     }
-    fn emit_enum(&mut self, _: &str, f: |&mut Encoded| -> CsvResult<()>)
-                -> CsvResult<()> {
+    fn emit_enum<F>(&mut self, _: &str, f: F) -> CsvResult<()>
+                where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         f(self)
     }
-    fn emit_enum_variant(&mut self, v_name: &str, _: uint, len: uint,
-                         f: |&mut Encoded| -> CsvResult<()>)
-                        -> CsvResult<()> {
+    fn emit_enum_variant<F>(&mut self, v_name: &str, _: uint, len: uint, f: F)
+                           -> CsvResult<()>
+                        where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         match len {
             0 => self.push_string(v_name),
             1 => f(self),
@@ -84,83 +84,76 @@ impl serialize::Encoder<Error> for Encoded {
                                with more than one argument.".to_string())),
         }
     }
-    fn emit_enum_variant_arg(&mut self, _: uint,
-                             f: |&mut Encoded| -> CsvResult<()>)
-                            -> CsvResult<()> {
+    fn emit_enum_variant_arg<F>(&mut self, _: uint, f: F) -> CsvResult<()>
+                            where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         f(self)
     }
-    fn emit_enum_struct_variant(&mut self, v_name: &str, v_id: uint, len: uint,
-                                f: |&mut Encoded| -> CsvResult<()>)
-                               -> CsvResult<()> {
+    fn emit_enum_struct_variant<F>(&mut self, v_name: &str, v_id: uint,
+                                   len: uint, f: F)
+                                  -> CsvResult<()>
+                               where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         self.emit_enum_variant(v_name, v_id, len, f)
     }
-    fn emit_enum_struct_variant_field(&mut self, _: &str, _: uint,
-                                      _: |&mut Encoded| -> CsvResult<()>)
-                                     -> CsvResult<()> {
+    fn emit_enum_struct_variant_field<F>(&mut self, _: &str, _: uint, _: F)
+                                         -> CsvResult<()>
+            where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         Err(Error::Encode("Cannot encode enum \
                            variants with arguments.".to_string()))
     }
-    fn emit_struct(&mut self, _: &str, len: uint,
-                   f: |&mut Encoded| -> CsvResult<()>) -> CsvResult<()> {
+    fn emit_struct<F>(&mut self, _: &str, len: uint, f: F) -> CsvResult<()>
+                  where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         self.emit_seq(len, f)
     }
-    fn emit_struct_field(&mut self, _: &str, f_idx: uint,
-                         f: |&mut Encoded| -> CsvResult<()>)
-                        -> CsvResult<()> {
+    fn emit_struct_field<F>(&mut self, _: &str, f_idx: uint, f: F)
+                           -> CsvResult<()>
+                        where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         self.emit_seq_elt(f_idx, f)
     }
-    fn emit_tuple(&mut self, len: uint,
-                  f: |&mut Encoded| -> CsvResult<()>) -> CsvResult<()> {
+    fn emit_tuple<F>(&mut self, len: uint, f: F) -> CsvResult<()>
+                 where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         self.emit_seq(len, f)
     }
-    fn emit_tuple_arg(&mut self, idx: uint,
-                      f: |&mut Encoded| -> CsvResult<()>)
-                     -> CsvResult<()> {
+    fn emit_tuple_arg<F>(&mut self, idx: uint, f: F) -> CsvResult<()>
+                     where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         self.emit_seq_elt(idx, f)
     }
-    fn emit_tuple_struct(&mut self, _: &str, _: uint,
-                         _: |&mut Encoded| -> CsvResult<()>)
-                        -> CsvResult<()> {
+    fn emit_tuple_struct<F>(&mut self, _: &str, _: uint, _: F) -> CsvResult<()>
+                        where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         unimplemented!()
     }
-    fn emit_tuple_struct_arg(&mut self, _: uint,
-                             _: |&mut Encoded| -> CsvResult<()>)
-                            -> CsvResult<()> {
+    fn emit_tuple_struct_arg<F>(&mut self, _: uint, _: F) -> CsvResult<()>
+                            where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         unimplemented!()
     }
-    fn emit_option(&mut self, f: |&mut Encoded| -> CsvResult<()>)
-                  -> CsvResult<()> {
+    fn emit_option<F>(&mut self, f: F) -> CsvResult<()>
+                  where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         f(self)
     }
     fn emit_option_none(&mut self) -> CsvResult<()> {
         self.push_bytes::<&[u8]>(&[])
     }
-    fn emit_option_some(&mut self, f: |&mut Encoded| -> CsvResult<()>)
-                       -> CsvResult<()> {
+    fn emit_option_some<F>(&mut self, f: F) -> CsvResult<()>
+                       where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         f(self)
     }
-    fn emit_seq(&mut self, _: uint,
-                f: |this: &mut Encoded| -> CsvResult<()>)
-               -> CsvResult<()> {
+    fn emit_seq<F>(&mut self, _: uint, f: F) -> CsvResult<()>
+               where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         f(self)
     }
-    fn emit_seq_elt(&mut self, _: uint,
-                    f: |this: &mut Encoded| -> CsvResult<()>)
-                   -> CsvResult<()> {
+    fn emit_seq_elt<F>(&mut self, _: uint, f: F) -> CsvResult<()>
+                   where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         f(self)
     }
-    fn emit_map(&mut self, _: uint, _: |&mut Encoded| -> CsvResult<()>)
-               -> CsvResult<()> {
+    fn emit_map<F>(&mut self, _: uint, _: F) -> CsvResult<()>
+               where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         unimplemented!()
     }
-    fn emit_map_elt_key(&mut self, _: uint,
-                        _: |&mut Encoded| -> CsvResult<()>)
-                       -> CsvResult<()> {
+    fn emit_map_elt_key<F>(&mut self, _: uint, _: F) -> CsvResult<()>
+                       where F: FnMut(&mut Encoded) -> CsvResult<()> {
         unimplemented!()
     }
-    fn emit_map_elt_val(&mut self, _: uint,
-                        _: |&mut Encoded| -> CsvResult<()>)
-                       -> CsvResult<()> {
+    fn emit_map_elt_val<F>(&mut self, _: uint, _: F) -> CsvResult<()>
+                       where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         unimplemented!()
     }
 }
