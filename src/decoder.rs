@@ -106,43 +106,14 @@ impl serialize::Decoder<Error> for Decoded {
     }
     fn read_enum_variant<T, F>(&mut self, names: &[&str], f: F)
                               -> CsvResult<T>
-            where F: FnMut(&mut Decoded, uint) -> CsvResult<T> {
+            where F: FnOnce(&mut Decoded, uint) -> CsvResult<T> {
         let variant = to_lower(try!(self.pop_string()).as_slice());
-
-        // This is subtly broken. Supporting both zero-parameter and
-        // one-parameter enum variants, I think, is impossible right now.
-        // The issue is, we don't know how many parameters each variant
-        // takes, so we can't detect all possible failures.
-        // match names.iter().position(|&name| to_lower(name) == variant) {
-            // Some(idx) => return f(self, idx),
-            // None => {}
-        // }
-
-        // At this point, we couldn't find a verbatim Enum variant, so let's
-        // assume we're trying to load enum variants of one argument.
-        // We don't know which one to pick, so we try each of them until we
-        // get a hit.
-        //
-        // If we fail, it's tough to know what error to report. Probably the
-        // right way to do this is to maintain a stack of errors. Ug.
-        self.push_string(variant); // push what we popped earlier
-        for i in range(0, names.len()) {
-            // Copy the top of the stack now. We'll push it back on if
-            // decoding into this variant fails.
-            let cur = try!(self.pop_string());
-            let copy = cur.clone();
-            self.push_string(cur);
-
-            match f(self, i) {
-                Ok(v) => return Ok(v), // loaded a value successfully; bail!
-                Err(_) => {
-                    // Put what we popped back on the stack so we can retry.
-                    self.push_string(copy);
-                }
-            }
+        match names.iter().position(|&name| to_lower(name) == variant) {
+            Some(idx) => f(self, idx),
+            None => self.err(format!(
+                "Could not match '{}' with any of the variants: {}",
+                variant, names)),
         }
-        return self.err(format!(
-            "Could not load value into any variant in {}", names))
     }
     fn read_enum_variant_arg<T, F>(&mut self, _: uint, f: F) -> CsvResult<T>
             where F: FnOnce(&mut Decoded) -> CsvResult<T> {
@@ -199,10 +170,7 @@ impl serialize::Decoder<Error> for Decoded {
             f(self, false)
         } else {
             self.push_string(s);
-            match f(self, true) {
-                Ok(v) => Ok(v),
-                Err(_) => f(self, false),
-            }
+            f(self, true)
         }
     }
     fn read_seq<T, F>(&mut self, f: F) -> CsvResult<T>

@@ -235,25 +235,22 @@ fail_parses_to!(nonflexible, "a\nx,y", vec![])
 fail_parses_to!(nonflexible2, "a,b\nx", vec![])
 
 #[deriving(Decodable, Encodable, Show, PartialEq, Eq)]
-enum Val {
-    Unsigned(uint),
-    Signed(int),
-    Bool(bool),
-}
+enum Color { Red, Blue, Green }
 
 decodes_to!(decode_int, "1", (uint,), vec![(1u,)])
 decodes_to!(decode_many_int, "1,2", (uint, i16), vec![(1u,2i16)])
 decodes_to!(decode_float, "1,1.0,1.5", (f64, f64, f64), vec![(1f64, 1.0, 1.5)])
 decodes_to!(decode_char, "a", (char,), vec![('a',)])
+decodes_to!(decode_str, "abc", (String,), vec![("abc".into_string(),)])
 
-decodes_to!(decode_opt_int, "a", (Option<uint>,), vec![(None,)])
-decodes_to!(decode_opt_float, "a", (Option<f64>,), vec![(None,)])
-decodes_to!(decode_opt_char, "ab", (Option<char>,), vec![(None,)])
+decodes_to!(decode_opt_int, "\"\"", (Option<uint>,), vec![(None,)])
+decodes_to!(decode_opt_float, "\"\"", (Option<f64>,), vec![(None,)])
+decodes_to!(decode_opt_char, "\"\"", (Option<char>,), vec![(None,)])
 decodes_to!(decode_opt_empty, "\"\"", (Option<String>,), vec![(None,)])
 
-decodes_to!(decode_val, "false,-5,5", (Val, Val, Val),
-            vec![(Val::Bool(false), Val::Signed(-5), Val::Unsigned(5))])
-decodes_to!(decode_opt_val, "1.0", (Option<Val>,), vec![(None,)])
+decodes_to!(decode_color, "red,Blue,GrEeN", (Color, Color, Color),
+            vec![(Color::Red, Color::Blue, Color::Green)])
+decodes_to!(decode_opt_color, "\"\"", (Option<Color>,), vec![(None,)])
 
 decodes_to!(decode_tail, "abc,1,2,3,4", (String, Vec<uint>),
             vec![("abc".into_string(), vec![1u, 2, 3, 4])])
@@ -319,9 +316,8 @@ encodes_as!(encode_float, vec![(1f64, 1.0f64, 1.5f64)], "1,1,1.5\n")
 encodes_as!(encode_char, vec![('a',)], "a\n")
 encodes_as!(encode_none, vec![(None::<bool>,)], "\"\"\n")
 encodes_as!(encode_some, vec![(Some(true),)], "true\n")
-encodes_as!(encode_val,
-            vec![(Val::Bool(false), Val::Signed(-5), Val::Unsigned(5))],
-            "false,-5,5\n")
+encodes_as!(encode_color, vec![(Color::Red, Color::Blue, Color::Green)],
+            "Red,Blue,Green\n")
 
 #[test]
 fn no_headers_no_skip_one_record() {

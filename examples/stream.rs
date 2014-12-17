@@ -7,7 +7,7 @@ use std::time::Duration;
 
 fn main() {
     let (send, recv) = channel();
-    spawn(proc() {
+    spawn(move || {
         let w = io::ChanWriter::new(send);
         let mut enc = csv::Writer::from_writer(w);
         for x in range(1u, 6) {

@@ -185,9 +185,7 @@ impl<R: io::Reader> Reader<R> {
     /// cannot be decoded into the type requested, an error is returned.
     ///
     /// Enums are also supported in a limited way. Namely, its variants must
-    /// have exactly `0` or `1` parameters. Variants with `0` parameters decode
-    /// based on a case-insensitive string match. Variants with `1` decode
-    /// based on its constituent type. Examples follow.
+    /// have no parameters and can match CSV fields by name (case insensitive).
     ///
     /// ### Examples
     ///
@@ -230,12 +228,15 @@ impl<R: io::Reader> Reader<R> {
     /// #[deriving(Decodable, PartialEq, Show)]
     /// struct MyUint(uint);
     ///
+    /// #[deriving(Decodable, PartialEq, Show)]
+    /// enum Color { Red, Green, Blue }
+    ///
     /// #[deriving(Decodable)]
     /// struct Pair {
     ///     name1: String,
     ///     name2: String,
     ///     dist: Option<MyUint>,
-    ///     color: String,
+    ///     color: Color,
     /// }
     ///
     /// let mut rdr = csv::Reader::from_string("foo,bar,1,red\nfoo,baz,,green")
@@ -246,6 +247,8 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// assert_eq!(rows[0].dist, Some(MyUint(1)));
     /// assert_eq!(rows[1].dist, None);
+    /// assert_eq!(rows[0].color, Color::Red);
+    /// assert_eq!(rows[1].color, Color::Green);
     /// # }
     /// ```
     ///
