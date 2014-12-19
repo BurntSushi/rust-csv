@@ -134,7 +134,7 @@ impl<R: io::Reader> Reader<R> {
             pmachine: ParseMachine {
                 delimiter: b',',
                 record_terminator: RecordTerminator::CRLF,
-                quote: b'"',
+                quote: Some(b'"'),
                 escape: b'\\',
                 double_quote: true,
             },
@@ -419,7 +419,9 @@ impl<R: io::Reader> Reader<R> {
     /// single quoted data, you would use `b'\''`.
     ///
     /// The default value is `b'"'`.
-    pub fn quote(mut self, quote: u8) -> Reader<R> {
+    ///
+    /// If `quote` is `None`, then no quoting will be used.
+    pub fn quote(mut self, quote: Option<u8>) -> Reader<R> {
         self.pmachine.quote = quote;
         self
     }
@@ -447,6 +449,20 @@ impl<R: io::Reader> Reader<R> {
     pub fn double_quote(mut self, yes: bool) -> Reader<R> {
         self.pmachine.double_quote = yes;
         self
+    }
+
+    /// A convenience method for reading ASCII delimited text.
+    ///
+    /// This sets the delimiter and record terminator to the ASCII unit
+    /// separator (`\x1f`) and record separator (`\x1e`), respectively.
+    ///
+    /// Since ASCII delimited text is meant to be unquoted, this also sets
+    /// `quote` to `None`.
+    pub fn ascii(self) -> Reader<R> {
+        self.quote(None)
+            .double_quote(false)
+            .delimiter(b'\x1f')
+            .record_terminator(RecordTerminator::Any(b'\x1e'))
     }
 }
 
@@ -548,12 +564,16 @@ impl<R: io::Reader> Reader<R> {
     /// let mut count = 0u;
     /// while !rdr.done() {
     ///     loop {
-    ///         match rdr.next_field().into_iter_result() {
-    ///             None => break,
-    ///             Some(r) => { r.unwrap(); }
+    ///         // This case analysis is necessary because we only want to
+    ///         // increment the count when `EndOfRecord` is seen. (If the
+    ///         // CSV data is empty, then it will never be emitted.)
+    ///         match rdr.next_field() {
+    ///             csv::NextField::EndOfCsv => break,
+    ///             csv::NextField::EndOfRecord => { count += 1; break; },
+    ///             csv::NextField::Error(err) => panic!(err),
+    ///             csv::NextField::Data(_) => {}
     ///         }
     ///     }
-    ///     count += 1;
     /// }
     ///
     /// assert_eq!(count, 5);
@@ -730,7 +750,7 @@ impl<R: io::Reader> Reader<R> {
     /// it into a vector and obliterate memory safety.
     ///
     /// The reason it exists is because it appears extremely difficult to write
-    /// a fast streaming iterator.
+    /// a fast streaming iterator. (But iterators are wildly convenient.)
     #[doc(hidden)]
     pub unsafe fn byte_fields<'a>(&'a mut self) -> UnsafeByteFields<'a, R> {
         UnsafeByteFields { rdr: self }
@@ -785,7 +805,7 @@ impl<R: io::Reader + io::Seek> Reader<R> {
 struct ParseMachine {
     delimiter: u8,
     record_terminator: RecordTerminator,
-    quote: u8,
+    quote: Option<u8>,
     escape: u8,
     double_quote: bool,
 }
@@ -837,7 +857,7 @@ impl ParseMachine {
     fn parse_start_field(&self, b: u8) -> NextState {
         if self.is_record_term(b) {
             (false, self.record_term_next_state(b))
-        } else if b == self.quote {
+        } else if Some(b) == self.quote {
             (false, InQuotedField)
         } else if b == self.delimiter {
             // empty field, so return in StartField state,
@@ -897,7 +917,7 @@ impl ParseMachine {
 
     #[inline]
     fn parse_in_quoted_field(&self, b: u8) -> NextState {
-        if b == self.quote {
+        if Some(b) == self.quote {
             (false, InQuotedFieldQuote)
         } else if !self.double_quote && b == self.escape {
             (false, InQuotedFieldEscape)
@@ -913,7 +933,7 @@ impl ParseMachine {
 
     #[inline]
     fn parse_in_quoted_field_quote(self, b: u8) -> NextState {
-        if self.double_quote && b == self.quote {
+        if self.double_quote && Some(b) == self.quote {
             (true, InQuotedField)
         } else if b == self.delimiter {
             (false, StartField)

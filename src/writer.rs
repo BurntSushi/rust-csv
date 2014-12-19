@@ -18,6 +18,10 @@ pub enum QuoteStyle {
     ///
     /// This is the default.
     Necessary,
+    /// This *never* writes quotes.
+    ///
+    /// If a field requires quotes, then the writer will report an error.
+    Never,
 }
 
 /// A CSV writer.
@@ -369,7 +373,7 @@ impl<W: io::Writer> Writer<W> {
 }
 
 impl<W: io::Writer> Writer<W> {
-    fn err<S: StrAllocating>(&self, msg: S) -> CsvResult<()> {
+    fn err<S: StrAllocating, T>(&self, msg: S) -> CsvResult<T> {
         Err(Error::Encode(msg.into_string()))
     }
 
@@ -378,7 +382,7 @@ impl<W: io::Writer> Writer<W> {
     }
 
     fn w_user_bytes(&mut self, s: &[u8]) -> CsvResult<()> {
-        if self.should_quote(s) {
+        if try!(self.should_quote(s)) {
             let quoted = self.quote_field(s);
             self.w_bytes(quoted.as_slice())
         } else {
@@ -409,11 +413,21 @@ impl<W: io::Writer> Writer<W> {
         Ok(())
     }
 
-    fn should_quote(&self, field: &[u8]) -> bool {
+    fn should_quote(&self, field: &[u8]) -> CsvResult<bool> {
+        let needs = || field.iter().any(|&b| self.byte_needs_quotes(b));
         match self.quote_style {
-            QuoteStyle::Always => true,
-            QuoteStyle::Necessary =>
-                field.iter().any(|&b| self.byte_needs_quotes(b)),
+            QuoteStyle::Always => Ok(true),
+            QuoteStyle::Necessary => Ok(needs()),
+            QuoteStyle::Never => {
+                if !needs() {
+                    Ok(false)
+                } else {
+                    self.err(format!(
+                        "Field requires quotes, but quote style \
+                         is 'Never': '{}'",
+                        String::from_utf8_lossy(field)))
+                }
+            }
         }
     }
 

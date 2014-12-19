@@ -203,11 +203,11 @@ parses_to!(quote_inner_space, "\" a \"", vec![vec![" a "]])
 parses_to!(quote_outer_space, "  \"a\"  ", vec![vec!["  \"a\"  "]])
 
 parses_to!(quote_change, "zaz", vec![vec!["a"]],
-           |rdr: Reader<_>| rdr.quote(b'z'))
+           |rdr: Reader<_>| rdr.quote(Some(b'z')))
 
 // This one is pretty hokey. I don't really know what the "right" behavior is.
 parses_to!(quote_delimiter, ",a,,b", vec![vec!["a,b"]],
-           |rdr: Reader<_>| rdr.quote(b','))
+           |rdr: Reader<_>| rdr.quote(Some(b',')))
 
 // Another hokey one...
 parses_to!(quote_no_escapes, r#""a\"b""#, vec![vec![r#"a\b""#]])
@@ -296,6 +296,8 @@ writes_as!(wtr_empty_field_rows,
 
 writes_as!(wtr_always_quote, vec![vec!["a"]], "\"a\"\n",
            |wtr: Writer<_>| wtr.quote_style(QuoteStyle::Always))
+writes_as!(wtr_never_quote, vec![vec!["a"]], "a\n",
+           |wtr: Writer<_>| wtr.quote_style(QuoteStyle::Never))
 
 writes_as!(wtr_escape, vec![vec!["a\"b"]], "\"a\\\"b\"\n",
            |wtr: Writer<_>| wtr.double_quote(false))
@@ -309,6 +311,8 @@ fail_writes_as!(wtr_no_rows,
                 { let rows: Vec<Vec<&str>> = vec![vec![]]; rows }, "")
 fail_writes_as!(wtr_noflexible, vec![vec!["a"], vec!["a", "b"]], "a\na,b\n")
 fail_writes_as!(wtr_noflexible2, vec![vec!["a", "b"], vec!["a"]], "a,b\na\n")
+fail_writes_as!(wtr_never_quote_needs_quotes, vec![vec![","]], "\",\"",
+                |wtr: Writer<_>| wtr.quote_style(QuoteStyle::Never))
 
 encodes_as!(encode_int, vec![(1u,)], "1\n")
 encodes_as!(encode_many_int, vec![(1u, 2i16)], "1,2\n")
