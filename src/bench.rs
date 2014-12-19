@@ -32,11 +32,8 @@ fn raw_records(b: &mut Bencher) {
     b.iter(|| {
         let mut dec = reader(&mut data);
         while !dec.done() {
-            loop {
-                match dec.next_field().into_iter_result() {
-                    None => break,
-                    Some(r) => { r.unwrap(); }
-                }
+            while let Some(r) = dec.next_field().into_iter_result() {
+                r.unwrap();
             }
         }
     })
@@ -66,18 +63,18 @@ fn string_records(b: &mut Bencher) {
 #[deriving(Decodable)]
 struct Play {
     gameid: String,
-    qtr: uint,
-    min: Option<uint>,
-    sec: Option<uint>,
+    qtr: int,
+    min: Option<int>,
+    sec: Option<int>,
     team_off: String,
     team_def: String,
-    down: Option<uint>,
-    togo: Option<uint>,
-    ydline: Option<uint>,
+    down: Option<int>,
+    togo: Option<int>,
+    ydline: Option<int>,
     description: String,
-    offscore: uint,
-    defscore: uint,
-    season: uint,
+    offscore: int,
+    defscore: int,
+    season: int,
 }
 
 #[bench]
