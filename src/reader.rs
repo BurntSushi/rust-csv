@@ -591,12 +591,8 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// let mut rdr = csv::Reader::from_string(data);
     /// while !rdr.done() {
-    ///     loop {
-    ///         let field = match rdr.next_field().into_iter_result() {
-    ///             None => break,
-    ///             Some(result) => result.unwrap(),
-    ///         };
-    ///         print!("{}", field);
+    ///     while let Some(r) = rdr.next_field().into_iter_result() {
+    ///         print!("{} ", r.unwrap());
     ///     }
     ///     println!("");
     /// }
@@ -961,8 +957,6 @@ pub struct UnsafeByteFields<'a, R: 'a> {
 impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>>
     for UnsafeByteFields<'a, R> {
     fn next(&mut self) -> Option<CsvResult<&'a [u8]>> {
-        // whoa... why is this allowed!?
-        // TODO: Construct a minimal example and submit a bug report. ---AG
         unsafe {
             ::std::mem::transmute(self.rdr.next_field().into_iter_result())
         }

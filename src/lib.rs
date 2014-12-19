@@ -132,12 +132,8 @@
 //!
 //! let mut rdr = csv::Reader::from_string(data);
 //! while !rdr.done() {
-//!     loop {
-//!         let field = match rdr.next_field().into_iter_result() {
-//!             None => break,
-//!             Some(result) => result.unwrap(),
-//!         };
-//!         print!("{}", field);
+//!     while let Some(r) = rdr.next_field().into_iter_result() {
+//!         print!("{} ", r.unwrap());
 //!     }
 //!     println!("");
 //! }

@@ -409,12 +409,8 @@ fn seeking() {
 fn raw_access() {
     let mut rdr = Reader::from_string("1,2");
     let mut fields = vec![];
-    loop {
-        let field = match rdr.next_field().into_iter_result() {
-            None => break,
-            Some(result) => result.unwrap(),
-        };
-        fields.push(field.to_vec());
+    while let Some(field) = rdr.next_field().into_iter_result() {
+        fields.push(field.unwrap().to_vec());
     }
     assert_eq!(fields[0], b"1".to_vec());
 }
