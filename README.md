@@ -85,33 +85,15 @@ details in the documentation.
 
 ### Installation
 
-This crate works with Cargo. Assuming you have Rust and
-[Cargo](http://crates.io/) installed, simply check out the source and run 
-tests:
-
-```bash
-git checkout git://github.com/BurntSushi/rust-csv
-cd rust-csv
-cargo test
-```
-
-You can also add `csv` as a dependency to your project's `Cargo.toml` using 
-this git repo:
-
-```toml
-[dependencies.csv]
-git = "git://github.com/BurntSushi/rust-csv"
-```
-
-Or, you can use `csv` from [crates.io](https://crates.io/crates/csv):
+This crate works with Cargo and is on
+[crates.io](https://crates.io/crates/csv). The package is regularly updated.
+Add is to your `Cargo.toml` like so:
 
 ```toml
 [dependencies]
 csv = "*"
+# other deps...
 ```
-
-For now, I'd probably recommend that you use the git repository while we're all 
-still tracking nightly, but I'll try to keep the `crates.io` package updated.
 
 
 ### Benchmarks

@@ -107,13 +107,16 @@ impl serialize::Decoder<Error> for Decoded {
     fn read_enum_variant<T, F>(&mut self, names: &[&str], mut f: F)
                               -> CsvResult<T>
             where F: FnMut(&mut Decoded, uint) -> CsvResult<T> {
-        let variant = to_lower(try!(self.pop_string()).as_slice());
-        match names.iter().position(|&name| to_lower(name) == variant) {
-            Some(idx) => f(self, idx),
-            None => self.err(format!(
-                "Could not match '{}' with any of the variants: {}",
-                variant, names)),
+        for i in range(0, names.len()) {
+            let cur = try!(self.pop_string());
+            self.push_string(cur.clone());
+            match f(self, i) {
+                Ok(v) => return Ok(v),
+                Err(_) => { self.push_string(cur); }
+            }
         }
+        self.err(format!(
+            "Could not load value into any variant in {}", names))
     }
     fn read_enum_variant_arg<T, F>(&mut self, _: uint, f: F) -> CsvResult<T>
             where F: FnOnce(&mut Decoded) -> CsvResult<T> {
@@ -170,7 +173,10 @@ impl serialize::Decoder<Error> for Decoded {
             f(self, false)
         } else {
             self.push_string(s);
-            f(self, true)
+            match f(self, true) {
+                Ok(v) => Ok(v),
+                Err(_) => f(self, false),
+            }
         }
     }
     fn read_seq<T, F>(&mut self, f: F) -> CsvResult<T>
@@ -194,8 +200,4 @@ impl serialize::Decoder<Error> for Decoded {
             where F: FnOnce(&mut Decoded) -> CsvResult<T> {
         unimplemented!()
     }
-}
-
-fn to_lower(s: &str) -> String {
-    s.chars().map(|c| c.to_lowercase()).collect()
 }

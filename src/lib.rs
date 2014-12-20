@@ -47,10 +47,10 @@
 //! interposed,emmett,9
 //! chocolate,refile,7";
 //!
+//! type Row = (String, String, uint);
+//!
 //! let mut rdr = csv::Reader::from_string(data).has_headers(false);
-//! let rows = rdr.decode::<(String, String, uint)>()
-//!               .collect::<Result<Vec<_>, _>>()
-//!               .unwrap();
+//! let rows = rdr.decode().collect::<Result<Vec<Row>, _>>().unwrap();
 //! assert_eq!(rows.len(), 5);
 //! ```
 //!

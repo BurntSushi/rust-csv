@@ -185,7 +185,9 @@ impl<R: io::Reader> Reader<R> {
     /// cannot be decoded into the type requested, an error is returned.
     ///
     /// Enums are also supported in a limited way. Namely, its variants must
-    /// have no parameters and can match CSV fields by name (case insensitive).
+    /// have exactly `1` parameter each. Each variant decodes based on its
+    /// constituent type and variants are tried in the order that they appear
+    /// in their `enum` definition. See below for examples.
     ///
     /// ### Examples
     ///
@@ -207,9 +209,7 @@ impl<R: io::Reader> Reader<R> {
     /// let mut rdr = csv::Reader::from_string("foo,bar,1\nfoo,baz,2")
     ///                           .has_headers(false);
     /// // Instantiating a specific type when decoding is usually necessary.
-    /// let rows = rdr.decode::<Pair>()
-    ///               .collect::<Result<Vec<_>, _>>()
-    ///               .unwrap();
+    /// let rows = rdr.decode().collect::<Result<Vec<Pair>, _>>().unwrap();
     ///
     /// assert_eq!(rows[0].dist, 1);
     /// assert_eq!(rows[1].dist, 2);
@@ -229,26 +229,24 @@ impl<R: io::Reader> Reader<R> {
     /// struct MyUint(uint);
     ///
     /// #[deriving(Decodable, PartialEq, Show)]
-    /// enum Color { Red, Green, Blue }
+    /// enum Number { Integer(i64), Float(f64) }
     ///
     /// #[deriving(Decodable)]
-    /// struct Pair {
+    /// struct Row {
     ///     name1: String,
     ///     name2: String,
     ///     dist: Option<MyUint>,
-    ///     color: Color,
+    ///     dist2: Number,
     /// }
     ///
-    /// let mut rdr = csv::Reader::from_string("foo,bar,1,red\nfoo,baz,,green")
+    /// let mut rdr = csv::Reader::from_string("foo,bar,1,1\nfoo,baz,,1.5")
     ///                           .has_headers(false);
-    /// let rows = rdr.decode::<Pair>()
-    ///               .collect::<Result<Vec<_>, _>>()
-    ///               .unwrap();
+    /// let rows = rdr.decode().collect::<Result<Vec<Row>, _>>().unwrap();
     ///
     /// assert_eq!(rows[0].dist, Some(MyUint(1)));
     /// assert_eq!(rows[1].dist, None);
-    /// assert_eq!(rows[0].color, Color::Red);
-    /// assert_eq!(rows[1].color, Color::Green);
+    /// assert_eq!(rows[0].dist2, Number::Integer(1));
+    /// assert_eq!(rows[1].dist2, Number::Float(1.5));
     /// # }
     /// ```
     ///
@@ -269,9 +267,7 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// let mut rdr = csv::Reader::from_string("a,b,1,2,3,4\ny,z,5,6,7,8")
     ///                           .has_headers(false);
-    /// let rows = rdr.decode::<Pair>()
-    ///               .collect::<Result<Vec<_>, _>>()
-    ///               .unwrap();
+    /// let rows = rdr.decode().collect::<Result<Vec<Pair>, _>>().unwrap();
     ///
     /// assert_eq!(rows[0].attrs, vec![1,2,3,4]);
     /// assert_eq!(rows[1].attrs, vec![5,6,7,8]);
