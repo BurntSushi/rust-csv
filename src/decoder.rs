@@ -104,9 +104,9 @@ impl serialize::Decoder<Error> for Decoded {
             where F: FnOnce(&mut Decoded) -> CsvResult<T> {
         f(self)
     }
-    fn read_enum_variant<T, F>(&mut self, names: &[&str], f: F)
+    fn read_enum_variant<T, F>(&mut self, names: &[&str], mut f: F)
                               -> CsvResult<T>
-            where F: FnOnce(&mut Decoded, uint) -> CsvResult<T> {
+            where F: FnMut(&mut Decoded, uint) -> CsvResult<T> {
         let variant = to_lower(try!(self.pop_string()).as_slice());
         match names.iter().position(|&name| to_lower(name) == variant) {
             Some(idx) => f(self, idx),
@@ -121,7 +121,7 @@ impl serialize::Decoder<Error> for Decoded {
     }
     fn read_enum_struct_variant<T, F>(&mut self, names: &[&str], f: F)
                                      -> CsvResult<T>
-            where F: FnOnce(&mut Decoded, uint) -> CsvResult<T> {
+            where F: FnMut(&mut Decoded, uint) -> CsvResult<T> {
         self.read_enum_variant(names, f)
     }
     fn read_enum_struct_variant_field<T, F>(&mut self, _: &str,
@@ -163,8 +163,8 @@ impl serialize::Decoder<Error> for Decoded {
             where F: FnOnce(&mut Decoded) -> CsvResult<T> {
         unimplemented!()
     }
-    fn read_option<T, F>(&mut self, f: F) -> CsvResult<T>
-            where F: FnOnce(&mut Decoded, bool) -> CsvResult<T> {
+    fn read_option<T, F>(&mut self, mut f: F) -> CsvResult<T>
+            where F: FnMut(&mut Decoded, bool) -> CsvResult<T> {
         let s = try!(self.pop_string());
         if s.is_empty() {
             f(self, false)
