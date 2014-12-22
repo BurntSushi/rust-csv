@@ -129,6 +129,9 @@ impl<R: io::Reader> Reader<R> {
     /// This allows you to create your own buffer with a capacity of your
     /// choosing. In all other constructors, a buffer with default capacity
     /// is created for you.
+    ///
+    /// ... but this isn't public right now because we're using our own
+    /// implemented of `BufferedReader`.
     fn from_buffer(buf: BufferedReader<R>) -> Reader<R> {
         Reader {
             pmachine: ParseMachine {
