@@ -190,7 +190,7 @@ use std::error::FromError;
 use std::fmt;
 use std::io;
 
-pub use bytestr::{ByteString, IntoVector};
+pub use bytestr::{BorrowBytes, ByteString, IntoVector};
 pub use encoder::Encoded;
 pub use decoder::Decoded;
 pub use reader::{

@@ -4,7 +4,7 @@ use std::str;
 
 use serialize::Encodable;
 
-use {ByteString, CsvResult, Encoded, Error, RecordTerminator};
+use {BorrowBytes, ByteString, CsvResult, Encoded, Error, RecordTerminator};
 
 /// The quoting style to use when writing CSV data.
 #[deriving(Copy)]
@@ -183,20 +183,20 @@ impl<W: io::Writer> Writer<W> {
     ///            "sticker,mortals,\nbribed,personae,7\n");
     /// # }
     /// ```
-    pub fn encode<E: Encodable<Encoded, Error>>
-                 (&mut self, e: E) -> CsvResult<()> {
+    pub fn encode<E>(&mut self, e: E) -> CsvResult<()>
+            where E: Encodable<Encoded, Error> {
         let mut erecord = Encoded::new();
         try!(e.encode(&mut erecord));
-        self.write_bytes(erecord.unwrap().into_iter())
+        self.write(erecord.unwrap().into_iter())
     }
 
-    /// Writes a record of Unicode strings.
+    /// Writes a record of strings (Unicode or raw bytes).
     ///
     /// This is meant to be the standard method provided by most CSV writers.
     /// That is, it writes a record of strings---no more and no less.
     ///
     /// This method accepts an iterator of *fields* for a single record. Each
-    /// field must satisfy `Str`, which allows the caller to control
+    /// field must satisfy `BorrowBytes`, which allows the caller to control
     /// allocation.
     ///
     /// ### Example
@@ -218,50 +218,27 @@ impl<W: io::Writer> Writer<W> {
     ///     assert!(result.is_ok());
     /// }
     /// ```
-    pub fn write<'a, Sized? S: 'a + Str, I: Iterator<&'a S>>
-                (&mut self, r: I) -> CsvResult<()> {
-        self.write_iter(r, |f| Ok(f.as_slice().as_bytes()))
-    }
-
-    /// Writes a record of *byte strings*.
-    ///
-    /// This is useful when you need to create CSV data that is not UTF-8
-    /// encoded, or more likely, if you are transforming CSV data that you
-    /// do not control with an unknown or malformed encoding.
-    ///
-    /// Note that this writes a *single* record. It accepts an iterator of
-    /// *fields* for that record. Each field must satisfy the `Slice` trait.
-    /// For example, your iterator can produce `Vec<u8>` or `&[u8]`, which
-    /// allows you to avoid allocation if possible.
-    ///
-    /// ### Example
     ///
     /// This shows how to write records that do not correspond to a valid UTF-8
     /// encoding. (Note the use of Rust's byte string syntax!)
     ///
     /// ```rust
     /// let mut wtr = csv::Writer::from_memory();
-    /// let result = wtr.write_bytes(vec![b"\xff", b"\x00"].into_iter());
+    /// let result = wtr.write(vec![b"\xff", b"\x00"].into_iter());
     /// assert!(result.is_ok());
     ///
     /// assert_eq!(wtr.as_bytes(), b"\xff,\x00\n");
     /// ```
-    pub fn write_bytes<S: AsSlice<u8>, I: Iterator<S>>
-                      (&mut self, r: I) -> CsvResult<()> {
-        self.write_iter(r, |f| Ok(f))
+    pub fn write<'a, I, F>(&mut self, r: I) -> CsvResult<()>
+            where I: Iterator<F>, F: BorrowBytes {
+        self.write_iter(r.map(|f| Ok(f)))
     }
 
     /// Writes a record of results. If any of the results resolve to an error,
     /// then writing stops and that error is returned.
     #[doc(hidden)]
-    pub fn write_results<S: AsSlice<u8>, I: Iterator<CsvResult<S>>>
-                        (&mut self, r: I) -> CsvResult<()> {
-        self.write_iter(r, |f| f)
-    }
-
-    fn write_iter<T, R: AsSlice<u8>, I: Iterator<T>>
-                 (&mut self, mut r: I, as_sliceable: |T| -> CsvResult<R>)
-                 -> CsvResult<()> {
+    pub fn write_iter<'a, I, F>(&mut self, mut r: I) -> CsvResult<()>
+            where I: Iterator<CsvResult<F>>, F: BorrowBytes {
         let delim = self.delimiter;
         let mut count = 0;
         let mut last_len = 0;
@@ -270,9 +247,9 @@ impl<W: io::Writer> Writer<W> {
                 try!(self.w_bytes(&[delim]));
             }
             count += 1;
-            let field = try!(as_sliceable(field));
-            last_len = field.as_slice().len();
-            try!(self.w_user_bytes(field.as_slice()));
+            let field = try!(field);
+            last_len = field.borrow_bytes().len();
+            try!(self.w_user_bytes(field.borrow_bytes()));
         }
         // This tomfoolery makes sure that a record with a single empty field
         // is encoded as `""`. Otherwise, you end up with a run of consecutive

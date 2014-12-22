@@ -1,3 +1,4 @@
+use std::borrow::{BorrowFrom, Cow, ToOwned};
 use std::fmt;
 use std::hash;
 use std::ops;
@@ -16,12 +17,59 @@ impl<'a, T: Clone> IntoVector<T> for &'a [T] {
     fn into_vec(self) -> Vec<T> { self.to_vec() }
 }
 
+impl IntoVector<u8> for ByteString {
+    fn into_vec(self) -> Vec<u8> { self.into_bytes() }
+}
+
 impl<'a> IntoVector<u8> for &'a str {
     fn into_vec(self) -> Vec<u8> { self.into_string().into_bytes() }
 }
 
 impl<'a> IntoVector<u8> for String {
     fn into_vec(self) -> Vec<u8> { self.into_bytes() }
+}
+
+/// A trait that permits borrowing byte vectors.
+///
+/// This is useful for providing an API that can abstract over Unicode
+/// strings and byte strings.
+pub trait BorrowBytes for Sized? {
+    /// Borrow a byte vector.
+    fn borrow_bytes<'a>(&'a self) -> &'a [u8];
+}
+
+impl BorrowBytes for String {
+    fn borrow_bytes(&self) -> &[u8] { self.as_slice().as_bytes() }
+}
+
+impl BorrowBytes for str {
+    fn borrow_bytes(&self) -> &[u8] { self.as_bytes() }
+}
+
+impl BorrowBytes for Vec<u8> {
+    fn borrow_bytes(&self) -> &[u8] { self.as_slice() }
+}
+
+impl BorrowBytes for ByteString {
+    fn borrow_bytes(&self) -> &[u8] { self.as_slice() }
+}
+
+impl BorrowBytes for [u8] {
+    fn borrow_bytes(&self) -> &[u8] { self }
+}
+
+impl<'a, T, Sized? B> BorrowBytes for Cow<'a, T, B>
+        where T: BorrowBytes, B: BorrowBytes + ToOwned<T> {
+    fn borrow_bytes(&self) -> &[u8] {
+        match *self {
+            Cow::Borrowed(v) => v.borrow_bytes(),
+            Cow::Owned(ref v) => v.borrow_bytes(),
+        }
+    }
+}
+
+impl<'a, Sized? T: BorrowBytes> BorrowBytes for &'a T {
+    fn borrow_bytes(&self) -> &[u8] { (*self).borrow_bytes() }
 }
 
 /// A type that represents unadulterated byte strings.
@@ -155,5 +203,19 @@ impl<S: Str> PartialEq<S> for ByteString {
 impl FromIterator<u8> for ByteString {
     fn from_iter<I: Iterator<u8>>(it: I) -> ByteString {
         ByteString::from_bytes(it.collect::<Vec<_>>())
+    }
+}
+
+impl BorrowFrom<ByteString> for [u8] {
+    fn borrow_from(owned: &ByteString) -> &[u8] { owned.0.as_slice() }
+}
+
+impl ToOwned<ByteString> for [u8] {
+    fn to_owned(&self) -> ByteString { ByteString(self.to_vec()) }
+}
+
+impl<'a> IntoCow<'a, ByteString, [u8]> for ByteString {
+    fn into_cow(self) -> Cow<'a, ByteString, [u8]> {
+        Cow::Owned(self)
     }
 }
