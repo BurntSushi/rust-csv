@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use rustc_serialize as serialize;
 
-use {ByteString, CsvResult, Error};
+use {ByteString, CsvResult, Error, StrAllocating};
 
 /// A record to be decoded.
 ///
@@ -34,7 +34,7 @@ impl Decoded {
     fn pop(&mut self) -> CsvResult<ByteString> {
         self.popped += 1;
         match self.stack.pop() {
-            None => self.err(&format!(
+            None => self.err(format!(
                 "Expected a record with length at least {}, \
                  but got a record with length {}.",
                 self.popped, self.popped - 1)),
@@ -54,7 +54,7 @@ impl Decoded {
         let s = s.as_slice().trim();
         match FromStr::from_str(s) {
             Some(t) => Ok(t),
-            None => self.err(&format!("Failed converting '{}' from str.", s)),
+            None => self.err(format!("Failed converting '{}' from str.", s)),
         }
     }
 
@@ -66,9 +66,8 @@ impl Decoded {
         self.push(ByteString::from_bytes(s.into_bytes()));
     }
 
-    fn err<T, Sized? S>(&self, msg: &S) -> CsvResult<T>
-            where S: ToOwned<String> {
-        Err(Error::Decode(msg.to_owned()))
+    fn err<T, S>(&self, msg: S) -> CsvResult<T> where S: StrAllocating {
+        Err(Error::Decode(msg.into_str()))
     }
 }
 
@@ -94,7 +93,7 @@ impl serialize::Decoder<Error> for Decoded {
         let s = try!(self.pop_string());
         let chars: Vec<char> = s.as_slice().chars().collect();
         if chars.len() != 1 {
-            return self.err(&format!(
+            return self.err(format!(
                 "Expected single character but got '{}'.", s))
         }
         Ok(chars[0])
@@ -117,7 +116,7 @@ impl serialize::Decoder<Error> for Decoded {
                 Err(_) => { self.push_string(cur); }
             }
         }
-        self.err(&format!(
+        self.err(format!(
             "Could not load value into any variant in {}", names))
     }
     fn read_enum_variant_arg<T, F>(&mut self, _: uint, f: F) -> CsvResult<T>
@@ -140,8 +139,8 @@ impl serialize::Decoder<Error> for Decoded {
             where F: FnOnce(&mut Decoded) -> CsvResult<T> {
         if self.len() < len {
             return self.err(
-                &format!("Struct '{}' has {} fields but current record \
-                          has {} fields.", s_name, len, self.len()));
+                format!("Struct '{}' has {} fields but current record \
+                         has {} fields.", s_name, len, self.len()));
         }
         f(self)
     }

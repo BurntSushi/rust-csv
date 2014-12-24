@@ -1,11 +1,13 @@
-use std::borrow::ToOwned;
 use std::error::FromError;
 use std::io;
 use std::str;
 
 use rustc_serialize::Encodable;
 
-use {BorrowBytes, ByteString, CsvResult, Encoded, Error, RecordTerminator};
+use {
+    BorrowBytes, ByteString, CsvResult, Encoded, Error, RecordTerminator,
+    StrAllocating,
+};
 
 /// The quoting style to use when writing CSV data.
 #[deriving(Copy)]
@@ -351,9 +353,8 @@ impl<W: io::Writer> Writer<W> {
 }
 
 impl<W: io::Writer> Writer<W> {
-    fn err<Sized? S, T>(&self, msg: &S) -> CsvResult<T>
-            where S: ToOwned<String> {
-        Err(Error::Encode(msg.to_owned()))
+    fn err<S, T>(&self, msg: S) -> CsvResult<T> where S: StrAllocating {
+        Err(Error::Encode(msg.into_str()))
     }
 
     fn w_bytes(&mut self, s: &[u8]) -> CsvResult<()> {
@@ -384,7 +385,7 @@ impl<W: io::Writer> Writer<W> {
             if self.first_len == 0 {
                 self.first_len = cur_len;
             } else if self.first_len != cur_len {
-                return self.err(&format!(
+                return self.err(format!(
                     "Record has length {} but other records have length {}",
                     cur_len, self.first_len))
             }
@@ -401,7 +402,7 @@ impl<W: io::Writer> Writer<W> {
                 if !needs() {
                     Ok(false)
                 } else {
-                    self.err(&format!(
+                    self.err(format!(
                         "Field requires quotes, but quote style \
                          is 'Never': '{}'",
                         String::from_utf8_lossy(field)))

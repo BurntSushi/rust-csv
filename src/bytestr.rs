@@ -72,6 +72,23 @@ impl<'a, Sized? T: BorrowBytes> BorrowBytes for &'a T {
     fn borrow_bytes(&self) -> &[u8] { (*self).borrow_bytes() }
 }
 
+/// Encapsulate allocating of strings.
+///
+/// This is a temporary measure until the standard library provides more
+/// impls for `std::string::IntoString`.
+pub trait StrAllocating {
+    /// Produce a new owned String.
+    fn into_str(self) -> String;
+}
+
+impl StrAllocating for String {
+    fn into_str(self) -> String { self }
+}
+
+impl<'a> StrAllocating for &'a str {
+    fn into_str(self) -> String { self.to_owned() }
+}
+
 /// A type that represents unadulterated byte strings.
 ///
 /// Byte strings represent *any* 8 bit character encoding. There are no

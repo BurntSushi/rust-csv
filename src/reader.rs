@@ -1,4 +1,3 @@
-use std::borrow::ToOwned;
 use std::io::{mod, MemReader};
 
 use rustc_serialize::Decodable;
@@ -7,6 +6,7 @@ use buffered::BufferedReader;
 use {
     ByteString, CsvResult, Decoded, IntoVector,
     Error, ParseError, ParseErrorKind,
+    StrAllocating,
 };
 
 use self::ParseState::{
@@ -169,9 +169,8 @@ impl Reader<io::IoResult<io::File>> {
 
 impl Reader<MemReader> {
     /// Creates a CSV reader for an in memory string buffer.
-    pub fn from_string<Sized? S>(s: &S) -> Reader<MemReader>
-            where S: ToOwned<String> {
-        Reader::from_bytes(s.to_owned().into_bytes())
+    pub fn from_string<S>(s: S) -> Reader<MemReader> where S: StrAllocating {
+        Reader::from_bytes(s.into_str().into_bytes())
     }
 
     /// Creates a CSV reader for an in memory buffer of bytes.

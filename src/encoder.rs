@@ -1,8 +1,6 @@
-use std::borrow::ToOwned;
-
 use rustc_serialize as serialize;
 
-use {ByteString, CsvResult, Error, IntoVector};
+use {ByteString, CsvResult, Error, IntoVector, StrAllocating};
 
 /// A record to be encoded.
 ///
@@ -29,13 +27,13 @@ impl Encoded {
         Ok(())
     }
 
-    fn push_string<Sized? S>(&mut self, s: &S) -> CsvResult<()>
-            where S: ToOwned<String> {
-        self.push_bytes(s.to_owned().into_bytes())
+    fn push_string<S>(&mut self, s: S) -> CsvResult<()>
+            where S: StrAllocating {
+        self.push_bytes(s.into_str().into_bytes())
     }
 
     fn push_to_string<T: ToString>(&mut self, t: T) -> CsvResult<()> {
-        self.push_string(&t.to_string())
+        self.push_string(t.to_string())
     }
 }
 
@@ -57,10 +55,10 @@ impl serialize::Encoder<Error> for Encoded {
         self.push_to_string(v)
     }
     fn emit_f64(&mut self, v: f64) -> CsvResult<()> {
-        self.push_string(&::std::f64::to_str_digits(v, 10))
+        self.push_string(::std::f64::to_str_digits(v, 10))
     }
     fn emit_f32(&mut self, v: f32) -> CsvResult<()> {
-        self.push_string(&::std::f32::to_str_digits(v, 10))
+        self.push_string(::std::f32::to_str_digits(v, 10))
     }
     fn emit_char(&mut self, v: char) -> CsvResult<()> {
         let mut bytes = [0u8, ..4];
