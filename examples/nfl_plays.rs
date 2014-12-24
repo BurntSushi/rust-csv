@@ -1,10 +1,10 @@
 extern crate csv;
-extern crate serialize;
+extern crate "rustc-serialize" as rustc_serialize;
 
 use std::path::Path;
 
 #[allow(dead_code)]
-#[deriving(Decodable)]
+#[deriving(RustcDecodable)]
 struct Play {
     gameid: String,
     qtr: uint,

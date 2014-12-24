@@ -22,7 +22,7 @@ impl IntoVector<u8> for ByteString {
 }
 
 impl<'a> IntoVector<u8> for &'a str {
-    fn into_vec(self) -> Vec<u8> { self.into_string().into_bytes() }
+    fn into_vec(self) -> Vec<u8> { self.to_owned().into_bytes() }
 }
 
 impl<'a> IntoVector<u8> for String {
@@ -114,7 +114,9 @@ impl ByteString {
     /// Consumes the byte string and decodes it into a Unicode string. If the
     /// decoding fails, then the original ByteString is returned.
     pub fn into_utf8_string(self) -> Result<String, ByteString> {
-        String::from_utf8(self.into_bytes()).map_err(ByteString)
+        // FIXME: Figure out how to return an error here.
+        String::from_utf8(self.into_bytes())
+               .map_err(|(bytes, _)| ByteString(bytes))
     }
 
     /// Return the number of bytes in the string.

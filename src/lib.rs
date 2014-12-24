@@ -182,8 +182,9 @@
 //!     while providing an outlet to use byte strings.
 
 extern crate rand;
-extern crate serialize;
 extern crate "test" as stdtest;
+
+extern crate "rustc-serialize" as rustc_serialize;
 
 use std::error::Error as StdError;
 use std::error::FromError;

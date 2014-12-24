@@ -13,6 +13,9 @@ license = "Unlicense"
 [lib]
 name = "csv"
 
+[dependencies]
+rustc-serialize = "*"
+
 [profile.bench]
 opt-level = 3
 lto = true  # this doesn't seem to work... why?

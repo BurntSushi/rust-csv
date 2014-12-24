@@ -1,3 +1,4 @@
+use std::borrow::ToOwned;
 use std::io::ByRefReader;
 use std::io::Reader as IoReader;
 use std::io::Writer as IoWriter;
@@ -234,14 +235,14 @@ parses_to!(flexible_rows2, "a,b\nx", vec![vec!["a", "b"], vec!["x"]],
 fail_parses_to!(nonflexible, "a\nx,y", vec![]);
 fail_parses_to!(nonflexible2, "a,b\nx", vec![]);
 
-#[deriving(Decodable, Encodable, Show, PartialEq, Eq)]
+#[deriving(RustcDecodable, RustcEncodable, Show, PartialEq, Eq)]
 enum Val { Unsigned(uint), Signed(int), Bool(bool) }
 
 decodes_to!(decode_int, "1", (uint,), vec![(1u,)]);
 decodes_to!(decode_many_int, "1,2", (uint, i16), vec![(1u,2i16)]);
 decodes_to!(decode_float, "1,1.0,1.5", (f64, f64, f64), vec![(1f64, 1.0, 1.5)]);
 decodes_to!(decode_char, "a", (char,), vec![('a',)]);
-decodes_to!(decode_str, "abc", (String,), vec![("abc".into_string(),)]);
+decodes_to!(decode_str, "abc", (String,), vec![("abc".to_owned(),)]);
 
 decodes_to!(decode_opt_int, "a", (Option<uint>,), vec![(None,)]);
 decodes_to!(decode_opt_float, "a", (Option<f64>,), vec![(None,)]);
@@ -253,7 +254,7 @@ decodes_to!(decode_val, "false,-5,5", (Val, Val, Val),
 decodes_to!(decode_opt_val, "1.0", (Option<Val>,), vec![(None,)]);
 
 decodes_to!(decode_tail, "abc,1,2,3,4", (String, Vec<uint>),
-            vec![("abc".into_string(), vec![1u, 2, 3, 4])]);
+            vec![("abc".to_owned(), vec![1u, 2, 3, 4])]);
 
 writes_as!(wtr_one_record_one_field, vec![vec!["a"]], "a\n");
 writes_as!(wtr_one_record_many_field, vec![vec!["a", "b"]], "a,b\n");

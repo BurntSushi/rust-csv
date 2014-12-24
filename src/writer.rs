@@ -1,8 +1,9 @@
+use std::borrow::ToOwned;
 use std::error::FromError;
 use std::io;
 use std::str;
 
-use serialize::Encodable;
+use rustc_serialize::Encodable;
 
 use {BorrowBytes, ByteString, CsvResult, Encoded, Error, RecordTerminator};
 
@@ -158,11 +159,11 @@ impl<W: io::Writer> Writer<W> {
     /// edit distances computed.
     ///
     /// ```rust
-    /// extern crate serialize;
+    /// extern crate "rustc-serialize" as rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
     ///
-    /// #[deriving(Encodable)]
+    /// #[deriving(RustcEncodable)]
     /// struct Distance {
     ///     name1: &'static str,
     ///     name2: &'static str,
@@ -350,8 +351,9 @@ impl<W: io::Writer> Writer<W> {
 }
 
 impl<W: io::Writer> Writer<W> {
-    fn err<S: StrAllocating, T>(&self, msg: S) -> CsvResult<T> {
-        Err(Error::Encode(msg.into_string()))
+    fn err<Sized? S, T>(&self, msg: &S) -> CsvResult<T>
+            where S: ToOwned<String> {
+        Err(Error::Encode(msg.to_owned()))
     }
 
     fn w_bytes(&mut self, s: &[u8]) -> CsvResult<()> {
@@ -382,7 +384,7 @@ impl<W: io::Writer> Writer<W> {
             if self.first_len == 0 {
                 self.first_len = cur_len;
             } else if self.first_len != cur_len {
-                return self.err(format!(
+                return self.err(&format!(
                     "Record has length {} but other records have length {}",
                     cur_len, self.first_len))
             }
@@ -399,7 +401,7 @@ impl<W: io::Writer> Writer<W> {
                 if !needs() {
                     Ok(false)
                 } else {
-                    self.err(format!(
+                    self.err(&format!(
                         "Field requires quotes, but quote style \
                          is 'Never': '{}'",
                         String::from_utf8_lossy(field)))

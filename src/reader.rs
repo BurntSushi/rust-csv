@@ -1,6 +1,7 @@
+use std::borrow::ToOwned;
 use std::io::{mod, MemReader};
 
-use serialize::Decodable;
+use rustc_serialize::Decodable;
 
 use buffered::BufferedReader;
 use {
@@ -168,8 +169,9 @@ impl Reader<io::IoResult<io::File>> {
 
 impl Reader<MemReader> {
     /// Creates a CSV reader for an in memory string buffer.
-    pub fn from_string<S: StrAllocating>(s: S) -> Reader<MemReader> {
-        Reader::from_bytes(s.into_string().into_bytes())
+    pub fn from_string<Sized? S>(s: &S) -> Reader<MemReader>
+            where S: ToOwned<String> {
+        Reader::from_bytes(s.to_owned().into_bytes())
     }
 
     /// Creates a CSV reader for an in memory buffer of bytes.
@@ -198,11 +200,11 @@ impl<R: io::Reader> Reader<R> {
     /// currently, the *names* of the struct members are irrelevant.)
     ///
     /// ```rust
-    /// extern crate serialize;
+    /// extern crate "rustc-serialize" as rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
     ///
-    /// #[deriving(Decodable)]
+    /// #[deriving(RustcDecodable)]
     /// struct Pair {
     ///     name1: String,
     ///     name2: String,
@@ -224,17 +226,17 @@ impl<R: io::Reader> Reader<R> {
     /// valid data in every record (whether it be empty or malformed).
     ///
     /// ```rust
-    /// extern crate serialize;
+    /// extern crate "rustc-serialize" as rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
     ///
-    /// #[deriving(Decodable, PartialEq, Show)]
+    /// #[deriving(RustcDecodable, PartialEq, Show)]
     /// struct MyUint(uint);
     ///
-    /// #[deriving(Decodable, PartialEq, Show)]
+    /// #[deriving(RustcDecodable, PartialEq, Show)]
     /// enum Number { Integer(i64), Float(f64) }
     ///
-    /// #[deriving(Decodable)]
+    /// #[deriving(RustcDecodable)]
     /// struct Row {
     ///     name1: String,
     ///     name2: String,
@@ -257,11 +259,11 @@ impl<R: io::Reader> Reader<R> {
     /// "tail" of another tuple/struct/`Vec` to capture all remaining fields:
     ///
     /// ```rust
-    /// extern crate serialize;
+    /// extern crate "rustc-serialize" as rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
     ///
-    /// #[deriving(Decodable)]
+    /// #[deriving(RustcDecodable)]
     /// struct Pair {
     ///     name1: String,
     ///     name2: String,
@@ -1092,9 +1094,10 @@ impl<'a, R: io::Reader> Iterator<CsvResult<Vec<ByteString>>>
 
 fn byte_record_to_utf8(record: Vec<ByteString>) -> CsvResult<Vec<String>> {
     for bytes in record.iter() {
-        if !::std::str::is_utf8(bytes[]) {
+        if let Err(err) = ::std::str::from_utf8(bytes[]) {
             return Err(Error::Decode(format!(
-                "Could not decode the following bytes as UTF-8: {}", bytes)));
+                "Could not decode the following bytes as UTF-8 because {}: {}",
+                err.to_string(), bytes)));
         }
     }
     Ok(unsafe { ::std::mem::transmute(record) })

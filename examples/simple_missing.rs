@@ -1,9 +1,9 @@
 extern crate csv;
-extern crate serialize;
+extern crate "rustc-serialize" as rustc_serialize;
 
 use std::path::Path;
 
-#[deriving(Decodable)]
+#[deriving(RustcDecodable)]
 struct Record {
     s1: String,
     s2: String,
