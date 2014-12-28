@@ -995,6 +995,11 @@ pub struct DecodedRecords<'a, R: 'a, D> {
     p: ByteRecords<'a, R>,
 }
 
+impl<'a, R: io::Reader, D> DecodedRecords<'a, R, D> {
+    /// Returns a mutable reference to the underlying CSV reader.
+    pub fn inner(&mut self) -> &mut Reader<R> { self.p.inner() }
+}
+
 impl<'a, R: io::Reader, D: Decodable<Decoded, Error>> Iterator<CsvResult<D>>
     for DecodedRecords<'a, R, D> {
     fn next(&mut self) -> Option<CsvResult<D>> {
@@ -1014,6 +1019,11 @@ impl<'a, R: io::Reader, D: Decodable<Decoded, Error>> Iterator<CsvResult<D>>
 /// The `R` type parameter refers to the type of the underlying reader.
 pub struct StringRecords<'a, R: 'a> {
     p: ByteRecords<'a, R>,
+}
+
+impl<'a, R: io::Reader> StringRecords<'a, R> {
+    /// Returns a mutable reference to the underlying CSV reader.
+    pub fn inner(&mut self) -> &mut Reader<R> { self.p.inner() }
 }
 
 impl<'a, R: io::Reader> Iterator<CsvResult<Vec<String>>>
@@ -1036,6 +1046,11 @@ impl<'a, R: io::Reader> Iterator<CsvResult<Vec<String>>>
 pub struct ByteRecords<'a, R: 'a> {
     p: &'a mut Reader<R>,
     first: bool,
+}
+
+impl<'a, R: io::Reader> ByteRecords<'a, R> {
+    /// Returns a mutable reference to the underlying CSV reader.
+    pub fn inner(&mut self) -> &mut Reader<R> { self.p }
 }
 
 impl<'a, R: io::Reader> Iterator<CsvResult<Vec<ByteString>>>
