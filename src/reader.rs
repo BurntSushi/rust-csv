@@ -283,8 +283,7 @@ impl<R: io::Reader> Reader<R> {
     /// error. I believe this is a limitation of the current decoding machinery
     /// in the `serialize` crate.)
     /// ```
-    pub fn decode<'a, D: Decodable<Decoded, Error>>
-                 (&'a mut self) -> DecodedRecords<'a, R, D> {
+    pub fn decode<D: Decodable<Decoded, Error>>(self) -> DecodedRecords<R, D> {
         DecodedRecords { p: self.byte_records() }
     }
 
@@ -309,7 +308,7 @@ impl<R: io::Reader> Reader<R> {
     ///     println!("{}", row);
     /// }
     /// ```
-    pub fn records<'a>(&'a mut self) -> StringRecords<'a, R> {
+    pub fn records(self) -> StringRecords<R> {
         StringRecords { p: self.byte_records() }
     }
 
@@ -323,13 +322,11 @@ impl<R: io::Reader> Reader<R> {
     /// ```rust
     /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3");
     ///
-    /// let headers1 = rdr.headers().unwrap();
+    /// let headers = rdr.headers().unwrap();
     /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
-    /// let headers2 = rdr.headers().unwrap();
     ///
     /// let s = |s: &'static str| s.to_string();
-    /// assert_eq!(headers1, headers2);
-    /// assert_eq!(headers1, vec![s("a"), s("b"), s("c")]);
+    /// assert_eq!(headers, vec![s("a"), s("b"), s("c")]);
     /// assert_eq!(rows.len(), 1);
     /// assert_eq!(rows[0], vec![s("1"), s("2"), s("3")]);
     /// ```
@@ -341,17 +338,15 @@ impl<R: io::Reader> Reader<R> {
     /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3")
     ///                           .has_headers(false);
     ///
-    /// let headers1 = rdr.headers().unwrap();
+    /// let headers = rdr.headers().unwrap();
     /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
-    /// let headers2 = rdr.headers().unwrap();
     ///
     /// let s = |s: &'static str| s.to_string();
-    /// assert_eq!(headers1, headers2);
-    /// assert_eq!(headers1, vec![s("a"), s("b"), s("c")]);
+    /// assert_eq!(headers, vec![s("a"), s("b"), s("c")]);
     ///
     /// // The header rows are now part of the record iterators.
     /// assert_eq!(rows.len(), 2);
-    /// assert_eq!(rows[0], headers1);
+    /// assert_eq!(rows[0], headers);
     /// assert_eq!(rows[1], vec![s("1"), s("2"), s("3")]);
     /// ```
     pub fn headers(&mut self) -> CsvResult<Vec<String>> {
@@ -534,7 +529,7 @@ impl<R: io::Reader> Reader<R> {
 
     /// This is just like `records`, except fields are `ByteString`s instead
     /// of `String`s.
-    pub fn byte_records<'a>(&'a mut self) -> ByteRecords<'a, R> {
+    pub fn byte_records(self) -> ByteRecords<R> {
         let first = self.has_seeked;
         ByteRecords { p: self, first: first }
     }
@@ -991,12 +986,12 @@ impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>>
 /// The `R` type parameter refers to the type of the underlying reader.
 ///
 /// The `D` type parameter refers to the decoded type.
-pub struct DecodedRecords<'a, R: 'a, D> {
-    p: ByteRecords<'a, R>,
+pub struct DecodedRecords<R, D> {
+    p: ByteRecords<R>,
 }
 
-impl<'a, R: io::Reader, D: Decodable<Decoded, Error>> Iterator<CsvResult<D>>
-    for DecodedRecords<'a, R, D> {
+impl<R: io::Reader, D: Decodable<Decoded, Error>> Iterator<CsvResult<D>>
+    for DecodedRecords<R, D> {
     fn next(&mut self) -> Option<CsvResult<D>> {
         self.p.next().map(|res| {
             res.and_then(|byte_record| {
@@ -1012,12 +1007,11 @@ impl<'a, R: io::Reader, D: Decodable<Decoded, Error>> Iterator<CsvResult<D>>
 /// CSV reader.
 ///
 /// The `R` type parameter refers to the type of the underlying reader.
-pub struct StringRecords<'a, R: 'a> {
-    p: ByteRecords<'a, R>,
+pub struct StringRecords<R> {
+    p: ByteRecords<R>,
 }
 
-impl<'a, R: io::Reader> Iterator<CsvResult<Vec<String>>>
-    for StringRecords<'a, R> {
+impl<R: io::Reader> Iterator<CsvResult<Vec<String>>> for StringRecords<R> {
     fn next(&mut self) -> Option<CsvResult<Vec<String>>> {
         self.p.next().map(|res| {
             res.and_then(|byte_record| {
@@ -1033,13 +1027,12 @@ impl<'a, R: io::Reader> Iterator<CsvResult<Vec<String>>>
 /// CSV reader.
 ///
 /// The `R` type parameter refers to the type of the underlying reader.
-pub struct ByteRecords<'a, R: 'a> {
-    p: &'a mut Reader<R>,
+pub struct ByteRecords<R> {
+    p: Reader<R>,
     first: bool,
 }
 
-impl<'a, R: io::Reader> Iterator<CsvResult<Vec<ByteString>>>
-    for ByteRecords<'a, R> {
+impl<R: io::Reader> Iterator<CsvResult<Vec<ByteString>>> for ByteRecords<R> {
     fn next(&mut self) -> Option<CsvResult<Vec<ByteString>>> {
         // We check this before checking `done` because the parser could
         // be done after a call to `byte_headers` but before any iterator

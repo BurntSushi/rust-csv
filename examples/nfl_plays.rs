@@ -24,7 +24,7 @@ struct Play {
 fn main() {
     let fp = &Path::new("./data/2012_nfl_pbp_data.csv");
 
-    let mut dec = csv::Reader::from_file(fp);
+    let dec = csv::Reader::from_file(fp);
     match dec.decode::<Play>().collect::<Result<Vec<_>, _>>() {
         Err(err) => panic!("{}", err),
         Ok(plays) => {
