@@ -133,7 +133,7 @@ impl ByteString {
     pub fn into_utf8_string(self) -> Result<String, ByteString> {
         // FIXME: Figure out how to return an error here.
         String::from_utf8(self.into_bytes())
-               .map_err(|(bytes, _)| ByteString(bytes))
+               .map_err(|err| ByteString(err.into_bytes()))
     }
 
     /// Return the number of bytes in the string.
