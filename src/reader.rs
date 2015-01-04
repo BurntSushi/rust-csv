@@ -1,4 +1,4 @@
-use std::io::{mod, MemReader};
+use std::io::{self, MemReader};
 
 use rustc_serialize::Decodable;
 
@@ -22,7 +22,7 @@ use self::ParseState::{
 ///
 /// Generally, you won't need to use this type because `CRLF` is the default,
 /// which is by far the most widely used record terminator.
-#[deriving(Copy)]
+#[derive(Copy)]
 pub enum RecordTerminator {
     /// Parses `\r`, `\n` or `\r\n` as a single record terminator.
     CRLF,
@@ -796,7 +796,7 @@ impl<R: io::Reader + io::Seek> Reader<R> {
     }
 }
 
-#[deriving(Copy)]
+#[derive(Copy)]
 struct ParseMachine {
     delimiter: u8,
     record_terminator: RecordTerminator,
@@ -805,7 +805,7 @@ struct ParseMachine {
     double_quote: bool,
 }
 
-#[deriving(Copy, Eq, PartialEq, Show)]
+#[derive(Copy, Eq, PartialEq, Show)]
 enum ParseState {
     StartRecord,
     EndRecord,
