@@ -1,6 +1,8 @@
 //! This example shows how to write your own custom implementation of
 //! `Decodable` to parse rational numbers.
 
+#![feature(old_orphan_check)] // see rustc commit c61a00
+
 extern crate csv;
 extern crate regex;
 extern crate "rustc-serialize" as rustc_serialize;
@@ -10,7 +12,7 @@ use std::str;
 use regex::Regex;
 use rustc_serialize::{Decodable, Decoder};
 
-#[deriving(Show)]
+#[derive(Show)]
 struct Rational {
     numerator: i64,
     denominator: i64,

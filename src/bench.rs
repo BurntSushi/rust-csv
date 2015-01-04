@@ -60,7 +60,7 @@ fn string_records(b: &mut Bencher) {
 }
 
 #[allow(dead_code)]
-#[deriving(RustcDecodable)]
+#[derive(RustcDecodable)]
 struct Play {
     gameid: String,
     qtr: int,

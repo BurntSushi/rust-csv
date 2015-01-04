@@ -1,10 +1,12 @@
+#![feature(old_orphan_check)] // see rustc commit c61a00
+
 extern crate csv;
 extern crate "rustc-serialize" as rustc_serialize;
 
 use std::path::Path;
 
 #[allow(dead_code)]
-#[deriving(RustcDecodable)]
+#[derive(RustcDecodable)]
 struct Play {
     gameid: String,
     qtr: uint,

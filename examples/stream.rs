@@ -1,6 +1,6 @@
 extern crate csv;
 
-use std::comm::channel;
+use std::sync::mpsc::channel;
 use std::io;
 use std::thread::Thread;
 use std::time::Duration;

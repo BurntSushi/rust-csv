@@ -1,9 +1,11 @@
+#![feature(old_orphan_check)] // see rustc commit c61a00
+
 extern crate csv;
 extern crate "rustc-serialize" as rustc_serialize;
 
 use std::path::Path;
 
-#[deriving(RustcDecodable)]
+#[derive(RustcDecodable)]
 struct Record {
     s1: String,
     s2: String,

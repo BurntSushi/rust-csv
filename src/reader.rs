@@ -199,11 +199,12 @@ impl<R: io::Reader> Reader<R> {
     /// currently, the *names* of the struct members are irrelevant.)
     ///
     /// ```rust
+    /// #![feature(old_orphan_check)] // see rustc commit c61a00
     /// extern crate "rustc-serialize" as rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
     ///
-    /// #[deriving(RustcDecodable)]
+    /// #[derive(RustcDecodable)]
     /// struct Pair {
     ///     name1: String,
     ///     name2: String,
@@ -225,17 +226,18 @@ impl<R: io::Reader> Reader<R> {
     /// valid data in every record (whether it be empty or malformed).
     ///
     /// ```rust
+    /// #![feature(old_orphan_check)] // see rustc commit c61a00
     /// extern crate "rustc-serialize" as rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
     ///
-    /// #[deriving(RustcDecodable, PartialEq, Show)]
+    /// #[derive(RustcDecodable, PartialEq, Show)]
     /// struct MyUint(uint);
     ///
-    /// #[deriving(RustcDecodable, PartialEq, Show)]
+    /// #[derive(RustcDecodable, PartialEq, Show)]
     /// enum Number { Integer(i64), Float(f64) }
     ///
-    /// #[deriving(RustcDecodable)]
+    /// #[derive(RustcDecodable)]
     /// struct Row {
     ///     name1: String,
     ///     name2: String,
@@ -258,11 +260,12 @@ impl<R: io::Reader> Reader<R> {
     /// "tail" of another tuple/struct/`Vec` to capture all remaining fields:
     ///
     /// ```rust
+    /// #![feature(old_orphan_check)] // see rustc commit c61a00
     /// extern crate "rustc-serialize" as rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
     ///
-    /// #[deriving(RustcDecodable)]
+    /// #[derive(RustcDecodable)]
     /// struct Pair {
     ///     name1: String,
     ///     name2: String,
@@ -974,8 +977,9 @@ pub struct UnsafeByteFields<'a, R: 'a> {
 }
 
 #[doc(hidden)]
-impl<'a, R: io::Reader> Iterator<CsvResult<&'a [u8]>>
-    for UnsafeByteFields<'a, R> {
+impl<'a, R> Iterator for UnsafeByteFields<'a, R> where R: io::Reader {
+    type Item = CsvResult<&'a [u8]>;
+
     fn next(&mut self) -> Option<CsvResult<&'a [u8]>> {
         unsafe {
             ::std::mem::transmute(self.rdr.next_field().into_iter_result())
@@ -995,8 +999,10 @@ pub struct DecodedRecords<'a, R: 'a, D> {
     p: ByteRecords<'a, R>,
 }
 
-impl<'a, R: io::Reader, D: Decodable<Decoded, Error>> Iterator<CsvResult<D>>
-    for DecodedRecords<'a, R, D> {
+impl<'a, R, D> Iterator for DecodedRecords<'a, R, D>
+        where R: io::Reader, D: Decodable<Decoded, Error> {
+    type Item = CsvResult<D>;
+
     fn next(&mut self) -> Option<CsvResult<D>> {
         self.p.next().map(|res| {
             res.and_then(|byte_record| {
@@ -1016,8 +1022,9 @@ pub struct StringRecords<'a, R: 'a> {
     p: ByteRecords<'a, R>,
 }
 
-impl<'a, R: io::Reader> Iterator<CsvResult<Vec<String>>>
-    for StringRecords<'a, R> {
+impl<'a, R> Iterator for StringRecords<'a, R> where R: io::Reader {
+    type Item = CsvResult<Vec<String>>;
+
     fn next(&mut self) -> Option<CsvResult<Vec<String>>> {
         self.p.next().map(|res| {
             res.and_then(|byte_record| {
@@ -1038,8 +1045,9 @@ pub struct ByteRecords<'a, R: 'a> {
     first: bool,
 }
 
-impl<'a, R: io::Reader> Iterator<CsvResult<Vec<ByteString>>>
-    for ByteRecords<'a, R> {
+impl<'a, R> Iterator for ByteRecords<'a, R> where R: io::Reader {
+    type Item = CsvResult<Vec<ByteString>>;
+
     fn next(&mut self) -> Option<CsvResult<Vec<ByteString>>> {
         // We check this before checking `done` because the parser could
         // be done after a call to `byte_headers` but before any iterator

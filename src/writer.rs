@@ -161,6 +161,7 @@ impl<W: io::Writer> Writer<W> {
     /// edit distances computed.
     ///
     /// ```rust
+    /// #![feature(old_orphan_check)] // see rustc commit c61a00
     /// extern crate "rustc-serialize" as rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
@@ -233,7 +234,7 @@ impl<W: io::Writer> Writer<W> {
     /// assert_eq!(wtr.as_bytes(), b"\xff,\x00\n");
     /// ```
     pub fn write<'a, I, F>(&mut self, r: I) -> CsvResult<()>
-            where I: Iterator<F>, F: BorrowBytes {
+            where I: Iterator<Item=F>, F: BorrowBytes {
         self.write_iter(r.map(|f| Ok(f)))
     }
 
@@ -241,7 +242,7 @@ impl<W: io::Writer> Writer<W> {
     /// then writing stops and that error is returned.
     #[doc(hidden)]
     pub fn write_iter<'a, I, F>(&mut self, mut r: I) -> CsvResult<()>
-            where I: Iterator<CsvResult<F>>, F: BorrowBytes {
+            where I: Iterator<Item=CsvResult<F>>, F: BorrowBytes {
         let delim = self.delimiter;
         let mut count = 0;
         let mut last_len = 0;
