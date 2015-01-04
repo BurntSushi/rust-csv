@@ -34,8 +34,7 @@ macro_rules! parses_to {
     ($name:ident, $csv:expr, $vec:expr, $config:expr) => (
         #[test]
         fn $name() {
-            let mut rdr = Reader::from_string($csv).has_headers(false);
-            rdr = $config(rdr);
+            let rdr = $config(Reader::from_string($csv).has_headers(false));
             let rows = rdr.records()
                           .collect::<Result<Vec<Vec<String>>, _>>()
                           .unwrap();
@@ -52,8 +51,7 @@ macro_rules! fail_parses_to {
         #[test]
         #[should_fail]
         fn $name() {
-            let mut rdr = Reader::from_string($csv).has_headers(false);
-            rdr = $config(rdr);
+            let rdr = $config(Reader::from_string($csv).has_headers(false));
             let rows = rdr.records()
                           .collect::<Result<Vec<Vec<String>>, _>>()
                           .unwrap();
@@ -69,8 +67,7 @@ macro_rules! decodes_to {
     ($name:ident, $csv:expr, $ty:ty, $vec:expr, $headers:expr) => (
         #[test]
         fn $name() {
-            let mut rdr = Reader::from_string($csv)
-                                 .has_headers($headers);
+            let rdr = Reader::from_string($csv).has_headers($headers);
             let rows = rdr.decode()
                           .collect::<Result<Vec<$ty>, _>>()
                           .unwrap();
@@ -369,14 +366,14 @@ fn bytes<S: IntoVector<u8>>(bs: S) -> ByteString {
 
 #[test]
 fn byte_strings() {
-    let mut d = Reader::from_string("abc,xyz").has_headers(false);
+    let d = Reader::from_string("abc,xyz").has_headers(false);
     let r = d.byte_records().next().unwrap().unwrap();
     assert_eq!(r, vec![bytes(b"abc"), bytes(b"xyz")]);
 }
 
 #[test]
 fn byte_strings_invalid_utf8() {
-    let mut d = Reader::from_bytes(b"a\xffbc,xyz").has_headers(false);
+    let d = Reader::from_bytes(b"a\xffbc,xyz").has_headers(false);
     let r = d.byte_records().next().unwrap().unwrap();
     assert_eq!(r, vec![bytes(b"a\xffbc"), bytes(b"xyz")]);
 }
@@ -384,7 +381,7 @@ fn byte_strings_invalid_utf8() {
 #[test]
 #[should_fail]
 fn invalid_utf8() {
-    let mut d = Reader::from_bytes(b"a\xffbc,xyz").has_headers(false);
+    let d = Reader::from_bytes(b"a\xffbc,xyz").has_headers(false);
     d.records().next().unwrap().unwrap();
 }
 
@@ -396,7 +393,7 @@ fn seeking() {
     let mut buf = io::MemReader::new(data.as_bytes().to_vec());
 
     {
-        let mut d = Reader::from_reader(buf.by_ref()).has_headers(false);
+        let d = Reader::from_reader(buf.by_ref()).has_headers(false);
         let vals =
             d.decode().collect::<Result<Vec<(uint, uint)>, _>>().unwrap();
         assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
@@ -404,7 +401,7 @@ fn seeking() {
 
     buf.seek(0, io::SeekSet).unwrap();
     {
-        let mut d = Reader::from_reader(buf.by_ref()).has_headers(false);
+        let d = Reader::from_reader(buf.by_ref()).has_headers(false);
         let vals =
             d.decode().collect::<Result<Vec<(uint, uint)>, _>>().unwrap();
         assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));

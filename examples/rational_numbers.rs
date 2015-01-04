@@ -49,7 +49,7 @@ X,Y,Rational
 13.21,34.55,144/233
 377.610,987.1597,2584/4181";
 
-    let mut rdr = csv::Reader::from_string(data).has_headers(true);
+    let rdr = csv::Reader::from_string(data).has_headers(true);
     for row in rdr.decode() {
         let (x, y, r): (f64, f64, Rational) = row.unwrap();
         println!("({}, {}): {}", x, y, r);

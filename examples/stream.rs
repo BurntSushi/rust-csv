@@ -18,8 +18,8 @@ fn main() {
         }
     });
 
-    let mut dec = csv::Reader::from_reader(io::ChanReader::new(recv))
-                              .has_headers(false);
+    let dec = csv::Reader::from_reader(io::ChanReader::new(recv))
+                          .has_headers(false);
     for r in dec.records() {
         println!("Record: {}", r);
     }
