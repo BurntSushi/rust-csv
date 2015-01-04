@@ -4,7 +4,10 @@
 #![experimental]
 #![deny(missing_docs)]
 
-#![feature(default_type_params, macro_rules, slicing_syntax)]
+#![feature(default_type_params, macro_rules, slicing_syntax, associated_types)]
+
+// FIXME: Temporary fix until associated types are fully baked (especially with Hash).
+#![feature(old_orphan_check)]
 
 //! This crate provides a streaming CSV (comma separated values) writer and
 //! reader that works with the `serialize` crate to do type based encoding
@@ -220,7 +223,7 @@ mod test;
 pub type CsvResult<T> = Result<T, Error>;
 
 /// An error produced by an operation on CSV data.
-#[deriving(Clone)]
+#[derive(Clone)]
 pub enum Error {
     /// An error reported by the type-based encoder.
     Encode(String),
@@ -245,7 +248,7 @@ impl Error {
 }
 
 /// A description of a CSV parse error.
-#[deriving(Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct ParseError {
     /// The line number of the parse error.
     pub line: u64,
@@ -263,7 +266,7 @@ pub struct ParseError {
 ///
 /// If and when a "strict" mode is added to this crate, this list of errors
 /// will expand.
-#[deriving(Clone, Copy)]
+#[derive(Clone, Copy)]
 pub enum ParseErrorKind {
     /// This error occurs when a record has a different number of fields
     /// than the first record parsed.
