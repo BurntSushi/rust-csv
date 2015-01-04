@@ -233,8 +233,8 @@ impl<W: io::Writer> Writer<W> {
     ///
     /// assert_eq!(wtr.as_bytes(), b"\xff,\x00\n");
     /// ```
-    pub fn write<'a, I, F>(&mut self, r: I) -> CsvResult<()>
-            where I: Iterator<Item=F>, F: BorrowBytes {
+    pub fn write<'a, I>(&mut self, r: I) -> CsvResult<()>
+            where I: Iterator, <I as Iterator>::Item: BorrowBytes {
         self.write_iter(r.map(|f| Ok(f)))
     }
 
