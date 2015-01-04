@@ -61,7 +61,7 @@ impl serialize::Encoder<Error> for Encoded {
         self.push_string(::std::f32::to_str_digits(v, 10))
     }
     fn emit_char(&mut self, v: char) -> CsvResult<()> {
-        let mut bytes = [0u8, ..4];
+        let mut bytes = [0u8; 4];
         let n = v.encode_utf8(bytes.as_mut_slice()).unwrap_or(0);
         self.push_bytes(bytes.slice_to(n))
     }

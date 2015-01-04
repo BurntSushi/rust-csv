@@ -1,6 +1,7 @@
-use std::borrow::{BorrowFrom, Cow, ToOwned};
+use std::borrow::{BorrowFrom, Cow, IntoCow, ToOwned};
 use std::fmt;
 use std::hash;
+use std::iter::FromIterator;
 use std::ops;
 
 /// A trait that encapsulates a `Vec<T>` or a `&[T]`.
@@ -109,7 +110,7 @@ impl<'a> StrAllocating for &'a str {
 /// encoding, but they also expose some lower level methods that use byte
 /// strings when absolutely necessary. This type is exposed in case you need
 /// to deal with the raw bytes directly.
-#[deriving(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteString(Vec<u8>);
 
 impl ByteString {
@@ -170,7 +171,8 @@ impl AsSlice<u8> for ByteString {
     }
 }
 
-impl Deref<[u8]> for ByteString {
+impl ops::Deref for ByteString {
+    type Target = [u8];
     fn deref<'a>(&'a self) -> &'a [u8] {
         &*self.0
     }
