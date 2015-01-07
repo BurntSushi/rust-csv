@@ -5,7 +5,6 @@
 #![deny(missing_docs)]
 
 #![feature(slicing_syntax)]
-#![feature(old_orphan_check)] // see rustc commit c61a00
 
 //! This crate provides a streaming CSV (comma separated values) writer and
 //! reader that works with the `serialize` crate to do type based encoding
