@@ -4,7 +4,7 @@
 #![experimental]
 #![deny(missing_docs)]
 
-#![feature(associated_types, default_type_params, macro_rules, slicing_syntax)]
+#![feature(slicing_syntax)]
 #![feature(old_orphan_check)] // see rustc commit c61a00
 
 //! This crate provides a streaming CSV (comma separated values) writer and
@@ -324,10 +324,6 @@ impl StdError for Error {
             _ => None,
         }
     }
-}
-
-impl FromError<Error> for Box<StdError> {
-    fn from_error(err: Error) -> Box<StdError> { box err }
 }
 
 impl FromError<io::IoError> for Error {

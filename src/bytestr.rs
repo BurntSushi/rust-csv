@@ -34,7 +34,7 @@ impl<'a> IntoVector<u8> for String {
 ///
 /// This is useful for providing an API that can abstract over Unicode
 /// strings and byte strings.
-pub trait BorrowBytes for Sized? {
+pub trait BorrowBytes {
     /// Borrow a byte vector.
     fn borrow_bytes<'a>(&'a self) -> &'a [u8];
 }
@@ -59,7 +59,7 @@ impl BorrowBytes for [u8] {
     fn borrow_bytes(&self) -> &[u8] { self }
 }
 
-impl<'a, T, Sized? B> BorrowBytes for Cow<'a, T, B>
+impl<'a, T, B: ?Sized> BorrowBytes for Cow<'a, T, B>
         where T: BorrowBytes, B: BorrowBytes + ToOwned<T> {
     fn borrow_bytes(&self) -> &[u8] {
         match *self {
@@ -69,7 +69,7 @@ impl<'a, T, Sized? B> BorrowBytes for Cow<'a, T, B>
     }
 }
 
-impl<'a, Sized? T: BorrowBytes> BorrowBytes for &'a T {
+impl<'a, T: ?Sized + BorrowBytes> BorrowBytes for &'a T {
     fn borrow_bytes(&self) -> &[u8] { (*self).borrow_bytes() }
 }
 
