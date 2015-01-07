@@ -37,7 +37,9 @@ impl Encoded {
     }
 }
 
-impl serialize::Encoder<Error> for Encoded {
+impl serialize::Encoder for Encoded {
+    type Error = Error;
+
     fn emit_nil(&mut self) -> CsvResult<()> { unimplemented!() }
     fn emit_uint(&mut self, v: uint) -> CsvResult<()> {
         self.push_to_string(v)

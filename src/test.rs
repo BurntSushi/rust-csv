@@ -29,7 +29,7 @@ fn assert_svec_eq<S: Str, T: Str>(got: Vec<Vec<S>>, expected: Vec<Vec<T>>) {
 
 macro_rules! parses_to {
     ($name:ident, $csv:expr, $vec:expr) => (
-        parses_to!($name, $csv, $vec, |rdr| rdr);
+        parses_to!($name, $csv, $vec, |&: rdr| rdr);
     );
     ($name:ident, $csv:expr, $vec:expr, $config:expr) => (
         #[test]
@@ -46,7 +46,7 @@ macro_rules! parses_to {
 
 macro_rules! fail_parses_to {
     ($name:ident, $csv:expr, $vec:expr) => (
-        fail_parses_to!($name, $csv, $vec, |rdr| rdr);
+        fail_parses_to!($name, $csv, $vec, |&: rdr| rdr);
     );
     ($name:ident, $csv:expr, $vec:expr, $config:expr) => (
         #[test]
@@ -81,7 +81,7 @@ macro_rules! decodes_to {
 
 macro_rules! writes_as {
     ($name:ident, $vec:expr, $csv:expr) => (
-        writes_as!($name, $vec, $csv, |wtr| wtr);
+        writes_as!($name, $vec, $csv, |&: wtr| wtr);
     );
     ($name:ident, $vec:expr, $csv:expr, $config:expr) => (
         #[test]
@@ -97,7 +97,7 @@ macro_rules! writes_as {
 
 macro_rules! fail_writes_as {
     ($name:ident, $vec:expr, $csv:expr) => (
-        fail_writes_as!($name, $vec, $csv, |wtr| wtr);
+        fail_writes_as!($name, $vec, $csv, |&: wtr| wtr);
     );
     ($name:ident, $vec:expr, $csv:expr, $config:expr) => (
         #[test]
@@ -171,7 +171,7 @@ parses_to!(trailing_lines_no_record_crlf,
            vec![vec!["a", "b", "c"], vec!["x", "y", "z"]]);
 parses_to!(empty_string_no_headers, "", vec![]);
 parses_to!(empty_string_headers, "", vec![],
-           |rdr: Reader<_>| rdr.has_headers(true));
+           |&: rdr: Reader<_>| rdr.has_headers(true));
 parses_to!(empty_lines, "\n\n\n\n", vec![]);
 parses_to!(empty_lines_interspersed, "\n\na,b\n\n\nx,y\n\n\nm,n\n",
            vec![vec!["a", "b"], vec!["x", "y"], vec!["m", "n"]]);
@@ -188,11 +188,11 @@ parses_to!(empty_lines_interspersed_cr, "\r\ra,b\r\r\rx,y\r\r\rm,n\r",
            vec![vec!["a", "b"], vec!["x", "y"], vec!["m", "n"]]);
 
 parses_to!(term_weird, "zza,bzc,dzz", vec![vec!["a", "b"], vec!["c", "d"]],
-           |rdr: Reader<_>| rdr.record_terminator(RecordTerminator::Any(b'z')));
+           |&: rdr: Reader<_>| rdr.record_terminator(RecordTerminator::Any(b'z')));
 
 parses_to!(ascii_delimited, "a\x1fb\x1ec\x1fd",
            vec![vec!["a", "b"], vec!["c", "d"]],
-           |rdr: Reader<_>| {
+           |&: rdr: Reader<_>| {
                rdr.delimiter(b'\x1f')
                   .record_terminator(RecordTerminator::Any(b'\x1e'))
            });
@@ -204,33 +204,33 @@ parses_to!(quote_inner_space, "\" a \"", vec![vec![" a "]]);
 parses_to!(quote_outer_space, "  \"a\"  ", vec![vec!["  \"a\"  "]]);
 
 parses_to!(quote_change, "zaz", vec![vec!["a"]],
-           |rdr: Reader<_>| rdr.quote(Some(b'z')));
+           |&: rdr: Reader<_>| rdr.quote(Some(b'z')));
 
 // This one is pretty hokey. I don't really know what the "right" behavior is.
 parses_to!(quote_delimiter, ",a,,b", vec![vec!["a,b"]],
-           |rdr: Reader<_>| rdr.quote(Some(b',')));
+           |&: rdr: Reader<_>| rdr.quote(Some(b',')));
 
 // Another hokey one...
 parses_to!(quote_no_escapes, r#""a\"b""#, vec![vec![r#"a\b""#]]);
 parses_to!(quote_escapes_no_double, r#""a""b""#, vec![vec![r#"a"b""#]],
-           |rdr: Reader<_>| rdr.double_quote(false));
+           |&: rdr: Reader<_>| rdr.double_quote(false));
 parses_to!(quote_escapes, r#""a\"b""#, vec![vec![r#"a"b"#]],
-           |rdr: Reader<_>| rdr.double_quote(false));
+           |&: rdr: Reader<_>| rdr.double_quote(false));
 parses_to!(quote_escapes_change, r#""az"b""#, vec![vec![r#"a"b"#]],
-           |rdr: Reader<_>| rdr.double_quote(false).escape(b'z'));
+           |&: rdr: Reader<_>| rdr.double_quote(false).escape(b'z'));
 
 parses_to!(delimiter_tabs, "a\tb", vec![vec!["a", "b"]],
-           |rdr: Reader<_>| rdr.delimiter(b'\t'));
+           |&: rdr: Reader<_>| rdr.delimiter(b'\t'));
 parses_to!(delimiter_weird, "azb", vec![vec!["a", "b"]],
-           |rdr: Reader<_>| rdr.delimiter(b'z'));
+           |&: rdr: Reader<_>| rdr.delimiter(b'z'));
 
 parses_to!(headers_absent, "a\nb", vec![vec!["b"]],
-           |rdr: Reader<_>| rdr.has_headers(true));
+           |&: rdr: Reader<_>| rdr.has_headers(true));
 
 parses_to!(flexible_rows, "a\nx,y", vec![vec!["a"], vec!["x", "y"]],
-           |rdr: Reader<_>| rdr.flexible(true));
+           |&: rdr: Reader<_>| rdr.flexible(true));
 parses_to!(flexible_rows2, "a,b\nx", vec![vec!["a", "b"], vec!["x"]],
-           |rdr: Reader<_>| rdr.flexible(true));
+           |&: rdr: Reader<_>| rdr.flexible(true));
 
 fail_parses_to!(nonflexible, "a\nx,y", vec![]);
 fail_parses_to!(nonflexible2, "a,b\nx", vec![]);
@@ -262,24 +262,24 @@ writes_as!(wtr_many_record_one_field, vec![vec!["a"], vec!["b"]], "a\nb\n");
 writes_as!(wtr_many_record_many_field,
            vec![vec!["a", "b"], vec!["x", "y"]], "a,b\nx,y\n");
 writes_as!(wtr_one_record_one_field_crlf, vec![vec!["a"]], "a\r\n",
-           |wtr: Writer<_>| wtr.record_terminator(RecordTerminator::CRLF));
+           |&: wtr: Writer<_>| wtr.record_terminator(RecordTerminator::CRLF));
 writes_as!(wtr_one_record_many_field_crlf, vec![vec!["a", "b"]], "a,b\r\n",
-           |wtr: Writer<_>| wtr.record_terminator(RecordTerminator::CRLF));
+           |&: wtr: Writer<_>| wtr.record_terminator(RecordTerminator::CRLF));
 writes_as!(wtr_many_record_one_field_crlf,
            vec![vec!["a"], vec!["b"]], "a\r\nb\r\n",
-           |wtr: Writer<_>| wtr.record_terminator(RecordTerminator::CRLF));
+           |&: wtr: Writer<_>| wtr.record_terminator(RecordTerminator::CRLF));
 writes_as!(wtr_many_record_many_field_crlf,
            vec![vec!["a", "b"], vec!["x", "y"]], "a,b\r\nx,y\r\n",
-           |wtr: Writer<_>| wtr.record_terminator(RecordTerminator::CRLF));
+           |&: wtr: Writer<_>| wtr.record_terminator(RecordTerminator::CRLF));
 
 writes_as!(wtr_tabs, vec![vec!["a", "b"]], "a\tb\n",
-           |wtr: Writer<_>| wtr.delimiter(b'\t'));
+           |&: wtr: Writer<_>| wtr.delimiter(b'\t'));
 writes_as!(wtr_weird, vec![vec!["a", "b"]], "azb\n",
-           |wtr: Writer<_>| wtr.delimiter(b'z'));
+           |&: wtr: Writer<_>| wtr.delimiter(b'z'));
 writes_as!(wtr_flexible, vec![vec!["a"], vec!["a", "b"]], "a\na,b\n",
-           |wtr: Writer<_>| wtr.flexible(true));
+           |&: wtr: Writer<_>| wtr.flexible(true));
 writes_as!(wtr_flexible2, vec![vec!["a", "b"], vec!["a"]], "a,b\na\n",
-           |wtr: Writer<_>| wtr.flexible(true));
+           |&: wtr: Writer<_>| wtr.flexible(true));
 
 writes_as!(wtr_quoted_lf, vec![vec!["a\n"]], "\"a\n\"\n");
 writes_as!(wtr_quoted_cr, vec![vec!["a\r"]], "\"a\r\"\n");
@@ -296,24 +296,24 @@ writes_as!(wtr_empty_field_rows,
            ",a\na,b\n,a\n");
 
 writes_as!(wtr_always_quote, vec![vec!["a"]], "\"a\"\n",
-           |wtr: Writer<_>| wtr.quote_style(QuoteStyle::Always));
+           |&: wtr: Writer<_>| wtr.quote_style(QuoteStyle::Always));
 writes_as!(wtr_never_quote, vec![vec!["a"]], "a\n",
-           |wtr: Writer<_>| wtr.quote_style(QuoteStyle::Never));
+           |&: wtr: Writer<_>| wtr.quote_style(QuoteStyle::Never));
 
 writes_as!(wtr_escape, vec![vec!["a\"b"]], "\"a\\\"b\"\n",
-           |wtr: Writer<_>| wtr.double_quote(false));
+           |&: wtr: Writer<_>| wtr.double_quote(false));
 writes_as!(wtr_escape_weird, vec![vec!["a\"b"]], "\"az\"b\"\n",
-           |wtr: Writer<_>| wtr.double_quote(false).escape(b'z'));
+           |&: wtr: Writer<_>| wtr.double_quote(false).escape(b'z'));
 
 writes_as!(wtr_quote_weird, vec![vec!["a,b"]], "za,bz\n",
-           |wtr: Writer<_>| wtr.quote(b'z'));
+           |&: wtr: Writer<_>| wtr.quote(b'z'));
 
 fail_writes_as!(wtr_no_rows,
                 { let rows: Vec<Vec<&str>> = vec![vec![]]; rows }, "");
 fail_writes_as!(wtr_noflexible, vec![vec!["a"], vec!["a", "b"]], "a\na,b\n");
 fail_writes_as!(wtr_noflexible2, vec![vec!["a", "b"], vec!["a"]], "a,b\na\n");
 fail_writes_as!(wtr_never_quote_needs_quotes, vec![vec![","]], "\",\"",
-                |wtr: Writer<_>| wtr.quote_style(QuoteStyle::Never));
+                |&: wtr: Writer<_>| wtr.quote_style(QuoteStyle::Never));
 
 encodes_as!(encode_int, vec![(1u,)], "1\n");
 encodes_as!(encode_many_int, vec![(1u, 2i16)], "1,2\n");

@@ -1,8 +1,6 @@
 //! This example shows how to write your own custom implementation of
 //! `Decodable` to parse rational numbers.
 
-#![feature(old_orphan_check)] // see rustc commit c61a00
-
 extern crate csv;
 extern crate regex;
 extern crate "rustc-serialize" as rustc_serialize;
@@ -18,8 +16,8 @@ struct Rational {
     denominator: i64,
 }
 
-impl<E, D: Decoder<E>> Decodable<D, E> for Rational {
-    fn decode(d: &mut D) -> Result<Rational, E> {
+impl Decodable for Rational {
+    fn decode<D: Decoder>(d: &mut D) -> Result<Rational, D::Error> {
         let field = try!(d.read_str());
         // This uses the `FromStr` impl below.
         match field.parse() {

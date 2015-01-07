@@ -71,7 +71,9 @@ impl Decoded {
     }
 }
 
-impl serialize::Decoder<Error> for Decoded {
+impl serialize::Decoder for Decoded {
+    type Error = Error;
+
     fn error(&mut self, err: &str) -> Error {
         Error::Decode(err.to_owned())
     }

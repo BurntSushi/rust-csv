@@ -161,7 +161,6 @@ impl<W: io::Writer> Writer<W> {
     /// edit distances computed.
     ///
     /// ```rust
-    /// #![feature(old_orphan_check)] // see rustc commit c61a00
     /// extern crate "rustc-serialize" as rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
@@ -187,8 +186,7 @@ impl<W: io::Writer> Writer<W> {
     ///            "sticker,mortals,\nbribed,personae,7\n");
     /// # }
     /// ```
-    pub fn encode<E>(&mut self, e: E) -> CsvResult<()>
-            where E: Encodable<Encoded, Error> {
+    pub fn encode<E>(&mut self, e: E) -> CsvResult<()> where E: Encodable {
         let mut erecord = Encoded::new();
         try!(e.encode(&mut erecord));
         self.write(erecord.unwrap().into_iter())
@@ -395,7 +393,7 @@ impl<W: io::Writer> Writer<W> {
     }
 
     fn should_quote(&self, field: &[u8]) -> CsvResult<bool> {
-        let needs = || field.iter().any(|&b| self.byte_needs_quotes(b));
+        let needs = |&:| field.iter().any(|&b| self.byte_needs_quotes(b));
         match self.quote_style {
             QuoteStyle::Always => Ok(true),
             QuoteStyle::Necessary => Ok(needs()),

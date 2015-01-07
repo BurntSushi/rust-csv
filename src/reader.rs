@@ -199,7 +199,6 @@ impl<R: io::Reader> Reader<R> {
     /// currently, the *names* of the struct members are irrelevant.)
     ///
     /// ```rust
-    /// #![feature(old_orphan_check)] // see rustc commit c61a00
     /// extern crate "rustc-serialize" as rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
@@ -226,7 +225,6 @@ impl<R: io::Reader> Reader<R> {
     /// valid data in every record (whether it be empty or malformed).
     ///
     /// ```rust
-    /// #![feature(old_orphan_check)] // see rustc commit c61a00
     /// extern crate "rustc-serialize" as rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
@@ -260,7 +258,6 @@ impl<R: io::Reader> Reader<R> {
     /// "tail" of another tuple/struct/`Vec` to capture all remaining fields:
     ///
     /// ```rust
-    /// #![feature(old_orphan_check)] // see rustc commit c61a00
     /// extern crate "rustc-serialize" as rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
@@ -286,8 +283,7 @@ impl<R: io::Reader> Reader<R> {
     /// error. I believe this is a limitation of the current decoding machinery
     /// in the `serialize` crate.)
     /// ```
-    pub fn decode<'a, D: Decodable<Decoded, Error>>
-                 (&'a mut self) -> DecodedRecords<'a, R, D> {
+    pub fn decode<'a, D: Decodable>(&'a mut self) -> DecodedRecords<'a, R, D> {
         DecodedRecords { p: self.byte_records() }
     }
 
@@ -330,7 +326,7 @@ impl<R: io::Reader> Reader<R> {
     /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
     /// let headers2 = rdr.headers().unwrap();
     ///
-    /// let s = |s: &'static str| s.to_string();
+    /// let s = |&: s: &'static str| s.to_string();
     /// assert_eq!(headers1, headers2);
     /// assert_eq!(headers1, vec![s("a"), s("b"), s("c")]);
     /// assert_eq!(rows.len(), 1);
@@ -348,7 +344,7 @@ impl<R: io::Reader> Reader<R> {
     /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
     /// let headers2 = rdr.headers().unwrap();
     ///
-    /// let s = |s: &'static str| s.to_string();
+    /// let s = |&: s: &'static str| s.to_string();
     /// assert_eq!(headers1, headers2);
     /// assert_eq!(headers1, vec![s("a"), s("b"), s("c")]);
     ///
@@ -1000,7 +996,7 @@ pub struct DecodedRecords<'a, R: 'a, D> {
 }
 
 impl<'a, R, D> Iterator for DecodedRecords<'a, R, D>
-        where R: io::Reader, D: Decodable<Decoded, Error> {
+        where R: io::Reader, D: Decodable {
     type Item = CsvResult<D>;
 
     fn next(&mut self) -> Option<CsvResult<D>> {
