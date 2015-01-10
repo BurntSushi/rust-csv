@@ -211,7 +211,7 @@ impl ops::Index<ops::Range<usize>> for ByteString {
     }
 }
 
-impl<H: hash::Hasher> hash::Hash<H> for ByteString {
+impl<H: hash::Hasher + hash::Writer> hash::Hash<H> for ByteString {
     fn hash(&self, hasher: &mut H) {
         // WHOA. This used to be `(&*self).hash(hasher);`, but it introduced
         // a *major* performance regression that got fixed by using
@@ -222,7 +222,7 @@ impl<H: hash::Hasher> hash::Hash<H> for ByteString {
         // TODO: Try `(&*self)` again (maybe when 1.0 hits). If the regression
         // remains, create a smaller reproducible example and report it as a
         // bug.
-        self.hash(hasher);
+        self.0.as_slice().hash(hasher);
     }
 }
 
