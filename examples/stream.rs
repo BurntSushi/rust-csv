@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 extern crate csv;
 
 use std::sync::mpsc::channel;
@@ -10,7 +12,7 @@ fn main() {
     let _ = Thread::spawn(move || {
         let w = io::ChanWriter::new(send);
         let mut enc = csv::Writer::from_writer(w);
-        for x in range(1u, 6) {
+        for x in range(1, 6) {
             if let Err(err) = enc.encode((x, x * x)) {
                 panic!("Failed encoding: {}", err);
             }
@@ -21,6 +23,6 @@ fn main() {
     let mut dec = csv::Reader::from_reader(io::ChanReader::new(recv))
                               .has_headers(false);
     for r in dec.records() {
-        println!("Record: {}", r);
+        println!("Record: {:?}", r);
     }
 }

@@ -18,12 +18,12 @@ fn assert_svec_eq<S: Str, T: Str>(got: Vec<Vec<S>>, expected: Vec<Vec<T>>) {
         }).collect();
 
     println!("got len: {}, expected len: {}", got.len(), expected.len());
-    println!("got lengths: {}",
+    println!("got lengths: {:?}",
              got.iter().map(|row: &Vec<&str>| row.len())
-                       .collect::<Vec<uint>>());
-    println!("expected lengths: {}",
+                       .collect::<Vec<usize>>());
+    println!("expected lengths: {:?}",
              expected.iter().map(|row: &Vec<&str>| row.len())
-                            .collect::<Vec<uint>>());
+                            .collect::<Vec<usize>>());
     assert_eq!(got, expected);
 }
 
@@ -236,15 +236,16 @@ fail_parses_to!(nonflexible, "a\nx,y", vec![]);
 fail_parses_to!(nonflexible2, "a,b\nx", vec![]);
 
 #[derive(RustcDecodable, RustcEncodable, Show, PartialEq, Eq)]
-enum Val { Unsigned(uint), Signed(int), Bool(bool) }
+enum Val { Unsigned(usize), Signed(isize), Bool(bool) }
 
-decodes_to!(decode_int, "1", (uint,), vec![(1u,)]);
-decodes_to!(decode_many_int, "1,2", (uint, i16), vec![(1u,2i16)]);
-decodes_to!(decode_float, "1,1.0,1.5", (f64, f64, f64), vec![(1f64, 1.0, 1.5)]);
+decodes_to!(decode_int, "1", (usize,), vec![(1us,)]);
+decodes_to!(decode_many_int, "1,2", (usize, i16), vec![(1us, 2i16)]);
+decodes_to!(decode_float, "1,1.0,1.5",
+            (f64, f64, f64), vec![(1f64, 1.0, 1.5)]);
 decodes_to!(decode_char, "a", (char,), vec![('a',)]);
 decodes_to!(decode_str, "abc", (String,), vec![("abc".to_owned(),)]);
 
-decodes_to!(decode_opt_int, "a", (Option<uint>,), vec![(None,)]);
+decodes_to!(decode_opt_int, "a", (Option<usize>,), vec![(None,)]);
 decodes_to!(decode_opt_float, "a", (Option<f64>,), vec![(None,)]);
 decodes_to!(decode_opt_char, "ab", (Option<char>,), vec![(None,)]);
 decodes_to!(decode_opt_empty, "\"\"", (Option<String>,), vec![(None,)]);
@@ -253,8 +254,8 @@ decodes_to!(decode_val, "false,-5,5", (Val, Val, Val),
             vec![(Val::Bool(false), Val::Signed(-5), Val::Unsigned(5))]);
 decodes_to!(decode_opt_val, "1.0", (Option<Val>,), vec![(None,)]);
 
-decodes_to!(decode_tail, "abc,1,2,3,4", (String, Vec<uint>),
-            vec![("abc".to_owned(), vec![1u, 2, 3, 4])]);
+decodes_to!(decode_tail, "abc,1,2,3,4", (String, Vec<usize>),
+            vec![("abc".to_owned(), vec![1us, 2, 3, 4])]);
 
 writes_as!(wtr_one_record_one_field, vec![vec!["a"]], "a\n");
 writes_as!(wtr_one_record_many_field, vec![vec!["a", "b"]], "a,b\n");
@@ -315,8 +316,8 @@ fail_writes_as!(wtr_noflexible2, vec![vec!["a", "b"], vec!["a"]], "a,b\na\n");
 fail_writes_as!(wtr_never_quote_needs_quotes, vec![vec![","]], "\",\"",
                 |&: wtr: Writer<_>| wtr.quote_style(QuoteStyle::Never));
 
-encodes_as!(encode_int, vec![(1u,)], "1\n");
-encodes_as!(encode_many_int, vec![(1u, 2i16)], "1,2\n");
+encodes_as!(encode_int, vec![(1us,)], "1\n");
+encodes_as!(encode_many_int, vec![(1us, 2i16)], "1,2\n");
 encodes_as!(encode_float, vec![(1f64, 1.0f64, 1.5f64)], "1,1,1.5\n");
 encodes_as!(encode_char, vec![('a',)], "a\n");
 encodes_as!(encode_none, vec![(None::<bool>,)], "\"\"\n");
@@ -398,7 +399,7 @@ fn seeking() {
     {
         let mut d = Reader::from_reader(buf.by_ref()).has_headers(false);
         let vals =
-            d.decode().collect::<Result<Vec<(uint, uint)>, _>>().unwrap();
+            d.decode().collect::<Result<Vec<(usize, usize)>, _>>().unwrap();
         assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
     }
 
@@ -406,7 +407,7 @@ fn seeking() {
     {
         let mut d = Reader::from_reader(buf.by_ref()).has_headers(false);
         let vals =
-            d.decode().collect::<Result<Vec<(uint, uint)>, _>>().unwrap();
+            d.decode().collect::<Result<Vec<(usize, usize)>, _>>().unwrap();
         assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
     }
 }

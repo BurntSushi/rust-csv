@@ -5,18 +5,18 @@ use std::cmp;
 use std::io::{Reader, Buffer, IoResult};
 use std::slice;
 
-static DEFAULT_BUF_SIZE: uint = 1024 * 64;
+static DEFAULT_BUF_SIZE: usize = 1024 * 64;
 
 pub struct BufferedReader<R> {
     inner: R,
     buf: Vec<u8>,
-    pos: uint,
-    cap: uint,
+    pos: usize,
+    cap: usize,
 }
 
 impl<R: Reader> BufferedReader<R> {
     /// Creates a new `BufferedReader` with the specified buffer capacity
-    pub fn with_capacity(cap: uint, inner: R) -> BufferedReader<R> {
+    pub fn with_capacity(cap: usize, inner: R) -> BufferedReader<R> {
         // It's *much* faster to create an uninitialized buffer than it is to
         // fill everything in with 0. This buffer is entirely an implementation
         // detail and is never exposed, so we're safe to not initialize
@@ -53,24 +53,24 @@ impl<R: Reader> Buffer for BufferedReader<R> {
             self.cap = try!(self.inner.read(self.buf.as_mut_slice()));
             self.pos = 0;
         }
-        Ok(self.buf[self.pos..self.cap])
+        Ok(&self.buf[self.pos..self.cap])
     }
 
-    fn consume(&mut self, amt: uint) {
+    fn consume(&mut self, amt: usize) {
         self.pos += amt;
         assert!(self.pos <= self.cap);
     }
 }
 
 impl<R: Reader> Reader for BufferedReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         if self.pos == self.cap && buf.len() >= self.buf.capacity() {
             return self.inner.read(buf);
         }
         let nread = {
             let available = try!(self.fill_buf());
             let nread = cmp::min(available.len(), buf.len());
-            slice::bytes::copy_memory(buf, available[..nread]);
+            slice::bytes::copy_memory(buf, &available[..nread]);
             nread
         };
         self.pos += nread;

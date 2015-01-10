@@ -35,7 +35,7 @@ fn main() {
     let mut rdr = csv::Reader::from_file(fp);
 
     for record in rdr.decode() {
-        let (s1, s2, dist): (String, String, uint) = record.unwrap();
+        let (s1, s2, dist): (String, String, usize) = record.unwrap();
         println!("({}, {}): {}", s1, s2, dist);
     }
 }
@@ -45,15 +45,15 @@ Don't like tuples? That's fine. Use a struct instead:
 
 ```rust
 extern crate csv;
-extern crate serialize;
+extern crate "rustc-serialize" as rustc_serialize;
 
 use std::path::Path;
 
-#[deriving(Decodable)]
+#[derive(RustcDecodable)]
 struct Record {
     s1: String,
     s2: String,
-    dist: uint,
+    dist: u32,
 }
 
 fn main() {
@@ -70,11 +70,11 @@ fn main() {
 Do some records not have a distance for some reason? Use an `Option` type!
 
 ```rust
-#[deriving(Decodable)]
+#[derive(Decodable)]
 struct Record {
     s1: String,
     s2: String,
-    dist: Option<uint>,
+    dist: Option<u32>,
 }
 ```
 

@@ -1,11 +1,3 @@
-#![crate_name = "csv"]
-#![doc(html_root_url = "http://burntsushi.net/rustdoc/csv")]
-
-#![experimental]
-#![deny(missing_docs)]
-
-#![feature(slicing_syntax)]
-
 //! This crate provides a streaming CSV (comma separated values) writer and
 //! reader that works with the `serialize` crate to do type based encoding
 //! and decoding. There are two primary goals of this project:
@@ -31,7 +23,7 @@
 //!
 //! let mut rdr = csv::Reader::from_string(data).has_headers(false);
 //! for row in rdr.decode() {
-//!     let (n1, n2, dist): (String, String, uint) = row.unwrap();
+//!     let (n1, n2, dist): (String, String, u32) = row.unwrap();
 //!     println!("{}, {}: {}", n1, n2, dist);
 //! }
 //! ```
@@ -47,7 +39,7 @@
 //! interposed,emmett,9
 //! chocolate,refile,7";
 //!
-//! type Row = (String, String, uint);
+//! type Row = (String, String, u32);
 //!
 //! let mut rdr = csv::Reader::from_string(data).has_headers(false);
 //! let rows = rdr.decode().collect::<Result<Vec<Row>, _>>().unwrap();
@@ -89,7 +81,7 @@
 //! let mut rdr = csv::Reader::from_string(data).has_headers(false);
 //! for row in rdr.records() {
 //!     let row = row.unwrap();
-//!     println!("{}", row);
+//!     println!("{:?}", row);
 //! }
 //! ```
 //!
@@ -106,7 +98,7 @@
 //! let mut rdr = csv::Reader::from_bytes(data).has_headers(false);
 //! for row in rdr.byte_records() {
 //!     let row = row.unwrap();
-//!     println!("{}", row);
+//!     println!("{:?}", row);
 //! }
 //! ```
 //!
@@ -133,7 +125,7 @@
 //! let mut rdr = csv::Reader::from_string(data);
 //! while !rdr.done() {
 //!     while let Some(r) = rdr.next_field().into_iter_result() {
-//!         print!("{} ", r.unwrap());
+//!         print!("{:?} ", r.unwrap());
 //!     }
 //!     println!("");
 //! }
@@ -181,6 +173,13 @@
 //!     general, the writer and reader API biases toward using Unicode strings
 //!     while providing an outlet to use byte strings.
 
+#![crate_name = "csv"]
+#![doc(html_root_url = "http://burntsushi.net/rustdoc/csv")]
+
+#![experimental]
+#![deny(missing_docs)]
+#![allow(unstable)]
+
 extern crate rand;
 extern crate "test" as stdtest;
 
@@ -220,7 +219,7 @@ mod test;
 pub type CsvResult<T> = Result<T, Error>;
 
 /// An error produced by an operation on CSV data.
-#[derive(Clone)]
+#[derive(Clone, Show)]
 pub enum Error {
     /// An error reported by the type-based encoder.
     Encode(String),
@@ -245,7 +244,7 @@ impl Error {
 }
 
 /// A description of a CSV parse error.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Show)]
 pub struct ParseError {
     /// The line number of the parse error.
     pub line: u64,
@@ -263,7 +262,7 @@ pub struct ParseError {
 ///
 /// If and when a "strict" mode is added to this crate, this list of errors
 /// will expand.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Show)]
 pub enum ParseErrorKind {
     /// This error occurs when a record has a different number of fields
     /// than the first record parsed.
@@ -273,7 +272,7 @@ pub enum ParseErrorKind {
     InvalidUTF8,
 }
 
-impl fmt::Show for Error {
+impl fmt::String for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Error::Encode(ref msg) => write!(f, "CSV encode error: {}", msg),
@@ -285,14 +284,14 @@ impl fmt::Show for Error {
     }
 }
 
-impl fmt::Show for ParseError {
+impl fmt::String for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "CSV parse error:{}:{}: {}",
                self.line, self.column, self.kind)
     }
 }
 
-impl fmt::Show for ParseErrorKind {
+impl fmt::String for ParseErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ParseErrorKind::UnequalLengths(first, cur) =>

@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 extern crate csv;
 extern crate "rustc-serialize" as rustc_serialize;
 
@@ -7,7 +9,7 @@ use std::path::Path;
 struct Record {
     s1: String,
     s2: String,
-    dist: uint,
+    dist: u32,
 }
 
 fn main() {

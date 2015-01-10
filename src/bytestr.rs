@@ -40,7 +40,7 @@ pub trait BorrowBytes {
 }
 
 impl BorrowBytes for String {
-    fn borrow_bytes(&self) -> &[u8] { self.as_slice().as_bytes() }
+    fn borrow_bytes(&self) -> &[u8] { self.as_bytes() }
 }
 
 impl BorrowBytes for str {
@@ -48,11 +48,11 @@ impl BorrowBytes for str {
 }
 
 impl BorrowBytes for Vec<u8> {
-    fn borrow_bytes(&self) -> &[u8] { self.as_slice() }
+    fn borrow_bytes(&self) -> &[u8] { &**self }
 }
 
 impl BorrowBytes for ByteString {
-    fn borrow_bytes(&self) -> &[u8] { self.as_slice() }
+    fn borrow_bytes(&self) -> &[u8] { &**self }
 }
 
 impl BorrowBytes for [u8] {
@@ -138,7 +138,7 @@ impl ByteString {
     }
 
     /// Return the number of bytes in the string.
-    pub fn len(&self) -> uint {
+    pub fn len(&self) -> usize {
         self.as_bytes().len()
     }
 
@@ -160,7 +160,7 @@ impl fmt::Show for ByteString {
         // encodable, which obviously doesn't work with raw byte strings.
         //
         // For now, we just show the bytes, e.g., `[255, 50, 48, 49, ...]`.
-        write!(f, "{}", self[])
+        write!(f, "{:?}", &**self)
     }
 }
 
@@ -173,34 +173,45 @@ impl AsSlice<u8> for ByteString {
 
 impl ops::Deref for ByteString {
     type Target = [u8];
+
     fn deref<'a>(&'a self) -> &'a [u8] {
         &*self.0
     }
 }
 
-impl ops::Slice<uint, [u8]> for ByteString {
-    #[inline]
-    fn as_slice_<'a>(&'a self) -> &'a [u8] {
-        self.as_slice()
-    }
+impl ops::Index<ops::FullRange> for ByteString {
+    type Output = [u8];
 
-    #[inline]
-    fn slice_from_or_fail<'a>(&'a self, start: &uint) -> &'a [u8] {
-        self.as_slice().slice_from_or_fail(start)
-    }
-
-    #[inline]
-    fn slice_to_or_fail<'a>(&'a self, end: &uint) -> &'a [u8] {
-        self.as_slice().slice_to_or_fail(end)
-    }
-
-    #[inline]
-    fn slice_or_fail<'a>(&'a self, start: &uint, end: &uint) -> &'a [u8] {
-        self.as_slice().slice_or_fail(start, end)
+    fn index<'a>(&'a self, _: &ops::FullRange) -> &'a [u8] {
+        &**self
     }
 }
 
-impl<H: hash::Writer> hash::Hash<H> for ByteString {
+impl ops::Index<ops::RangeFrom<usize>> for ByteString {
+    type Output = [u8];
+
+    fn index<'a>(&'a self, index: &ops::RangeFrom<usize>) -> &'a [u8] {
+        &(&**self)[index.start..]
+    }
+}
+
+impl ops::Index<ops::RangeTo<usize>> for ByteString {
+    type Output = [u8];
+
+    fn index<'a>(&'a self, index: &ops::RangeTo<usize>) -> &'a [u8] {
+        &(&**self)[..index.end]
+    }
+}
+
+impl ops::Index<ops::Range<usize>> for ByteString {
+    type Output = [u8];
+
+    fn index<'a>(&'a self, index: &ops::Range<usize>) -> &'a [u8] {
+        &(&**self)[index.start..index.end]
+    }
+}
+
+impl<H: hash::Hasher> hash::Hash<H> for ByteString {
     fn hash(&self, hasher: &mut H) {
         // WHOA. This used to be `(&*self).hash(hasher);`, but it introduced
         // a *major* performance regression that got fixed by using
@@ -211,7 +222,7 @@ impl<H: hash::Writer> hash::Hash<H> for ByteString {
         // TODO: Try `(&*self)` again (maybe when 1.0 hits). If the regression
         // remains, create a smaller reproducible example and report it as a
         // bug.
-        self.as_slice().hash(hasher);
+        self.hash(hasher);
     }
 }
 
@@ -228,7 +239,7 @@ impl FromIterator<u8> for ByteString {
 }
 
 impl BorrowFrom<ByteString> for [u8] {
-    fn borrow_from(owned: &ByteString) -> &[u8] { owned.0.as_slice() }
+    fn borrow_from(owned: &ByteString) -> &[u8] { &*owned.0 }
 }
 
 impl ToOwned<ByteString> for [u8] {

@@ -8,7 +8,7 @@ use Reader;
 static CSV_DATA: &'static str = "./examples/data/bench.csv";
 
 fn ordie<T, E: Show>(r: Result<T, E>) -> T {
-    r.or_else(|e: E| -> Result<T, E> panic!(e.to_string())).unwrap()
+    r.or_else(|e: E| -> Result<T, E> panic!(format!("{:?}", e))).unwrap()
 }
 
 fn file_to_mem(fp: &str) -> io::MemReader {
@@ -63,18 +63,18 @@ fn string_records(b: &mut Bencher) {
 #[derive(RustcDecodable)]
 struct Play {
     gameid: String,
-    qtr: int,
-    min: Option<int>,
-    sec: Option<int>,
+    qtr: i32,
+    min: Option<i32>,
+    sec: Option<i32>,
     team_off: String,
     team_def: String,
-    down: Option<int>,
-    togo: Option<int>,
-    ydline: Option<int>,
+    down: Option<i32>,
+    togo: Option<i32>,
+    ydline: Option<i32>,
     description: String,
-    offscore: int,
-    defscore: int,
-    season: int,
+    offscore: i32,
+    defscore: i32,
+    season: i32,
 }
 
 #[bench]

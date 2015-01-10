@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 extern crate csv;
 extern crate "rustc-serialize" as rustc_serialize;
 
@@ -7,18 +9,18 @@ use std::path::Path;
 #[derive(RustcDecodable)]
 struct Play {
     gameid: String,
-    qtr: uint,
-    min: Option<uint>,
-    sec: Option<uint>,
+    qtr: u32,
+    min: Option<u32>,
+    sec: Option<u32>,
     team_off: String,
     team_def: String,
-    down: Option<uint>,
-    togo: Option<uint>,
-    ydline: Option<uint>,
+    down: Option<u32>,
+    togo: Option<u32>,
+    ydline: Option<u32>,
     description: String,
-    offscore: uint,
-    defscore: uint,
-    season: uint,
+    offscore: u32,
+    defscore: u32,
+    season: u32,
 }
 
 fn main() {
@@ -31,9 +33,9 @@ fn main() {
             println!("Found {} plays.", plays.len());
 
             let tfb = plays.iter().find(|&p| {
-                "NE" == p.team_off.as_slice() && "DEN" == p.team_def.as_slice()
-                && p.description.as_slice().contains("TOUCHDOWN")
-                && p.description.as_slice().contains("T.Brady")
+                "NE" == p.team_off && "DEN" == p.team_def
+                && p.description.contains("TOUCHDOWN")
+                && p.description.contains("T.Brady")
             }).unwrap();
             println!("Tom Brady touchdown: {}", tfb.description);
         }

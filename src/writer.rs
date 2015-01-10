@@ -73,7 +73,7 @@ pub struct Writer<W> {
     escape: u8,
     double_quote: bool,
     quote_style: QuoteStyle,
-    first_len: uint,
+    first_len: usize,
 }
 
 impl Writer<io::IoResult<io::File>> {
@@ -131,7 +131,7 @@ impl Writer<Vec<u8>> {
             // This seems suspicious. If the client only writes `String`
             // values, then this can never fail. If the client is writing
             // byte strings, then they should be calling `to_bytes` instead.
-            Ok(()) => str::from_utf8(self.buf.get_ref()[]).unwrap(),
+            Ok(()) => str::from_utf8(&**self.buf.get_ref()).unwrap(),
         }
     }
 
@@ -140,7 +140,7 @@ impl Writer<Vec<u8>> {
         match self.buf.flush() {
             // shouldn't panic with Vec<u8>
             Err(err) => panic!("Error flushing to Vec<u8>: {}", err),
-            Ok(()) => self.buf.get_ref()[],
+            Ok(()) => &**self.buf.get_ref(),
         }
     }
 }
@@ -165,11 +165,11 @@ impl<W: io::Writer> Writer<W> {
     /// # extern crate csv;
     /// # fn main() {
     ///
-    /// #[deriving(RustcEncodable)]
+    /// #[derive(RustcEncodable)]
     /// struct Distance {
     ///     name1: &'static str,
     ///     name2: &'static str,
-    ///     dist: Option<uint>,
+    ///     dist: Option<usize>,
     /// }
     ///
     /// let records = vec![
@@ -363,7 +363,7 @@ impl<W: io::Writer> Writer<W> {
     fn w_user_bytes(&mut self, s: &[u8]) -> CsvResult<()> {
         if try!(self.should_quote(s)) {
             let quoted = self.quote_field(s);
-            self.w_bytes(quoted.as_slice())
+            self.w_bytes(&*quoted)
         } else {
             self.w_bytes(s)
         }
@@ -376,7 +376,7 @@ impl<W: io::Writer> Writer<W> {
         }
     }
 
-    fn set_first_len(&mut self, cur_len: uint) -> CsvResult<()> {
+    fn set_first_len(&mut self, cur_len: usize) -> CsvResult<()> {
         if cur_len == 0 {
             return self.err("Records must have length greater than 0.")
         }

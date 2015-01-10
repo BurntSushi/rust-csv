@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 extern crate csv;
 extern crate "rustc-serialize" as rustc_serialize;
 
@@ -7,7 +9,7 @@ use std::path::Path;
 struct Record {
     s1: String,
     s2: String,
-    dist: Option<uint>,
+    dist: Option<u32>,
 }
 
 fn main() {
@@ -16,6 +18,6 @@ fn main() {
 
     for record in rdr.decode() {
         let record: Record = record.unwrap();
-        println!("({}, {}): {}", record.s1, record.s2, record.dist);
+        println!("({}, {}): {:?}", record.s1, record.s2, record.dist);
     }
 }

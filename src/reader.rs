@@ -58,7 +58,7 @@ impl PartialEq<u8> for RecordTerminator {
 ///
 /// let mut rdr = csv::Reader::from_string(data).has_headers(false);
 /// for row in rdr.decode() {
-///     let (n1, n2, dist): (String, String, uint) = row.unwrap();
+///     let (n1, n2, dist): (String, String, u32) = row.unwrap();
 ///     println!("{}, {}: {}", n1, n2, dist);
 /// }
 /// ```
@@ -80,7 +80,7 @@ impl PartialEq<u8> for RecordTerminator {
 ///                           .flexible(true);
 /// for row in rdr.records() {
 ///     let row = row.unwrap();
-///     println!("{}", row);
+///     println!("{:?}", row);
 /// }
 /// ```
 pub struct Reader<R> {
@@ -207,7 +207,7 @@ impl<R: io::Reader> Reader<R> {
     /// struct Pair {
     ///     name1: String,
     ///     name2: String,
-    ///     dist: uint,
+    ///     dist: u32,
     /// }
     ///
     /// let mut rdr = csv::Reader::from_string("foo,bar,1\nfoo,baz,2")
@@ -230,7 +230,7 @@ impl<R: io::Reader> Reader<R> {
     /// # fn main() {
     ///
     /// #[derive(RustcDecodable, PartialEq, Show)]
-    /// struct MyUint(uint);
+    /// struct MyUint(u32);
     ///
     /// #[derive(RustcDecodable, PartialEq, Show)]
     /// enum Number { Integer(i64), Float(f64) }
@@ -266,7 +266,7 @@ impl<R: io::Reader> Reader<R> {
     /// struct Pair {
     ///     name1: String,
     ///     name2: String,
-    ///     attrs: Vec<uint>,
+    ///     attrs: Vec<u32>,
     /// }
     ///
     /// let mut rdr = csv::Reader::from_string("a,b,1,2,3,4\ny,z,5,6,7,8")
@@ -305,7 +305,7 @@ impl<R: io::Reader> Reader<R> {
     /// let mut rdr = csv::Reader::from_string(data).has_headers(false);
     /// for row in rdr.records() {
     ///     let row = row.unwrap();
-    ///     println!("{}", row);
+    ///     println!("{:?}", row);
     /// }
     /// ```
     pub fn records<'a>(&'a mut self) -> StringRecords<'a, R> {
@@ -320,6 +320,8 @@ impl<R: io::Reader> Reader<R> {
     /// ### Example
     ///
     /// ```rust
+    /// #![allow(unstable)]
+    ///
     /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3");
     ///
     /// let headers1 = rdr.headers().unwrap();
@@ -337,6 +339,8 @@ impl<R: io::Reader> Reader<R> {
     /// returned in this example include the first record:
     ///
     /// ```rust
+    /// #![allow(unstable)]
+    ///
     /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3")
     ///                           .has_headers(false);
     ///
@@ -611,7 +615,7 @@ impl<R: io::Reader> Reader<R> {
     /// let mut rdr = csv::Reader::from_string(data);
     /// while !rdr.done() {
     ///     while let Some(r) = rdr.next_field().into_iter_result() {
-    ///         print!("{} ", r.unwrap());
+    ///         print!("{:?} ", r.unwrap());
     ///     }
     ///     println!("");
     /// }
@@ -732,11 +736,11 @@ impl<R: io::Reader> Reader<R> {
         }
         if self.parsing_first_record {
             // This is only copying bytes for the first record.
-            let bytes = ByteString::from_bytes(self.fieldbuf.as_slice());
+            let bytes = ByteString::from_bytes(&*self.fieldbuf);
             self.first_record.push(bytes);
         }
         self.field_count += 1;
-        NextField::Data(self.fieldbuf.as_slice())
+        NextField::Data(&*self.fieldbuf)
     }
 
     /// An unsafe iterator over byte fields.
@@ -1097,10 +1101,10 @@ impl<'a, R> Iterator for ByteRecords<'a, R> where R: io::Reader {
 
 fn byte_record_to_utf8(record: Vec<ByteString>) -> CsvResult<Vec<String>> {
     for bytes in record.iter() {
-        if let Err(err) = ::std::str::from_utf8(bytes[]) {
+        if let Err(err) = ::std::str::from_utf8(&**bytes) {
             return Err(Error::Decode(format!(
-                "Could not decode the following bytes as UTF-8 because {}: {}",
-                err.to_string(), bytes)));
+                "Could not decode the following bytes as UTF-8 \
+                 because {}: {:?}", err.to_string(), bytes)));
         }
     }
     Ok(unsafe { ::std::mem::transmute(record) })

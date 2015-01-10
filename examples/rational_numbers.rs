@@ -1,6 +1,8 @@
 //! This example shows how to write your own custom implementation of
 //! `Decodable` to parse rational numbers.
 
+#![allow(unstable)]
+
 extern crate csv;
 extern crate regex;
 extern crate "rustc-serialize" as rustc_serialize;
@@ -50,6 +52,6 @@ X,Y,Rational
     let mut rdr = csv::Reader::from_string(data).has_headers(true);
     for row in rdr.decode() {
         let (x, y, r): (f64, f64, Rational) = row.unwrap();
-        println!("({}, {}): {}", x, y, r);
+        println!("({}, {}): {:?}", x, y, r);
     }
 }

@@ -16,6 +16,9 @@ name = "csv"
 [dependencies]
 rustc-serialize = "*"
 
+[dev-dependencies]
+regex = "*"
+
 [profile.bench]
 opt-level = 3
 lto = true  # this doesn't seem to work... why?
