@@ -70,7 +70,7 @@ fn main() {
 Do some records not have a distance for some reason? Use an `Option` type!
 
 ```rust
-#[derive(Decodable)]
+#[derive(RustcDecodable)]
 struct Record {
     s1: String,
     s2: String,
