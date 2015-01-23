@@ -148,7 +148,7 @@ impl ByteString {
     }
 }
 
-impl fmt::Show for ByteString {
+impl fmt::Debug for ByteString {
     /// Writes the underlying bytes as a `&[u8]`.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // XXX: Ideally, we could just do this:

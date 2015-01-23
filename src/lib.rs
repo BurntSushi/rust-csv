@@ -272,7 +272,7 @@ pub enum ParseErrorKind {
     InvalidUTF8,
 }
 
-impl fmt::String for Error {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Error::Encode(ref msg) => write!(f, "CSV encode error: {}", msg),
@@ -284,14 +284,14 @@ impl fmt::String for Error {
     }
 }
 
-impl fmt::String for ParseError {
+impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "CSV parse error:{}:{}: {}",
                self.line, self.column, self.kind)
     }
 }
 
-impl fmt::String for ParseErrorKind {
+impl fmt::Display for ParseErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ParseErrorKind::UnequalLengths(first, cur) =>
@@ -314,7 +314,7 @@ impl StdError for Error {
         }
     }
 
-    fn detail(&self) -> Option<String> { Some(self.to_string()) }
+    // fn detail(&self) -> Option<String> { Some(self.to_string()) }
 
     fn cause(&self) -> Option<&StdError> {
         match *self {

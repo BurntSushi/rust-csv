@@ -1,4 +1,4 @@
-use std::fmt::Show;
+use std::fmt::{Debug, Display};
 use std::io::{self, ByRefReader};
 use std::io::Reader as IoReader;
 use stdtest::Bencher;
@@ -7,7 +7,7 @@ use Reader;
 
 static CSV_DATA: &'static str = "./examples/data/bench.csv";
 
-fn ordie<T, E: Show>(r: Result<T, E>) -> T {
+fn ordie<T, E: Debug+Display>(r: Result<T, E>) -> T {
     r.or_else(|e: E| -> Result<T, E> panic!(format!("{:?}", e))).unwrap()
 }
 
