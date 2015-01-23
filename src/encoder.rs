@@ -67,7 +67,7 @@ impl serialize::Encoder for Encoded {
     fn emit_char(&mut self, v: char) -> CsvResult<()> {
         let mut bytes = [0u8; 4];
         let n = v.encode_utf8(bytes.as_mut_slice()).unwrap_or(0);
-        self.push_bytes(bytes.slice_to(n))
+        self.push_bytes(&bytes[..n])
     }
     fn emit_str(&mut self, v: &str) -> CsvResult<()> {
         self.push_string(v)
@@ -153,7 +153,7 @@ impl serialize::Encoder for Encoded {
         unimplemented!()
     }
     fn emit_map_elt_key<F>(&mut self, _: usize, _: F) -> CsvResult<()>
-                       where F: FnMut(&mut Encoded) -> CsvResult<()> {
+                       where F: FnOnce(&mut Encoded) -> CsvResult<()> {
         unimplemented!()
     }
     fn emit_map_elt_val<F>(&mut self, _: usize, _: F) -> CsvResult<()>

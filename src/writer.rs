@@ -431,7 +431,7 @@ impl<W: io::Writer> Writer<W> {
                     break
                 }
                 Some(next_quote) => {
-                    buf.push_all(s.slice_to(next_quote));
+                    buf.push_all(&s[..next_quote]);
                     if self.double_quote {
                         buf.push(self.quote);
                         buf.push(self.quote);
@@ -439,7 +439,7 @@ impl<W: io::Writer> Writer<W> {
                         buf.push(self.escape);
                         buf.push(self.quote);
                     }
-                    s = s.slice_from(next_quote + 1);
+                    s = &s[next_quote + 1..];
                 }
             }
         }
