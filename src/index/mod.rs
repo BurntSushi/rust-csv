@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use std::error::FromError;
-use std::io;
+use std::old_io as io;
 
 use {CsvResult, Error, Reader, NextField};
 
@@ -52,7 +52,7 @@ impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
 pub fn create<R: io::Reader + io::Seek, W: io::Writer>
              (mut csv_rdr: Reader<R>, mut idx_wtr: W) -> CsvResult<()> {
     // Seek to the beginning so that we get everything.
-    try!(csv_rdr.seek(0, ::std::io::SeekSet));
+    try!(csv_rdr.seek(0, io::SeekSet));
     let mut count = 0u64;
     while !csv_rdr.done() {
         try!(idx_wtr.write_be_u64(csv_rdr.byte_offset()));

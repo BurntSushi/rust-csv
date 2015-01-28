@@ -188,7 +188,7 @@ extern crate "rustc-serialize" as rustc_serialize;
 use std::error::Error as StdError;
 use std::error::FromError;
 use std::fmt;
-use std::io;
+use std::old_io as io;
 
 pub use bytestr::{BorrowBytes, ByteString, IntoVector, StrAllocating};
 pub use encoder::Encoded;

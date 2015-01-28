@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Display};
-use std::io::{self, ByRefReader};
-use std::io::Reader as IoReader;
+use std::old_io as io;
+use std::old_io::ByRefReader;
+use std::old_io::Reader as IoReader;
 use stdtest::Bencher;
 
 use Reader;

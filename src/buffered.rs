@@ -2,7 +2,7 @@
 // method: `clear`. It resets the buffer to be empty (thereby losing any
 // unread data).
 use std::cmp;
-use std::io::{Reader, Buffer, IoResult};
+use std::old_io::{Reader, Buffer, IoResult};
 use std::slice;
 
 static DEFAULT_BUF_SIZE: usize = 1024 * 64;

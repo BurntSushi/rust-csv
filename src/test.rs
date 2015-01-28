@@ -1,7 +1,8 @@
 use std::borrow::ToOwned;
-use std::io::ByRefReader;
-use std::io::Reader as IoReader;
-use std::io::Writer as IoWriter;
+use std::old_io as io;
+use std::old_io::ByRefReader;
+use std::old_io::Reader as IoReader;
+use std::old_io::Writer as IoWriter;
 use {
     Reader, Writer, ByteString, CsvResult,
     IntoVector, RecordTerminator, QuoteStyle,
@@ -391,8 +392,6 @@ fn invalid_utf8() {
 
 #[test]
 fn seeking() {
-    use std::io;
-
     let data = "1,2\n3,4\n5,6\n";
     let mut buf = io::MemReader::new(data.as_bytes().to_vec());
 

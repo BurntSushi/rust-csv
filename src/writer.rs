@@ -1,5 +1,5 @@
 use std::error::FromError;
-use std::io;
+use std::old_io as io;
 use std::str;
 
 use rustc_serialize::Encodable;
@@ -357,7 +357,7 @@ impl<W: io::Writer> Writer<W> {
     }
 
     fn w_bytes(&mut self, s: &[u8]) -> CsvResult<()> {
-        self.buf.write(s).map_err(Error::Io)
+        self.buf.write_all(s).map_err(Error::Io)
     }
 
     fn w_user_bytes(&mut self, s: &[u8]) -> CsvResult<()> {

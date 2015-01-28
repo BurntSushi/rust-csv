@@ -1,4 +1,4 @@
-use std::io::{self, MemReader};
+use std::old_io as io;
 
 use rustc_serialize::Decodable;
 
@@ -167,15 +167,16 @@ impl Reader<io::IoResult<io::File>> {
     }
 }
 
-impl Reader<MemReader> {
+impl Reader<io::MemReader> {
     /// Creates a CSV reader for an in memory string buffer.
-    pub fn from_string<S>(s: S) -> Reader<MemReader> where S: StrAllocating {
+    pub fn from_string<S>(s: S) -> Reader<io::MemReader>
+            where S: StrAllocating {
         Reader::from_bytes(s.into_str().into_bytes())
     }
 
     /// Creates a CSV reader for an in memory buffer of bytes.
-    pub fn from_bytes<V: IntoVector<u8>>(bytes: V) -> Reader<MemReader> {
-        Reader::from_reader(MemReader::new(bytes.into_vec()))
+    pub fn from_bytes<V: IntoVector<u8>>(bytes: V) -> Reader<io::MemReader> {
+        Reader::from_reader(io::MemReader::new(bytes.into_vec()))
     }
 }
 
