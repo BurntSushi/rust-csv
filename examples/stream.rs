@@ -1,4 +1,4 @@
-#![allow(unstable)]
+#![feature(core, io, std_misc)]
 
 extern crate csv;
 

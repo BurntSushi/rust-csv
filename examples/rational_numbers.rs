@@ -1,7 +1,7 @@
 //! This example shows how to write your own custom implementation of
 //! `Decodable` to parse rational numbers.
 
-#![allow(unstable)]
+#![feature(collections, core)]
 
 extern crate csv;
 extern crate regex;
@@ -12,7 +12,7 @@ use std::str;
 use regex::Regex;
 use rustc_serialize::{Decodable, Decoder};
 
-#[derive(Show)]
+#[derive(Debug)]
 struct Rational {
     numerator: i64,
     denominator: i64,

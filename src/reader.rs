@@ -321,8 +321,6 @@ impl<R: io::Reader> Reader<R> {
     /// ### Example
     ///
     /// ```rust
-    /// #![allow(unstable)]
-    ///
     /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3");
     ///
     /// let headers1 = rdr.headers().unwrap();
@@ -340,8 +338,6 @@ impl<R: io::Reader> Reader<R> {
     /// returned in this example include the first record:
     ///
     /// ```rust
-    /// #![allow(unstable)]
-    ///
     /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3")
     ///                           .has_headers(false);
     ///

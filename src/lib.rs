@@ -176,13 +176,13 @@
 #![crate_name = "csv"]
 #![doc(html_root_url = "http://burntsushi.net/rustdoc/csv")]
 
-#![experimental]
 #![deny(missing_docs)]
-#![allow(unstable)]
+#![allow(unused_features)] // some are used in `test` but not in library
 
-extern crate rand;
+#![feature(collections, core, hash, io, path, std_misc, test, unicode)]
+
+#[cfg(test)]
 extern crate "test" as stdtest;
-
 extern crate "rustc-serialize" as rustc_serialize;
 
 use std::error::Error as StdError;
