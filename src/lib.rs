@@ -219,7 +219,7 @@ mod test;
 pub type CsvResult<T> = Result<T, Error>;
 
 /// An error produced by an operation on CSV data.
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub enum Error {
     /// An error reported by the type-based encoder.
     Encode(String),
@@ -244,7 +244,7 @@ impl Error {
 }
 
 /// A description of a CSV parse error.
-#[derive(Clone, Copy, Show)]
+#[derive(Clone, Copy, Debug)]
 pub struct ParseError {
     /// The line number of the parse error.
     pub line: u64,
@@ -262,7 +262,7 @@ pub struct ParseError {
 ///
 /// If and when a "strict" mode is added to this crate, this list of errors
 /// will expand.
-#[derive(Clone, Copy, Show)]
+#[derive(Clone, Copy, Debug)]
 pub enum ParseErrorKind {
     /// This error occurs when a record has a different number of fields
     /// than the first record parsed.
