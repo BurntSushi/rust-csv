@@ -236,7 +236,7 @@ parses_to!(flexible_rows2, "a,b\nx", vec![vec!["a", "b"], vec!["x"]],
 fail_parses_to!(nonflexible, "a\nx,y", vec![]);
 fail_parses_to!(nonflexible2, "a,b\nx", vec![]);
 
-#[derive(RustcDecodable, RustcEncodable, Show, PartialEq, Eq)]
+#[derive(Debug, RustcDecodable, RustcEncodable, PartialEq, Eq)]
 enum Val { Unsigned(usize), Signed(isize), Bool(bool) }
 
 decodes_to!(decode_int, "1", (usize,), vec![(1us,)]);
