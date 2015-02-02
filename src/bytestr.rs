@@ -179,10 +179,10 @@ impl ops::Deref for ByteString {
     }
 }
 
-impl ops::Index<ops::FullRange> for ByteString {
+impl ops::Index<ops::RangeFull> for ByteString {
     type Output = [u8];
 
-    fn index<'a>(&'a self, _: &ops::FullRange) -> &'a [u8] {
+    fn index<'a>(&'a self, _: &ops::RangeFull) -> &'a [u8] {
         &**self
     }
 }
