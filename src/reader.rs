@@ -230,10 +230,10 @@ impl<R: io::Reader> Reader<R> {
     /// # extern crate csv;
     /// # fn main() {
     ///
-    /// #[derive(RustcDecodable, PartialEq, Show)]
+    /// #[derive(RustcDecodable, PartialEq, Debug)]
     /// struct MyUint(u32);
     ///
-    /// #[derive(RustcDecodable, PartialEq, Show)]
+    /// #[derive(RustcDecodable, PartialEq, Debug)]
     /// enum Number { Integer(i64), Float(f64) }
     ///
     /// #[derive(RustcDecodable)]
@@ -810,7 +810,7 @@ struct ParseMachine {
     double_quote: bool,
 }
 
-#[derive(Copy, Eq, PartialEq, Show)]
+#[derive(Copy, Eq, PartialEq, Debug)]
 enum ParseState {
     StartRecord,
     EndRecord,
