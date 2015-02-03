@@ -239,7 +239,7 @@ impl<W: io::Writer> Writer<W> {
     /// Writes a record of results. If any of the results resolve to an error,
     /// then writing stops and that error is returned.
     #[doc(hidden)]
-    pub fn write_iter<'a, I, F>(&mut self, mut r: I) -> CsvResult<()>
+    pub fn write_iter<'a, I, F>(&mut self, r: I) -> CsvResult<()>
             where I: Iterator<Item=CsvResult<F>>, F: BorrowBytes {
         let delim = self.delimiter;
         let mut count = 0;
