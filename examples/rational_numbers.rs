@@ -31,19 +31,18 @@ impl Decodable for Rational {
 }
 
 impl str::FromStr for Rational {
-    type Err = csv::Error;
+    type Err = String;
 
     /// Parse a string into a Rational. Allow for the possibility of whitespace
     /// around `/`.
-    fn from_str(s: &str) -> Result<Rational, csv::Error> {
+    fn from_str(s: &str) -> Result<Rational, String> {
         let re = Regex::new(r"^([0-9]+)\s*/\s*([0-9]+)$").unwrap();
-        match re.captures(s).map(|caps| Rational {
-            numerator: caps.at(1).unwrap().parse().unwrap(),
-            denominator: caps.at(2).unwrap().parse().unwrap(),
-        }) {
-            Some(r) => Ok(r),
-            None => Err(csv::Error::Encode(format!("Failed to parse Rational {}", s))),
-        }
+        re.captures(s)
+          .map(|caps| Rational {
+              numerator: caps.at(1).unwrap().parse().unwrap(),
+              denominator: caps.at(2).unwrap().parse().unwrap(),
+          })
+          .ok_or(format!("Could not parse '{}' as a rational.", s))
     }
 }
 
