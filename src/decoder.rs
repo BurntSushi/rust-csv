@@ -53,8 +53,8 @@ impl Decoded {
         let s = try!(self.pop_string());
         let s = s.trim();
         match FromStr::from_str(s) {
-            Some(t) => Ok(t),
-            None => self.err(format!("Failed converting '{}' from str.", s)),
+            Ok(t) => Ok(t),
+            Err(_) => self.err(format!("Failed converting '{}' from str.", s)),
         }
     }
 
