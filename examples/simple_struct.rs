@@ -1,9 +1,9 @@
-#![feature(path)]
+#![feature(core, path)]
 
 extern crate csv;
 extern crate "rustc-serialize" as rustc_serialize;
 
-use std::path::Path;
+use std::old_path::Path;
 
 #[derive(RustcDecodable)]
 struct Record {

@@ -1,8 +1,8 @@
-#![feature(path)]
+#![feature(core, path)]
 
 extern crate csv;
 
-use std::path::Path;
+use std::old_path::Path;
 
 fn main() {
     let fp = &Path::new("./data/simple.csv");

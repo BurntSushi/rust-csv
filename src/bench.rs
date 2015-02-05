@@ -13,7 +13,7 @@ fn ordie<T, E: Debug+Display>(r: Result<T, E>) -> T {
 }
 
 fn file_to_mem(fp: &str) -> io::MemReader {
-    use std::path::Path;
+    use std::old_path::Path;
 
     let mut f = ordie(io::File::open(&Path::new(fp)));
     let bs = ordie(f.read_to_end());

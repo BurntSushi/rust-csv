@@ -3,7 +3,7 @@
 extern crate csv;
 extern crate "rustc-serialize" as rustc_serialize;
 
-use std::path::Path;
+use std::old_path::Path;
 
 #[allow(dead_code)]
 #[derive(RustcDecodable)]
