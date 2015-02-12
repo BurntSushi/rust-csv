@@ -1,4 +1,4 @@
-#![feature(core, path)]
+#![feature(path)]
 
 extern crate csv;
 
