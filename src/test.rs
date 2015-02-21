@@ -239,8 +239,8 @@ fail_parses_to!(nonflexible2, "a,b\nx", vec![]);
 #[derive(Debug, RustcDecodable, RustcEncodable, PartialEq, Eq)]
 enum Val { Unsigned(usize), Signed(isize), Bool(bool) }
 
-decodes_to!(decode_int, "1", (usize,), vec![(1us,)]);
-decodes_to!(decode_many_int, "1,2", (usize, i16), vec![(1us, 2i16)]);
+decodes_to!(decode_int, "1", (usize,), vec![(1usize,)]);
+decodes_to!(decode_many_int, "1,2", (usize, i16), vec![(1usize, 2i16)]);
 decodes_to!(decode_float, "1,1.0,1.5",
             (f64, f64, f64), vec![(1f64, 1.0, 1.5)]);
 decodes_to!(decode_char, "a", (char,), vec![('a',)]);
@@ -256,7 +256,7 @@ decodes_to!(decode_val, "false,-5,5", (Val, Val, Val),
 decodes_to!(decode_opt_val, "1.0", (Option<Val>,), vec![(None,)]);
 
 decodes_to!(decode_tail, "abc,1,2,3,4", (String, Vec<usize>),
-            vec![("abc".to_owned(), vec![1us, 2, 3, 4])]);
+            vec![("abc".to_owned(), vec![1usize, 2, 3, 4])]);
 
 writes_as!(wtr_one_record_one_field, vec![vec!["a"]], "a\n");
 writes_as!(wtr_one_record_many_field, vec![vec!["a", "b"]], "a,b\n");
@@ -317,8 +317,8 @@ fail_writes_as!(wtr_noflexible2, vec![vec!["a", "b"], vec!["a"]], "a,b\na\n");
 fail_writes_as!(wtr_never_quote_needs_quotes, vec![vec![","]], "\",\"",
                 |&: wtr: Writer<_>| wtr.quote_style(QuoteStyle::Never));
 
-encodes_as!(encode_int, vec![(1us,)], "1\n");
-encodes_as!(encode_many_int, vec![(1us, 2i16)], "1,2\n");
+encodes_as!(encode_int, vec![(1usize,)], "1\n");
+encodes_as!(encode_many_int, vec![(1usize, 2i16)], "1,2\n");
 encodes_as!(encode_float, vec![(1f64, 1.0f64, 1.5f64)], "1,1,1.5\n");
 encodes_as!(encode_char, vec![('a',)], "a\n");
 encodes_as!(encode_none, vec![(None::<bool>,)], "\"\"\n");

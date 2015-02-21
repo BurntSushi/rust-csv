@@ -179,7 +179,7 @@
 #![deny(missing_docs)]
 #![allow(unused_features)] // some are used in `test` but not in library
 
-#![feature(collections, core, hash, io, path, std_misc, test, unicode)]
+#![feature(collections, core, hash, old_io, old_path, std_misc, test, unicode)]
 
 #[cfg(test)]
 extern crate "test" as stdtest;

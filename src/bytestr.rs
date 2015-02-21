@@ -1,7 +1,7 @@
-use std::borrow::{BorrowFrom, Cow, IntoCow, ToOwned};
+use std::borrow::{Borrow, Cow, ToOwned};
 use std::fmt;
 use std::hash;
-use std::iter::FromIterator;
+use std::iter::{FromIterator, IntoIterator};
 use std::ops;
 
 /// A trait that encapsulates a `Vec<T>` or a `&[T]`.
@@ -59,8 +59,8 @@ impl BorrowBytes for [u8] {
     fn borrow_bytes(&self) -> &[u8] { self }
 }
 
-impl<'a, T, B: ?Sized> BorrowBytes for Cow<'a, T, B>
-        where T: BorrowBytes, B: BorrowBytes + ToOwned<T> {
+impl<'a, B: ?Sized> BorrowBytes for Cow<'a, B>
+        where B: BorrowBytes + ToOwned, <B as ToOwned>::Owned: BorrowBytes {
     fn borrow_bytes(&self) -> &[u8] {
         match *self {
             Cow::Borrowed(v) => v.borrow_bytes(),
@@ -211,8 +211,8 @@ impl ops::Index<ops::Range<usize>> for ByteString {
     }
 }
 
-impl<H: hash::Hasher + hash::Writer> hash::Hash<H> for ByteString {
-    fn hash(&self, hasher: &mut H) {
+impl hash::Hash for ByteString {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
         // WHOA. This used to be `(&*self).hash(hasher);`, but it introduced
         // a *major* performance regression that got fixed by using
         // `self.as_slice().hash(hasher);` instead. I didn't do any profiling,
@@ -222,7 +222,7 @@ impl<H: hash::Hasher + hash::Writer> hash::Hash<H> for ByteString {
         // TODO: Try `(&*self)` again (maybe when 1.0 hits). If the regression
         // remains, create a smaller reproducible example and report it as a
         // bug.
-        self.0.as_slice().hash(hasher);
+        self.0.as_slice().hash(state);
     }
 }
 
@@ -233,21 +233,17 @@ impl<S: Str> PartialEq<S> for ByteString {
 }
 
 impl FromIterator<u8> for ByteString {
-    fn from_iter<I: Iterator<Item=u8>>(it: I) -> ByteString {
-        ByteString::from_bytes(it.collect::<Vec<_>>())
+    fn from_iter<I: IntoIterator<Item=u8>>(it: I) -> ByteString {
+        ByteString::from_bytes(it.into_iter().collect::<Vec<_>>())
     }
 }
 
-impl BorrowFrom<ByteString> for [u8] {
-    fn borrow_from(owned: &ByteString) -> &[u8] { &*owned.0 }
+impl Borrow<[u8]> for ByteString {
+    fn borrow(&self) -> &[u8] { &*self.0 }
 }
 
-impl ToOwned<ByteString> for [u8] {
-    fn to_owned(&self) -> ByteString { ByteString(self.to_vec()) }
-}
-
-impl<'a> IntoCow<'a, ByteString, [u8]> for ByteString {
-    fn into_cow(self) -> Cow<'a, ByteString, [u8]> {
-        Cow::Owned(self)
-    }
-}
+// impl<'a> IntoCow<'a, [u8]> for ByteString {
+    // fn into_cow(self) -> Cow<'a, [u8]> {
+        // Cow::Owned(self)
+    // }
+// }

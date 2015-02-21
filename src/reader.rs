@@ -285,7 +285,10 @@ impl<R: io::Reader> Reader<R> {
     /// in the `serialize` crate.)
     /// ```
     pub fn decode<'a, D: Decodable>(&'a mut self) -> DecodedRecords<'a, R, D> {
-        DecodedRecords { p: self.byte_records() }
+        DecodedRecords {
+            p: self.byte_records(),
+            _phantom: ::std::marker::PhantomData,
+        }
     }
 
     /// Returns an iterator of records in the CSV data where each field is
@@ -994,6 +997,7 @@ impl<'a, R> Iterator for UnsafeByteFields<'a, R> where R: io::Reader {
 /// The `D` type parameter refers to the decoded type.
 pub struct DecodedRecords<'a, R: 'a, D> {
     p: ByteRecords<'a, R>,
+    _phantom: ::std::marker::PhantomData<D>,
 }
 
 impl<'a, R, D> Iterator for DecodedRecords<'a, R, D>

@@ -1,15 +1,15 @@
-#![feature(core, io, std_misc)]
+#![feature(core, old_io, std_misc)]
 
 extern crate csv;
 
 use std::sync::mpsc::channel;
 use std::old_io as io;
-use std::thread::Thread;
+use std::thread;
 use std::time::Duration;
 
 fn main() {
     let (send, recv) = channel();
-    let _ = Thread::spawn(move || {
+    let _ = thread::spawn(move || {
         let w = io::ChanWriter::new(send);
         let mut enc = csv::Writer::from_writer(w);
         for x in range(1, 6) {

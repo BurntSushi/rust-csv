@@ -1,4 +1,4 @@
-#![feature(path)]
+#![feature(old_path)]
 
 extern crate csv;
 extern crate "rustc-serialize" as rustc_serialize;
