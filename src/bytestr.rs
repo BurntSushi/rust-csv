@@ -164,13 +164,6 @@ impl fmt::Debug for ByteString {
     }
 }
 
-impl AsSlice<u8> for ByteString {
-    #[inline]
-    fn as_slice<'a>(&'a self) -> &'a [u8] {
-        self.as_bytes()
-    }
-}
-
 impl ops::Deref for ByteString {
     type Target = [u8];
 
@@ -222,13 +215,13 @@ impl hash::Hash for ByteString {
         // TODO: Try `(&*self)` again (maybe when 1.0 hits). If the regression
         // remains, create a smaller reproducible example and report it as a
         // bug.
-        self.0.as_slice().hash(state);
+        self.0.hash(state);
     }
 }
 
-impl<S: Str> PartialEq<S> for ByteString {
+impl<S> PartialEq<S> for ByteString where S: ops::Deref<Target=str> {
     fn eq(&self, other: &S) -> bool {
-        self.as_bytes() == other.as_slice().as_bytes()
+        self.as_bytes() == other.as_bytes()
     }
 }
 
@@ -241,9 +234,3 @@ impl FromIterator<u8> for ByteString {
 impl Borrow<[u8]> for ByteString {
     fn borrow(&self) -> &[u8] { &*self.0 }
 }
-
-// impl<'a> IntoCow<'a, [u8]> for ByteString {
-    // fn into_cow(self) -> Cow<'a, [u8]> {
-        // Cow::Owned(self)
-    // }
-// }

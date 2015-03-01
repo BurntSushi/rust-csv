@@ -330,7 +330,7 @@ impl<R: io::Reader> Reader<R> {
     /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
     /// let headers2 = rdr.headers().unwrap();
     ///
-    /// let s = |&: s: &'static str| s.to_string();
+    /// let s = |s: &'static str| s.to_string();
     /// assert_eq!(headers1, headers2);
     /// assert_eq!(headers1, vec![s("a"), s("b"), s("c")]);
     /// assert_eq!(rows.len(), 1);
@@ -348,7 +348,7 @@ impl<R: io::Reader> Reader<R> {
     /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
     /// let headers2 = rdr.headers().unwrap();
     ///
-    /// let s = |&: s: &'static str| s.to_string();
+    /// let s = |s: &'static str| s.to_string();
     /// assert_eq!(headers1, headers2);
     /// assert_eq!(headers1, vec![s("a"), s("b"), s("c")]);
     ///

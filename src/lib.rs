@@ -179,10 +179,10 @@
 #![deny(missing_docs)]
 #![allow(unused_features)] // some are used in `test` but not in library
 
-#![feature(collections, core, hash, old_io, old_path, std_misc, test, unicode)]
+#![feature(collections, core, old_io, old_path, std_misc, test, unicode)]
 
 #[cfg(test)]
-extern crate "test" as stdtest;
+extern crate test;
 extern crate "rustc-serialize" as rustc_serialize;
 
 use std::error::Error as StdError;
@@ -212,7 +212,7 @@ mod writer;
 #[cfg(test)]
 mod bench;
 #[cfg(test)]
-mod test;
+mod tests;
 
 /// A convenience type for representing the result of most CSV reader/writer
 /// operations.

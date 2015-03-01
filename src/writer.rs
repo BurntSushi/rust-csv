@@ -393,7 +393,7 @@ impl<W: io::Writer> Writer<W> {
     }
 
     fn should_quote(&self, field: &[u8]) -> CsvResult<bool> {
-        let needs = |&:| field.iter().any(|&b| self.byte_needs_quotes(b));
+        let needs = || field.iter().any(|&b| self.byte_needs_quotes(b));
         match self.quote_style {
             QuoteStyle::Always => Ok(true),
             QuoteStyle::Necessary => Ok(needs()),
@@ -427,11 +427,11 @@ impl<W: io::Writer> Writer<W> {
         loop {
             match s.position_elem(&self.quote) {
                 None => {
-                    buf.push_all(s);
+                    buf.extend(s.iter().map(|&x|x));
                     break
                 }
                 Some(next_quote) => {
-                    buf.push_all(&s[..next_quote]);
+                    buf.extend(s[..next_quote].iter().map(|&x|x));
                     if self.double_quote {
                         buf.push(self.quote);
                         buf.push(self.quote);
