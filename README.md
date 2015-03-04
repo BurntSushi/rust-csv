@@ -28,12 +28,8 @@ strings):
 ```rust
 extern crate csv;
 
-use std::path::Path;
-
 fn main() {
-    let fp = &Path::new("./data/simple.csv");
-    let mut rdr = csv::Reader::from_file(fp);
-
+    let mut rdr = csv::Reader::from_file("./data/simple.csv").unwrap();
     for record in rdr.decode() {
         let (s1, s2, dist): (String, String, usize) = record.unwrap();
         println!("({}, {}): {}", s1, s2, dist);
@@ -47,8 +43,6 @@ Don't like tuples? That's fine. Use a struct instead:
 extern crate csv;
 extern crate "rustc-serialize" as rustc_serialize;
 
-use std::path::Path;
-
 #[derive(RustcDecodable)]
 struct Record {
     s1: String,
@@ -57,9 +51,7 @@ struct Record {
 }
 
 fn main() {
-    let fp = &Path::new("./data/simple.csv");
-    let mut rdr = csv::Reader::from_file(fp);
-
+    let mut rdr = csv::Reader::from_file("./data/simple.csv").unwrap();
     for record in rdr.decode() {
         let record: Record = record.unwrap();
         println!("({}, {}): {}", record.s1, record.s2, record.dist);

@@ -9,9 +9,7 @@ struct Record {
 }
 
 fn main() {
-    let fp = "./data/simple.csv";
-    let mut rdr = csv::Reader::from_file(fp).unwrap();
-
+    let mut rdr = csv::Reader::from_file("./data/simple.csv").unwrap();
     for record in rdr.decode() {
         let record: Record = record.unwrap();
         println!("({}, {}): {}", record.s1, record.s2, record.dist);
