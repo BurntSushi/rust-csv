@@ -1,11 +1,8 @@
-use std::borrow::ToOwned;
-use std::old_io as io;
-use std::old_io::ByRefReader;
-use std::old_io::Reader as IoReader;
-use std::old_io::Writer as IoWriter;
+use std::borrow::{IntoCow, ToOwned};
+use std::io::{self, ReadExt, Seek, Write};
 use {
-    Reader, Writer, ByteString, CsvResult,
-    IntoVector, RecordTerminator, QuoteStyle,
+    Reader, Writer, ByteString, Result,
+    RecordTerminator, QuoteStyle,
 };
 
 fn assert_svec_eq<S: Str, T: Str>(got: Vec<Vec<S>>, expected: Vec<Vec<T>>) {
@@ -38,7 +35,7 @@ macro_rules! parses_to {
             let mut rdr = Reader::from_string($csv).has_headers(false);
             rdr = $config(rdr);
             let rows = rdr.records()
-                          .collect::<Result<Vec<Vec<String>>, _>>()
+                          .collect::<Result<Vec<Vec<String>>>>()
                           .unwrap();
             assert_svec_eq::<String, &str>(rows, $vec);
         }
@@ -56,7 +53,7 @@ macro_rules! fail_parses_to {
             let mut rdr = Reader::from_string($csv).has_headers(false);
             rdr = $config(rdr);
             let rows = rdr.records()
-                          .collect::<Result<Vec<Vec<String>>, _>>()
+                          .collect::<Result<Vec<Vec<String>>>>()
                           .unwrap();
             assert_svec_eq::<String, &str>(rows, $vec);
         }
@@ -73,7 +70,7 @@ macro_rules! decodes_to {
             let mut rdr = Reader::from_string($csv)
                                  .has_headers($headers);
             let rows = rdr.decode()
-                          .collect::<Result<Vec<$ty>, _>>()
+                          .collect::<Result<Vec<$ty>>>()
                           .unwrap();
             assert_eq!(rows, $vec);
         }
@@ -331,7 +328,7 @@ encodes_as!(encode_val,
 fn no_headers_no_skip_one_record() {
     let mut d = Reader::from_string("a,b").has_headers(false);
     d.headers().unwrap();
-    let rows: Vec<CsvResult<Vec<String>>> = d.records().collect();
+    let rows: Vec<Result<Vec<String>>> = d.records().collect();
     assert_eq!(rows.len(), 1);
 }
 
@@ -346,7 +343,7 @@ fn no_headers_first_record() {
 fn no_headers_no_skip() {
     let mut d = Reader::from_string("a,b\nc,d").has_headers(false);
     d.headers().unwrap();
-    let rows: Vec<CsvResult<Vec<String>>> = d.records().collect();
+    let rows: Vec<Result<Vec<String>>> = d.records().collect();
     assert_eq!(rows.len(), 2);
 }
 
@@ -365,7 +362,7 @@ fn headers_eof() {
     assert!(d.done());
 }
 
-fn bytes<S: IntoVector<u8>>(bs: S) -> ByteString {
+fn bytes<'a, S>(bs: S) -> ByteString where S: IntoCow<'a, [u8]> {
     ByteString::from_bytes(bs)
 }
 
@@ -393,20 +390,20 @@ fn invalid_utf8() {
 #[test]
 fn seeking() {
     let data = "1,2\n3,4\n5,6\n";
-    let mut buf = io::MemReader::new(data.as_bytes().to_vec());
+    let mut buf = io::Cursor::new(data.as_bytes().to_vec());
 
     {
         let mut d = Reader::from_reader(buf.by_ref()).has_headers(false);
         let vals =
-            d.decode().collect::<Result<Vec<(usize, usize)>, _>>().unwrap();
+            d.decode().collect::<Result<Vec<(usize, usize)>>>().unwrap();
         assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
     }
 
-    buf.seek(0, io::SeekSet).unwrap();
+    buf.seek(io::SeekFrom::Start(0)).unwrap();
     {
         let mut d = Reader::from_reader(buf.by_ref()).has_headers(false);
         let vals =
-            d.decode().collect::<Result<Vec<(usize, usize)>, _>>().unwrap();
+            d.decode().collect::<Result<Vec<(usize, usize)>>>().unwrap();
         assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
     }
 }
@@ -427,7 +424,15 @@ fn raw_access() {
 fn raw_unsafe_access() {
     let mut rdr = Reader::from_string("1,2");
     let fields = unsafe {
-        rdr.byte_fields().collect::<Result<Vec<_>, _>>().unwrap()
+        rdr.byte_fields().collect::<Result<Vec<_>>>().unwrap()
     };
     assert_eq!(fields[0], b"1");
+}
+
+#[test]
+fn scratch() {
+    let mut rdr = Reader::from_string("1").has_headers(false);
+    for row in rdr.records() {
+        let _ = writeln!(&mut io::stderr(), "{:?}", row);
+    }
 }

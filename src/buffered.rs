@@ -1,79 +1,125 @@
-// This is a copy of the `std::io::BufferedReader` with one additional
+// This is a copy of the `std::io::BufReader` with one additional
 // method: `clear`. It resets the buffer to be empty (thereby losing any
 // unread data).
 use std::cmp;
-use std::old_io::{Reader, Buffer, IoResult};
+use std::fmt;
+use std::io::{self, BufRead};
 use std::slice;
 
 static DEFAULT_BUF_SIZE: usize = 1024 * 64;
 
-pub struct BufferedReader<R> {
+/// Wraps a `Read` and buffers input from it
+///
+/// It can be excessively inefficient to work directly with a `Read` instance.
+/// For example, every call to `read` on `TcpStream` results in a system call.
+/// A `BufReader` performs large, infrequent reads on the underlying `Read`
+/// and maintains an in-memory buffer of the results.
+pub struct BufReader<R> {
     inner: R,
-    buf: Vec<u8>,
-    pos: usize,
-    cap: usize,
+    buf: io::Cursor<Vec<u8>>,
 }
 
-impl<R: Reader> BufferedReader<R> {
-    /// Creates a new `BufferedReader` with the specified buffer capacity
-    pub fn with_capacity(cap: usize, inner: R) -> BufferedReader<R> {
-        // It's *much* faster to create an uninitialized buffer than it is to
-        // fill everything in with 0. This buffer is entirely an implementation
-        // detail and is never exposed, so we're safe to not initialize
-        // everything up-front. This allows creation of BufferedReader
-        // instances to be very cheap (large mallocs are not nearly as
-        // expensive as large callocs).
-        let mut buf = Vec::with_capacity(cap);
-        unsafe { buf.set_len(cap); }
-        BufferedReader {
+impl<R: io::Read> BufReader<R> {
+    /// Creates a new `BufReader` with a default buffer capacity
+    pub fn new(inner: R) -> BufReader<R> {
+        BufReader::with_capacity(DEFAULT_BUF_SIZE, inner)
+    }
+
+    /// Creates a new `BufReader` with the specified buffer capacity
+    pub fn with_capacity(cap: usize, inner: R) -> BufReader<R> {
+        BufReader {
             inner: inner,
-            buf: buf,
-            pos: 0,
-            cap: 0,
+            buf: io::Cursor::new(Vec::with_capacity(cap)),
         }
     }
 
-    pub fn new(inner: R) -> BufferedReader<R> {
-        BufferedReader::with_capacity(DEFAULT_BUF_SIZE, inner)
-    }
+    /// Gets a reference to the underlying reader.
+    #[allow(dead_code)] pub fn get_ref(&self) -> &R { &self.inner }
 
+    /// Gets a mutable reference to the underlying reader.
+    ///
+    /// # Warning
+    ///
+    /// It is inadvisable to directly read from the underlying reader.
     pub fn get_mut(&mut self) -> &mut R { &mut self.inner }
 
+    /// Unwraps this `BufReader`, returning the underlying reader.
+    ///
+    /// Note that any leftover data in the internal buffer is lost.
+    #[allow(dead_code)] pub fn into_inner(self) -> R { self.inner }
+
     pub fn clear(&mut self) {
-        let cap = self.buf.capacity();
-        unsafe { self.buf.set_len(cap); }
-        self.pos = 0;
-        self.cap = 0;
+        self.buf.set_position(0);
+        self.buf.get_mut().truncate(0);
     }
 }
 
-impl<R: Reader> Buffer for BufferedReader<R> {
-    fn fill_buf<'a>(&'a mut self) -> IoResult<&'a [u8]> {
-        if self.pos == self.cap {
-            self.cap = try!(self.inner.read(self.buf.as_mut_slice()));
-            self.pos = 0;
+impl<R: io::Read> io::Read for BufReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        // If we don't have any buffered data and we're doing a massive read
+        // (larger than our internal buffer), bypass our internal buffer
+        // entirely.
+        if self.buf.get_ref().len() == self.buf.position() as usize &&
+            buf.len() >= self.buf.get_ref().capacity() {
+            return self.inner.read(buf);
         }
-        Ok(&self.buf[self.pos..self.cap])
+        try!(self.fill_buf());
+        self.buf.read(buf)
+    }
+}
+
+impl<R: io::Read> io::BufRead for BufReader<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        // If we've reached the end of our internal buffer then we need to fetch
+        // some more data from the underlying reader.
+        if self.buf.position() as usize == self.buf.get_ref().len() {
+            self.buf.set_position(0);
+            let v = self.buf.get_mut();
+            v.truncate(0);
+            let inner = &mut self.inner;
+            try!(with_end_to_cap(v, |b| inner.read(b)));
+        }
+        self.buf.fill_buf()
     }
 
     fn consume(&mut self, amt: usize) {
-        self.pos += amt;
-        assert!(self.pos <= self.cap);
+        self.buf.consume(amt)
     }
 }
 
-impl<R: Reader> Reader for BufferedReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
-        if self.pos == self.cap && buf.len() >= self.buf.capacity() {
-            return self.inner.read(buf);
-        }
-        let nread = {
-            let available = try!(self.fill_buf());
-            let nread = cmp::min(available.len(), buf.len());
-            slice::bytes::copy_memory(buf, &available[..nread]);
-            nread
-        };
-        self.pos += nread;
-        Ok(nread)
+impl<R> fmt::Debug for BufReader<R> where R: fmt::Debug {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "BufReader {{ reader: {:?}, buffer: {}/{} }}",
+               self.inner, self.buf.position(), self.buf.get_ref().len())
+    }
+}
+
+// Acquires a slice of the vector `v` from its length to its capacity
+// (uninitialized data), reads into it, and then updates the length.
+//
+// This function is leveraged to efficiently read some bytes into a destination
+// vector without extra copying and taking advantage of the space that's already
+// in `v`.
+//
+// The buffer we're passing down, however, is pointing at uninitialized data
+// (the end of a `Vec`), and many operations will be *much* faster if we don't
+// have to zero it out. In order to prevent LLVM from generating an `undef`
+// value when reads happen from this uninitialized memory, we force LLVM to
+// think it's initialized by sending it through a black box. This should prevent
+// actual undefined behavior after optimizations.
+fn with_end_to_cap<F>(v: &mut Vec<u8>, f: F) -> io::Result<usize>
+        where F: FnOnce(&mut [u8]) -> io::Result<usize> {
+    unsafe {
+        let n = try!(f({
+            let base = v.as_mut_ptr().offset(v.len() as isize);
+            slice::from_raw_parts_mut(base, v.capacity() - v.len())
+        }));
+
+        // If the closure (typically a `read` implementation) reported that it
+        // read a larger number of bytes than the vector actually has, we need
+        // to be sure to clamp the vector to at most its capacity.
+        let new_len = cmp::min(v.capacity(), v.len() + n);
+        v.set_len(new_len);
+        return Ok(n);
     }
 }

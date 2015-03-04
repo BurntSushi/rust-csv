@@ -1,7 +1,6 @@
 use std::fmt::{Debug, Display};
-use std::old_io as io;
-use std::old_io::ByRefReader;
-use std::old_io::Reader as IoReader;
+use std::fs;
+use std::io::{self, Read, ReadExt, Seek};
 use test::Bencher;
 
 use Reader;
@@ -12,17 +11,16 @@ fn ordie<T, E: Debug+Display>(r: Result<T, E>) -> T {
     r.or_else(|e: E| -> Result<T, E> panic!(format!("{:?}", e))).unwrap()
 }
 
-fn file_to_mem(fp: &str) -> io::MemReader {
-    use std::old_path::Path;
-
-    let mut f = ordie(io::File::open(&Path::new(fp)));
-    let bs = ordie(f.read_to_end());
-    io::MemReader::new(bs)
+fn file_to_mem(fp: &str) -> io::Cursor<Vec<u8>> {
+    let mut f = ordie(fs::File::open(fp));
+    let mut bs = vec![];
+    ordie(f.read_to_end(&mut bs));
+    io::Cursor::new(bs)
 }
 
-fn reader<'a>(rdr: &'a mut io::MemReader)
-             -> Reader<io::RefReader<'a, io::MemReader>> {
-    let _ = ordie(rdr.seek(0, io::SeekSet));
+fn reader<'a>(rdr: &'a mut io::Cursor<Vec<u8>>)
+             -> Reader<&'a mut io::Cursor<Vec<u8>>> {
+    let _ = ordie(rdr.seek(io::SeekFrom::Start(0)));
     Reader::from_reader(rdr.by_ref())
 }
 

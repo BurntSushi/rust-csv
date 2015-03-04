@@ -1,12 +1,14 @@
+use std::borrow::IntoCow;
 use std::error::FromError;
-use std::old_io as io;
+use std::fs;
+use std::io::{self, Write};
+use std::path::AsPath;
 use std::str;
 
 use rustc_serialize::Encodable;
 
 use {
-    BorrowBytes, ByteString, CsvResult, Encoded, Error, RecordTerminator,
-    StrAllocating,
+    BorrowBytes, ByteString, Result, Encoded, Error, RecordTerminator,
 };
 
 /// The quoting style to use when writing CSV data.
@@ -65,7 +67,7 @@ pub enum QuoteStyle {
 /// }
 /// ```
 pub struct Writer<W> {
-    buf: io::BufferedWriter<W>,
+    buf: io::BufWriter<W>,
     delimiter: u8,
     record_terminator: RecordTerminator,
     flexible: bool,
@@ -76,23 +78,25 @@ pub struct Writer<W> {
     first_len: usize,
 }
 
-impl Writer<io::IoResult<io::File>> {
+impl Writer<fs::File> {
     /// Creates a new `Writer` that writes CSV data to the file path given.
     ///
     /// The file is created if it does not already exist and is truncated
     /// otherwise.
-    pub fn from_file(path: &Path) -> Writer<io::IoResult<io::File>> {
-        Writer::from_writer(io::File::create(path))
+    pub fn from_file<P: AsPath + ?Sized>
+                    (path: &P)
+                    -> Result<Writer<fs::File>> {
+        Ok(Writer::from_writer(try!(fs::File::create(path))))
     }
 }
 
 
-impl<W: io::Writer> Writer<W> {
-    /// Creates a new CSV writer that writes to the `io::Writer` given.
+impl<W: io::Write> Writer<W> {
+    /// Creates a new CSV writer that writes to the `io::Write` given.
     ///
     /// Note that the writer is buffered for you automatically.
     pub fn from_writer(w: W) -> Writer<W> {
-        Writer::from_buffer(io::BufferedWriter::new(w))
+        Writer::from_buffer(io::BufWriter::new(w))
     }
 
     /// Creates a new CSV writer that writes to the buffer given.
@@ -100,7 +104,7 @@ impl<W: io::Writer> Writer<W> {
     /// This lets you specify your own buffered writer (e.g., use a different
     /// capacity). All other constructors wrap the writer given in a buffer
     /// with default capacity.
-    pub fn from_buffer(buf: io::BufferedWriter<W>) -> Writer<W> {
+    pub fn from_buffer(buf: io::BufWriter<W>) -> Writer<W> {
         Writer {
             buf: buf,
             delimiter: b',',
@@ -145,7 +149,7 @@ impl Writer<Vec<u8>> {
     }
 }
 
-impl<W: io::Writer> Writer<W> {
+impl<W: io::Write> Writer<W> {
     /// Writes a record by encoding any `Encodable` value.
     ///
     /// This is the most convenient way to write CSV data. Most Rust types
@@ -186,7 +190,7 @@ impl<W: io::Writer> Writer<W> {
     ///            "sticker,mortals,\nbribed,personae,7\n");
     /// # }
     /// ```
-    pub fn encode<E>(&mut self, e: E) -> CsvResult<()> where E: Encodable {
+    pub fn encode<E>(&mut self, e: E) -> Result<()> where E: Encodable {
         let mut erecord = Encoded::new();
         try!(e.encode(&mut erecord));
         self.write(erecord.unwrap().into_iter())
@@ -231,7 +235,7 @@ impl<W: io::Writer> Writer<W> {
     ///
     /// assert_eq!(wtr.as_bytes(), b"\xff,\x00\n");
     /// ```
-    pub fn write<'a, I>(&mut self, r: I) -> CsvResult<()>
+    pub fn write<'a, I>(&mut self, r: I) -> Result<()>
             where I: Iterator, <I as Iterator>::Item: BorrowBytes {
         self.write_iter(r.map(|f| Ok(f)))
     }
@@ -239,8 +243,8 @@ impl<W: io::Writer> Writer<W> {
     /// Writes a record of results. If any of the results resolve to an error,
     /// then writing stops and that error is returned.
     #[doc(hidden)]
-    pub fn write_iter<'a, I, F>(&mut self, r: I) -> CsvResult<()>
-            where I: Iterator<Item=CsvResult<F>>, F: BorrowBytes {
+    pub fn write_iter<'a, I, F>(&mut self, r: I) -> Result<()>
+            where I: Iterator<Item=Result<F>>, F: BorrowBytes {
         let delim = self.delimiter;
         let mut count = 0;
         let mut last_len = 0;
@@ -266,12 +270,12 @@ impl<W: io::Writer> Writer<W> {
     }
 
     /// Flushes the underlying buffer.
-    pub fn flush(&mut self) -> CsvResult<()> {
+    pub fn flush(&mut self) -> Result<()> {
         self.buf.flush().map_err(FromError::from_error)
     }
 }
 
-impl<W: io::Writer> Writer<W> {
+impl<W: io::Write> Writer<W> {
     /// The delimiter to use when writing CSV data.
     ///
     /// Since the CSV writer is meant to be mostly encoding agnostic, you must
@@ -351,16 +355,16 @@ impl<W: io::Writer> Writer<W> {
     }
 }
 
-impl<W: io::Writer> Writer<W> {
-    fn err<S, T>(&self, msg: S) -> CsvResult<T> where S: StrAllocating {
-        Err(Error::Encode(msg.into_str()))
+impl<W: io::Write> Writer<W> {
+    fn err<'a, S, T>(&self, msg: S) -> Result<T> where S: IntoCow<'a, str> {
+        Err(Error::Encode(msg.into_cow().into_owned()))
     }
 
-    fn w_bytes(&mut self, s: &[u8]) -> CsvResult<()> {
+    fn w_bytes(&mut self, s: &[u8]) -> Result<()> {
         self.buf.write_all(s).map_err(Error::Io)
     }
 
-    fn w_user_bytes(&mut self, s: &[u8]) -> CsvResult<()> {
+    fn w_user_bytes(&mut self, s: &[u8]) -> Result<()> {
         if try!(self.should_quote(s)) {
             let quoted = self.quote_field(s);
             self.w_bytes(&*quoted)
@@ -369,14 +373,14 @@ impl<W: io::Writer> Writer<W> {
         }
     }
 
-    fn w_lineterm(&mut self) -> CsvResult<()> {
+    fn w_lineterm(&mut self) -> Result<()> {
         match self.record_terminator {
             RecordTerminator::CRLF => self.w_bytes(b"\r\n"),
             RecordTerminator::Any(b) => self.w_bytes(&[b]),
         }
     }
 
-    fn set_first_len(&mut self, cur_len: usize) -> CsvResult<()> {
+    fn set_first_len(&mut self, cur_len: usize) -> Result<()> {
         if cur_len == 0 {
             return self.err("Records must have length greater than 0.")
         }
@@ -392,7 +396,7 @@ impl<W: io::Writer> Writer<W> {
         Ok(())
     }
 
-    fn should_quote(&self, field: &[u8]) -> CsvResult<bool> {
+    fn should_quote(&self, field: &[u8]) -> Result<bool> {
         let needs = || field.iter().any(|&b| self.byte_needs_quotes(b));
         match self.quote_style {
             QuoteStyle::Always => Ok(true),

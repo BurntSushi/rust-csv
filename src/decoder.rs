@@ -1,10 +1,10 @@
-use std::borrow::ToOwned;
+use std::borrow::{IntoCow, ToOwned};
 use std::default::Default;
 use std::str::FromStr;
 
 use rustc_serialize as serialize;
 
-use {ByteString, CsvResult, Error, StrAllocating};
+use {ByteString, Result, Error};
 
 /// A record to be decoded.
 ///
@@ -31,7 +31,7 @@ impl Decoded {
 }
 
 impl Decoded {
-    fn pop(&mut self) -> CsvResult<ByteString> {
+    fn pop(&mut self) -> Result<ByteString> {
         self.popped += 1;
         match self.stack.pop() {
             None => self.err(format!(
@@ -42,14 +42,14 @@ impl Decoded {
         }
     }
 
-    fn pop_string(&mut self) -> CsvResult<String> {
+    fn pop_string(&mut self) -> Result<String> {
         {try!(self.pop())}.into_utf8_string().map_err(|bytes| {
             Error::Decode(
                 format!("Could not convert bytes '{:?}' to UTF-8.", bytes))
         })
     }
 
-    fn pop_from_str<T: FromStr + Default>(&mut self) -> CsvResult<T> {
+    fn pop_from_str<T: FromStr + Default>(&mut self) -> Result<T> {
         let s = try!(self.pop_string());
         let s = s.trim();
         match FromStr::from_str(s) {
@@ -66,8 +66,8 @@ impl Decoded {
         self.push(ByteString::from_bytes(s.into_bytes()));
     }
 
-    fn err<T, S>(&self, msg: S) -> CsvResult<T> where S: StrAllocating {
-        Err(Error::Decode(msg.into_str()))
+    fn err<'a, T, S>(&self, msg: S) -> Result<T> where S: IntoCow<'a, str> {
+        Err(Error::Decode(msg.into_cow().into_owned()))
     }
 }
 
@@ -77,21 +77,21 @@ impl serialize::Decoder for Decoded {
     fn error(&mut self, err: &str) -> Error {
         Error::Decode(err.to_owned())
     }
-    fn read_nil(&mut self) -> CsvResult<()> { unimplemented!() }
-    fn read_usize(&mut self) -> CsvResult<usize> { self.pop_from_str() }
-    fn read_u64(&mut self) -> CsvResult<u64> { self.pop_from_str() }
-    fn read_u32(&mut self) -> CsvResult<u32> { self.pop_from_str() }
-    fn read_u16(&mut self) -> CsvResult<u16> { self.pop_from_str() }
-    fn read_u8(&mut self) -> CsvResult<u8> { self.pop_from_str() }
-    fn read_isize(&mut self) -> CsvResult<isize> { self.pop_from_str() }
-    fn read_i64(&mut self) -> CsvResult<i64> { self.pop_from_str() }
-    fn read_i32(&mut self) -> CsvResult<i32> { self.pop_from_str() }
-    fn read_i16(&mut self) -> CsvResult<i16> { self.pop_from_str() }
-    fn read_i8(&mut self) -> CsvResult<i8> { self.pop_from_str() }
-    fn read_bool(&mut self) -> CsvResult<bool> { self.pop_from_str() }
-    fn read_f64(&mut self) -> CsvResult<f64> { self.pop_from_str() }
-    fn read_f32(&mut self) -> CsvResult<f32> { self.pop_from_str() }
-    fn read_char(&mut self) -> CsvResult<char> {
+    fn read_nil(&mut self) -> Result<()> { unimplemented!() }
+    fn read_usize(&mut self) -> Result<usize> { self.pop_from_str() }
+    fn read_u64(&mut self) -> Result<u64> { self.pop_from_str() }
+    fn read_u32(&mut self) -> Result<u32> { self.pop_from_str() }
+    fn read_u16(&mut self) -> Result<u16> { self.pop_from_str() }
+    fn read_u8(&mut self) -> Result<u8> { self.pop_from_str() }
+    fn read_isize(&mut self) -> Result<isize> { self.pop_from_str() }
+    fn read_i64(&mut self) -> Result<i64> { self.pop_from_str() }
+    fn read_i32(&mut self) -> Result<i32> { self.pop_from_str() }
+    fn read_i16(&mut self) -> Result<i16> { self.pop_from_str() }
+    fn read_i8(&mut self) -> Result<i8> { self.pop_from_str() }
+    fn read_bool(&mut self) -> Result<bool> { self.pop_from_str() }
+    fn read_f64(&mut self) -> Result<f64> { self.pop_from_str() }
+    fn read_f32(&mut self) -> Result<f32> { self.pop_from_str() }
+    fn read_char(&mut self) -> Result<char> {
         let s = try!(self.pop_string());
         let chars: Vec<char> = s.chars().collect();
         if chars.len() != 1 {
@@ -100,16 +100,16 @@ impl serialize::Decoder for Decoded {
         }
         Ok(chars[0])
     }
-    fn read_str(&mut self) -> CsvResult<String> {
+    fn read_str(&mut self) -> Result<String> {
         self.pop_string()
     }
-    fn read_enum<T, F>(&mut self, _: &str, f: F) -> CsvResult<T>
-            where F: FnOnce(&mut Decoded) -> CsvResult<T> {
+    fn read_enum<T, F>(&mut self, _: &str, f: F) -> Result<T>
+            where F: FnOnce(&mut Decoded) -> Result<T> {
         f(self)
     }
     fn read_enum_variant<T, F>(&mut self, names: &[&str], mut f: F)
-                              -> CsvResult<T>
-            where F: FnMut(&mut Decoded, usize) -> CsvResult<T> {
+                              -> Result<T>
+            where F: FnMut(&mut Decoded, usize) -> Result<T> {
         for i in range(0, names.len()) {
             let cur = try!(self.pop_string());
             self.push_string(cur.clone());
@@ -121,24 +121,24 @@ impl serialize::Decoder for Decoded {
         self.err(format!(
             "Could not load value into any variant in {:?}", names))
     }
-    fn read_enum_variant_arg<T, F>(&mut self, _: usize, f: F) -> CsvResult<T>
-            where F: FnOnce(&mut Decoded) -> CsvResult<T> {
+    fn read_enum_variant_arg<T, F>(&mut self, _: usize, f: F) -> Result<T>
+            where F: FnOnce(&mut Decoded) -> Result<T> {
         f(self)
     }
     fn read_enum_struct_variant<T, F>(&mut self, names: &[&str], f: F)
-                                     -> CsvResult<T>
-            where F: FnMut(&mut Decoded, usize) -> CsvResult<T> {
+                                     -> Result<T>
+            where F: FnMut(&mut Decoded, usize) -> Result<T> {
         self.read_enum_variant(names, f)
     }
     fn read_enum_struct_variant_field<T, F>(&mut self, _: &str,
                                             f_idx: usize, f: F)
-                                           -> CsvResult<T>
-            where F: FnOnce(&mut Decoded) -> CsvResult<T> {
+                                           -> Result<T>
+            where F: FnOnce(&mut Decoded) -> Result<T> {
         self.read_enum_variant_arg(f_idx, f)
     }
     fn read_struct<T, F>(&mut self, s_name: &str, len: usize, f: F)
-                        -> CsvResult<T>
-            where F: FnOnce(&mut Decoded) -> CsvResult<T> {
+                        -> Result<T>
+            where F: FnOnce(&mut Decoded) -> Result<T> {
         if self.len() < len {
             return self.err(
                 format!("Struct '{}' has {} fields but current record \
@@ -147,30 +147,30 @@ impl serialize::Decoder for Decoded {
         f(self)
     }
     fn read_struct_field<T, F>(&mut self, _: &str, _: usize, f: F)
-                              -> CsvResult<T>
-            where F: FnOnce(&mut Decoded) -> CsvResult<T> {
+                              -> Result<T>
+            where F: FnOnce(&mut Decoded) -> Result<T> {
         f(self)
     }
-    fn read_tuple<T, F>(&mut self, _: usize, f: F) -> CsvResult<T>
-            where F: FnOnce(&mut Decoded) -> CsvResult<T> {
+    fn read_tuple<T, F>(&mut self, _: usize, f: F) -> Result<T>
+            where F: FnOnce(&mut Decoded) -> Result<T> {
         f(self)
     }
-    fn read_tuple_arg<T, F>(&mut self, _: usize, f: F) -> CsvResult<T>
-            where F: FnOnce(&mut Decoded) -> CsvResult<T> {
+    fn read_tuple_arg<T, F>(&mut self, _: usize, f: F) -> Result<T>
+            where F: FnOnce(&mut Decoded) -> Result<T> {
         f(self)
     }
     fn read_tuple_struct<T, F>(&mut self, _: &str, _: usize, _: F)
-                              -> CsvResult<T>
-            where F: FnOnce(&mut Decoded) -> CsvResult<T> {
+                              -> Result<T>
+            where F: FnOnce(&mut Decoded) -> Result<T> {
         unimplemented!()
     }
     fn read_tuple_struct_arg<T, F>(&mut self, _: usize, _: F)
-                                  -> CsvResult<T>
-            where F: FnOnce(&mut Decoded) -> CsvResult<T> {
+                                  -> Result<T>
+            where F: FnOnce(&mut Decoded) -> Result<T> {
         unimplemented!()
     }
-    fn read_option<T, F>(&mut self, mut f: F) -> CsvResult<T>
-            where F: FnMut(&mut Decoded, bool) -> CsvResult<T> {
+    fn read_option<T, F>(&mut self, mut f: F) -> Result<T>
+            where F: FnMut(&mut Decoded, bool) -> Result<T> {
         let s = try!(self.pop_string());
         if s.is_empty() {
             f(self, false)
@@ -182,25 +182,25 @@ impl serialize::Decoder for Decoded {
             }
         }
     }
-    fn read_seq<T, F>(&mut self, f: F) -> CsvResult<T>
-            where F: FnOnce(&mut Decoded, usize) -> CsvResult<T> {
+    fn read_seq<T, F>(&mut self, f: F) -> Result<T>
+            where F: FnOnce(&mut Decoded, usize) -> Result<T> {
         let len = self.len();
         f(self, len)
     }
-    fn read_seq_elt<T, F>(&mut self, _: usize, f: F) -> CsvResult<T>
-            where F: FnOnce(&mut Decoded) -> CsvResult<T> {
+    fn read_seq_elt<T, F>(&mut self, _: usize, f: F) -> Result<T>
+            where F: FnOnce(&mut Decoded) -> Result<T> {
         f(self)
     }
-    fn read_map<T, F>(&mut self, _: F) -> CsvResult<T>
-            where F: FnOnce(&mut Decoded, usize) -> CsvResult<T> {
+    fn read_map<T, F>(&mut self, _: F) -> Result<T>
+            where F: FnOnce(&mut Decoded, usize) -> Result<T> {
         unimplemented!()
     }
-    fn read_map_elt_key<T, F>(&mut self, _: usize, _: F) -> CsvResult<T>
-            where F: FnOnce(&mut Decoded) -> CsvResult<T> {
+    fn read_map_elt_key<T, F>(&mut self, _: usize, _: F) -> Result<T>
+            where F: FnOnce(&mut Decoded) -> Result<T> {
         unimplemented!()
     }
-    fn read_map_elt_val<T, F>(&mut self, _: usize, _: F) -> CsvResult<T>
-            where F: FnOnce(&mut Decoded) -> CsvResult<T> {
+    fn read_map_elt_val<T, F>(&mut self, _: usize, _: F) -> Result<T>
+            where F: FnOnce(&mut Decoded) -> Result<T> {
         unimplemented!()
     }
 }

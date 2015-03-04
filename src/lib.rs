@@ -42,7 +42,7 @@
 //! type Row = (String, String, u32);
 //!
 //! let mut rdr = csv::Reader::from_string(data).has_headers(false);
-//! let rows = rdr.decode().collect::<Result<Vec<Row>, _>>().unwrap();
+//! let rows = rdr.decode().collect::<csv::Result<Vec<Row>>>().unwrap();
 //! assert_eq!(rows.len(), 5);
 //! ```
 //!
@@ -179,18 +179,19 @@
 #![deny(missing_docs)]
 #![allow(unused_features)] // some are used in `test` but not in library
 
-#![feature(collections, core, old_io, old_path, std_misc, test, unicode)]
+#![feature(collections, core, fs, io, path, std_misc, test, unicode)]
 
-#[cfg(test)]
-extern crate test;
+extern crate byteorder;
 extern crate "rustc-serialize" as rustc_serialize;
+#[cfg(test)] extern crate test;
 
 use std::error::Error as StdError;
 use std::error::FromError;
 use std::fmt;
-use std::old_io as io;
+use std::io;
+use std::result;
 
-pub use bytestr::{BorrowBytes, ByteString, IntoVector, StrAllocating};
+pub use bytestr::{BorrowBytes, ByteString};
 pub use encoder::Encoded;
 pub use decoder::Decoded;
 pub use reader::{
@@ -216,7 +217,7 @@ mod tests;
 
 /// A convenience type for representing the result of most CSV reader/writer
 /// operations.
-pub type CsvResult<T> = Result<T, Error>;
+pub type Result<T> = result::Result<T, Error>;
 
 /// An error produced by an operation on CSV data.
 #[derive(Clone, Debug)]
@@ -228,19 +229,9 @@ pub enum Error {
     /// An error reported by the CSV parser.
     Parse(ParseError),
     /// An error originating from reading or writing to the underlying buffer.
-    Io(io::IoError),
+    Io(io::Error),
     /// An error originating from using a CSV index.
     Index(String),
-}
-
-impl Error {
-    /// Returns true if this is an IO error corresponding to `EndOfFile`.
-    pub fn is_eof(&self) -> bool {
-        match *self {
-            Error::Io(io::IoError { kind: io::EndOfFile, .. }) => true,
-            _ => false,
-        }
-    }
 }
 
 /// A description of a CSV parse error.
@@ -314,8 +305,6 @@ impl StdError for Error {
         }
     }
 
-    // fn detail(&self) -> Option<String> { Some(self.to_string()) }
-
     fn cause(&self) -> Option<&StdError> {
         match *self {
             Error::Io(ref err) => Some(err as &StdError),
@@ -324,6 +313,17 @@ impl StdError for Error {
     }
 }
 
-impl FromError<io::IoError> for Error {
-    fn from_error(err: io::IoError) -> Error { Error::Io(err) }
+impl FromError<io::Error> for Error {
+    fn from_error(err: io::Error) -> Error { Error::Io(err) }
+}
+
+impl FromError<byteorder::Error> for Error {
+    fn from_error(err: byteorder::Error) -> Error {
+        match err {
+            byteorder::Error::Io(err) => FromError::from_error(err),
+            byteorder::Error::UnexpectedEOF => {
+                Error::Index(format!("Unexpected EOF when reading CSV index."))
+            }
+        }
+    }
 }

@@ -1,34 +1,8 @@
-use std::borrow::{Borrow, Cow, ToOwned};
+use std::borrow::{Borrow, Cow, IntoCow, ToOwned};
 use std::fmt;
 use std::hash;
 use std::iter::{FromIterator, IntoIterator};
 use std::ops;
-
-/// A trait that encapsulates a `Vec<T>` or a `&[T]`.
-pub trait IntoVector<T> {
-    /// Convert the underlying value to a vector.
-    fn into_vec(self) -> Vec<T>;
-}
-
-impl<T> IntoVector<T> for Vec<T> {
-    fn into_vec(self) -> Vec<T> { self }
-}
-
-impl<'a, T: Clone> IntoVector<T> for &'a [T] {
-    fn into_vec(self) -> Vec<T> { self.to_vec() }
-}
-
-impl IntoVector<u8> for ByteString {
-    fn into_vec(self) -> Vec<u8> { self.into_bytes() }
-}
-
-impl<'a> IntoVector<u8> for &'a str {
-    fn into_vec(self) -> Vec<u8> { self.to_owned().into_bytes() }
-}
-
-impl<'a> IntoVector<u8> for String {
-    fn into_vec(self) -> Vec<u8> { self.into_bytes() }
-}
 
 /// A trait that permits borrowing byte vectors.
 ///
@@ -73,23 +47,6 @@ impl<'a, T: ?Sized + BorrowBytes> BorrowBytes for &'a T {
     fn borrow_bytes(&self) -> &[u8] { (*self).borrow_bytes() }
 }
 
-/// Encapsulate allocating of strings.
-///
-/// This is a temporary measure until the standard library provides more
-/// impls for `std::string::IntoString`.
-pub trait StrAllocating {
-    /// Produce a new owned String.
-    fn into_str(self) -> String;
-}
-
-impl StrAllocating for String {
-    fn into_str(self) -> String { self }
-}
-
-impl<'a> StrAllocating for &'a str {
-    fn into_str(self) -> String { self.to_owned() }
-}
-
 /// A type that represents unadulterated byte strings.
 ///
 /// Byte strings represent *any* 8 bit character encoding. There are no
@@ -115,8 +72,8 @@ pub struct ByteString(Vec<u8>);
 
 impl ByteString {
     /// Create a new byte string from a vector or slice of bytes.
-    pub fn from_bytes<S: IntoVector<u8>>(bs: S) -> ByteString {
-        ByteString(bs.into_vec())
+    pub fn from_bytes<'a, S>(bs: S) -> ByteString where S: IntoCow<'a, [u8]> {
+        ByteString(bs.into_cow().into_owned())
     }
 
     /// Consumes this byte string into a vector of bytes.

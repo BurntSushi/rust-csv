@@ -1,9 +1,11 @@
 #![allow(missing_docs)]
 
 use std::error::FromError;
-use std::old_io as io;
+use std::io;
 
-use {CsvResult, Error, Reader, NextField};
+use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
+
+use {Result, Error, Reader, NextField};
 
 pub struct Indexed<R, I> {
     rdr: Reader<R>,
@@ -11,10 +13,10 @@ pub struct Indexed<R, I> {
     count: u64,
 }
 
-impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
-    pub fn new(mut rdr: Reader<R>, mut idx: I) -> CsvResult<Indexed<R, I>> {
-        try!(idx.seek(-8, io::SeekEnd));
-        let mut count = try!(idx.read_be_u64());
+impl<R: io::Read + io::Seek, I: io::Read + io::Seek> Indexed<R, I> {
+    pub fn new(mut rdr: Reader<R>, mut idx: I) -> Result<Indexed<R, I>> {
+        try!(idx.seek(io::SeekFrom::End(-8)));
+        let mut count = try!(idx.read_u64::<BigEndian>());
         if rdr.has_headers && count > 0 {
             count -= 1;
             let _ = try!(rdr.byte_headers());
@@ -26,7 +28,7 @@ impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
         })
     }
 
-    pub fn seek(&mut self, mut i: u64) -> CsvResult<()> {
+    pub fn seek(&mut self, mut i: u64) -> Result<()> {
         if i >= self.count {
             return Err(Error::Index(format!(
                 "Record index {} is out of bounds. (There are {} records.)",
@@ -35,9 +37,9 @@ impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
         if self.rdr.has_headers {
             i += 1;
         }
-        try!(self.idx.seek((i * 8) as i64, io::SeekSet));
-        let offset = try!(self.idx.read_be_u64());
-        self.rdr.seek(offset as i64, io::SeekSet)
+        try!(self.idx.seek(io::SeekFrom::Start(i * 8)));
+        let offset = try!(self.idx.read_u64::<BigEndian>());
+        self.rdr.seek(offset)
     }
 
     pub fn count(&self) -> u64 {
@@ -49,13 +51,13 @@ impl<R: io::Reader + io::Seek, I: io::Reader + io::Seek> Indexed<R, I> {
     }
 }
 
-pub fn create<R: io::Reader + io::Seek, W: io::Writer>
-             (mut csv_rdr: Reader<R>, mut idx_wtr: W) -> CsvResult<()> {
+pub fn create<R: io::Read + io::Seek, W: io::Write>
+             (mut csv_rdr: Reader<R>, mut idx_wtr: W) -> Result<()> {
     // Seek to the beginning so that we get everything.
-    try!(csv_rdr.seek(0, io::SeekSet));
+    try!(csv_rdr.seek(0));
     let mut count = 0u64;
     while !csv_rdr.done() {
-        try!(idx_wtr.write_be_u64(csv_rdr.byte_offset()));
+        try!(idx_wtr.write_u64::<BigEndian>(csv_rdr.byte_offset()));
         loop {
             match csv_rdr.next_field() {
                 NextField::EndOfCsv => break,
@@ -65,5 +67,5 @@ pub fn create<R: io::Reader + io::Seek, W: io::Writer>
             }
         }
     }
-    idx_wtr.write_be_u64(count).map_err(FromError::from_error)
+    idx_wtr.write_u64::<BigEndian>(count).map_err(FromError::from_error)
 }

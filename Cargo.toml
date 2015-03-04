@@ -14,7 +14,8 @@ license = "Unlicense"
 name = "csv"
 
 [dependencies]
-rustc-serialize = "0.2.0"
+byteorder = "*"
+rustc-serialize = "*"
 
 [dev-dependencies]
 regex = "*"

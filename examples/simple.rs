@@ -1,12 +1,7 @@
-#![feature(old_path)]
-
 extern crate csv;
 
-use std::old_path::Path;
-
 fn main() {
-    let fp = &Path::new("./data/simple.csv");
-    let mut rdr = csv::Reader::from_file(fp);
+    let mut rdr = csv::Reader::from_file("./data/simple.csv").unwrap();
 
     for record in rdr.decode() {
         let (s1, s2, dist): (String, String, usize) = record.unwrap();

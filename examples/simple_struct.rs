@@ -1,9 +1,5 @@
-#![feature(old_path)]
-
 extern crate csv;
 extern crate "rustc-serialize" as rustc_serialize;
-
-use std::old_path::Path;
 
 #[derive(RustcDecodable)]
 struct Record {
@@ -13,8 +9,8 @@ struct Record {
 }
 
 fn main() {
-    let fp = &Path::new("./data/simple.csv");
-    let mut rdr = csv::Reader::from_file(fp);
+    let fp = "./data/simple.csv";
+    let mut rdr = csv::Reader::from_file(fp).unwrap();
 
     for record in rdr.decode() {
         let record: Record = record.unwrap();

@@ -1,9 +1,5 @@
-#![feature(old_path)]
-
 extern crate csv;
 extern crate "rustc-serialize" as rustc_serialize;
-
-use std::old_path::Path;
 
 #[allow(dead_code)]
 #[derive(RustcDecodable)]
@@ -24,9 +20,9 @@ struct Play {
 }
 
 fn main() {
-    let fp = &Path::new("./data/2012_nfl_pbp_data.csv");
+    let fp = "./data/2012_nfl_pbp_data.csv";
+    let mut dec = csv::Reader::from_file(fp).unwrap();
 
-    let mut dec = csv::Reader::from_file(fp);
     match dec.decode::<Play>().collect::<Result<Vec<_>, _>>() {
         Err(err) => panic!("{}", err),
         Ok(plays) => {

@@ -1,12 +1,14 @@
-use std::old_io as io;
+use std::borrow::IntoCow;
+use std::fs;
+use std::io::{self, BufRead};
+use std::path::AsPath;
 
 use rustc_serialize::Decodable;
 
-use buffered::BufferedReader;
+use buffered::BufReader;
 use {
-    ByteString, CsvResult, Decoded, IntoVector,
+    ByteString, Result, Decoded,
     Error, ParseError, ParseErrorKind,
-    StrAllocating,
 };
 
 use self::ParseState::{
@@ -86,10 +88,11 @@ impl PartialEq<u8> for RecordTerminator {
 pub struct Reader<R> {
     pmachine: ParseMachine, // various parsing settings
     flexible: bool, // true => records of varying length are allowed
-    buffer: BufferedReader<R>,
+    buffer: BufReader<R>,
     fieldbuf: Vec<u8>, // reusable buffer used to store fields
     state: ParseState, // current state in parsing machine
     err: Option<Error>, // current error; when `Some`, parsing is done forever
+    eof: bool, // true when EOF is reached
 
     // Keep a copy of the first record parsed.
     first_record: Vec<ByteString>,
@@ -117,12 +120,12 @@ pub struct Reader<R> {
     byte_offset: u64, // current byte offset
 }
 
-impl<R: io::Reader> Reader<R> {
-    /// Creates a new CSV reader from an arbitrary `io::Reader`.
+impl<R: io::Read> Reader<R> {
+    /// Creates a new CSV reader from an arbitrary `io::Read`.
     ///
     /// The reader is buffered for you automatically.
     pub fn from_reader(rdr: R) -> Reader<R> {
-        Reader::from_buffer(BufferedReader::new(rdr))
+        Reader::from_buffer(BufReader::new(rdr))
     }
 
     /// Creates a new CSV reader from a buffer.
@@ -132,8 +135,8 @@ impl<R: io::Reader> Reader<R> {
     /// is created for you.
     ///
     /// ... but this isn't public right now because we're using our own
-    /// implemented of `BufferedReader`.
-    fn from_buffer(buf: BufferedReader<R>) -> Reader<R> {
+    /// implemented of `BufReader`.
+    fn from_buffer(buf: BufReader<R>) -> Reader<R> {
         Reader {
             pmachine: ParseMachine {
                 delimiter: b',',
@@ -147,6 +150,7 @@ impl<R: io::Reader> Reader<R> {
             fieldbuf: Vec::with_capacity(1024),
             state: StartRecord,
             err: None,
+            eof: false,
             first_record: vec![],
             parsing_first_record: true,
             has_seeked: false,
@@ -160,27 +164,30 @@ impl<R: io::Reader> Reader<R> {
     }
 }
 
-impl Reader<io::IoResult<io::File>> {
+impl Reader<fs::File> {
     /// Creates a new CSV reader for the data at the file path given.
-    pub fn from_file(path: &Path) -> Reader<io::IoResult<io::File>> {
-        Reader::from_reader(io::File::open(path))
+    pub fn from_file<P: AsPath + ?Sized>
+                    (path: &P)
+                    -> Result<Reader<fs::File>> {
+        Ok(Reader::from_reader(try!(fs::File::open(path))))
     }
 }
 
-impl Reader<io::MemReader> {
+impl Reader<io::Cursor<Vec<u8>>> {
     /// Creates a CSV reader for an in memory string buffer.
-    pub fn from_string<S>(s: S) -> Reader<io::MemReader>
-            where S: StrAllocating {
-        Reader::from_bytes(s.into_str().into_bytes())
+    pub fn from_string<'a, S>(s: S) -> Reader<io::Cursor<Vec<u8>>>
+            where S: IntoCow<'a, str> {
+        Reader::from_bytes(s.into_cow().into_owned().into_bytes())
     }
 
     /// Creates a CSV reader for an in memory buffer of bytes.
-    pub fn from_bytes<V: IntoVector<u8>>(bytes: V) -> Reader<io::MemReader> {
-        Reader::from_reader(io::MemReader::new(bytes.into_vec()))
+    pub fn from_bytes<'a, V>(bytes: V) -> Reader<io::Cursor<Vec<u8>>>
+            where V: IntoCow<'a, [u8]> {
+        Reader::from_reader(io::Cursor::new(bytes.into_cow().into_owned()))
     }
 }
 
-impl<R: io::Reader> Reader<R> {
+impl<R: io::Read> Reader<R> {
     /// Uses type-based decoding to read a single record from CSV data.
     ///
     /// The type that is being decoded into should correspond to *one full
@@ -214,7 +221,7 @@ impl<R: io::Reader> Reader<R> {
     /// let mut rdr = csv::Reader::from_string("foo,bar,1\nfoo,baz,2")
     ///                           .has_headers(false);
     /// // Instantiating a specific type when decoding is usually necessary.
-    /// let rows = rdr.decode().collect::<Result<Vec<Pair>, _>>().unwrap();
+    /// let rows = rdr.decode().collect::<csv::Result<Vec<Pair>>>().unwrap();
     ///
     /// assert_eq!(rows[0].dist, 1);
     /// assert_eq!(rows[1].dist, 2);
@@ -246,7 +253,7 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// let mut rdr = csv::Reader::from_string("foo,bar,1,1\nfoo,baz,,1.5")
     ///                           .has_headers(false);
-    /// let rows = rdr.decode().collect::<Result<Vec<Row>, _>>().unwrap();
+    /// let rows = rdr.decode().collect::<csv::Result<Vec<Row>>>().unwrap();
     ///
     /// assert_eq!(rows[0].dist, Some(MyUint(1)));
     /// assert_eq!(rows[1].dist, None);
@@ -272,7 +279,7 @@ impl<R: io::Reader> Reader<R> {
     ///
     /// let mut rdr = csv::Reader::from_string("a,b,1,2,3,4\ny,z,5,6,7,8")
     ///                           .has_headers(false);
-    /// let rows = rdr.decode().collect::<Result<Vec<Pair>, _>>().unwrap();
+    /// let rows = rdr.decode().collect::<csv::Result<Vec<Pair>>>().unwrap();
     ///
     /// assert_eq!(rows[0].attrs, vec![1,2,3,4]);
     /// assert_eq!(rows[1].attrs, vec![5,6,7,8]);
@@ -327,7 +334,7 @@ impl<R: io::Reader> Reader<R> {
     /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3");
     ///
     /// let headers1 = rdr.headers().unwrap();
-    /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
+    /// let rows = rdr.records().collect::<csv::Result<Vec<_>>>().unwrap();
     /// let headers2 = rdr.headers().unwrap();
     ///
     /// let s = |s: &'static str| s.to_string();
@@ -345,7 +352,7 @@ impl<R: io::Reader> Reader<R> {
     ///                           .has_headers(false);
     ///
     /// let headers1 = rdr.headers().unwrap();
-    /// let rows = rdr.records().collect::<Result<Vec<_>, _>>().unwrap();
+    /// let rows = rdr.records().collect::<csv::Result<Vec<_>>>().unwrap();
     /// let headers2 = rdr.headers().unwrap();
     ///
     /// let s = |s: &'static str| s.to_string();
@@ -357,12 +364,12 @@ impl<R: io::Reader> Reader<R> {
     /// assert_eq!(rows[0], headers1);
     /// assert_eq!(rows[1], vec![s("1"), s("2"), s("3")]);
     /// ```
-    pub fn headers(&mut self) -> CsvResult<Vec<String>> {
+    pub fn headers(&mut self) -> Result<Vec<String>> {
         byte_record_to_utf8(try!(self.byte_headers()))
     }
 }
 
-impl<R: io::Reader> Reader<R> {
+impl<R: io::Read> Reader<R> {
     /// The delimiter to use when reading CSV data.
     ///
     /// Since the CSV reader is meant to be mostly encoding agnostic, you must
@@ -497,7 +504,7 @@ pub enum NextField<'a> {
 
 impl<'a> NextField<'a> {
     /// Transform NextField into an iterator result.
-    pub fn into_iter_result(self) -> Option<CsvResult<&'a [u8]>> {
+    pub fn into_iter_result(self) -> Option<Result<&'a [u8]>> {
         match self {
             NextField::EndOfRecord | NextField::EndOfCsv => None,
             NextField::Error(err) => Some(Err(err)),
@@ -514,10 +521,10 @@ impl<'a> NextField<'a> {
 /// These are low level methods for dealing with the raw bytes of CSV records.
 /// You should only need to use these when you need the performance or if
 /// your CSV data isn't UTF-8 encoded.
-impl<R: io::Reader> Reader<R> {
+impl<R: io::Read> Reader<R> {
     /// This is just like `headers`, except fields are `ByteString`s instead
     /// of `String`s.
-    pub fn byte_headers(&mut self) -> CsvResult<Vec<ByteString>> {
+    pub fn byte_headers(&mut self) -> Result<Vec<ByteString>> {
         if !self.first_record.is_empty() {
             Ok(self.first_record.clone())
         } else {
@@ -582,7 +589,7 @@ impl<R: io::Reader> Reader<R> {
     /// assert_eq!(count, 5);
     /// ```
     pub fn done(&self) -> bool {
-        self.err.is_some()
+        self.eof || self.err.is_some()
     }
 
     /// An iterator over fields in the current record.
@@ -650,8 +657,9 @@ impl<R: io::Reader> Reader<R> {
         //    EOF) and then return `None` indefinitely.
         // 2) EOF errors are handled specially and can be returned "lazily".
         //    e.g., EOF in the middle of parsing a field. First we have to
-        //    return the field and then return EOF on the next call.
-        if let Some(_) = self.err {
+        //    return the field and then return "end of record" and then
+        //    EOF on the next call.
+        if self.eof || self.err.is_some() {
             // We don't return the error here because it is always returned
             // immediately when it is first found (unless it's EOF, but if it's
             // EOF, we just want to stop the iteration anyway).
@@ -676,10 +684,11 @@ impl<R: io::Reader> Reader<R> {
                     self.err = Some(Error::Io(err));
                     break 'TOPLOOP;
                 }
+                Ok(bs) if bs.len() == 0 => { self.eof = true; break 'TOPLOOP }
                 Ok(bs) => {
                     // This "batch" processing of bytes is critical for
                     // performance.
-                    for &b in bs.iter() {
+                    for &b in bs {
                         let (accept, next) =
                             self.pmachine.parse_byte(self.state, b);
                         self.state = next;
@@ -712,9 +721,9 @@ impl<R: io::Reader> Reader<R> {
 
         // Handle the error. EOF is a bit tricky, but otherwise, we just stop
         // the parser cold.
-        match self.err {
-            None => {}
-            Some(Error::Io(io::IoError { kind: io::EndOfFile, .. })) => {
+        match (self.eof, &self.err) {
+            (false, &None) => {}
+            (true, &None) => {
                 // If we get EOF while we're trying to parse a new record
                 // but haven't actually seen any fields yet (i.e., trailing
                 // new lines in a file), then we should immediately stop the
@@ -722,17 +731,21 @@ impl<R: io::Reader> Reader<R> {
                 if self.state == StartRecord {
                     return NextField::EndOfCsv;
                 }
+                // Otherwise, indicate that we've reached the end of the
+                // record. This will allow the last field to get returned.
+                // Then "EndOfRecord" will get returned. Finally, "EndOfCsv".
                 self.state = EndRecord;
                 // fallthrough to return current field.
                 // On the next call, `None` will be returned.
             }
-            Some(ref err) => {
+            (false, &Some(ref err)) => {
                 // Reset the state to the beginning so that bad errors
                 // are always reported. (i.e., Don't let an EndRecord state
                 // slip in here.)
                 self.state = StartRecord;
                 return NextField::Error(err.clone());
             }
+            _ => unreachable!(), // can never have EOF and an error
         }
         if self.parsing_first_record {
             // This is only copying bytes for the first record.
@@ -740,7 +753,7 @@ impl<R: io::Reader> Reader<R> {
             self.first_record.push(bytes);
         }
         self.field_count += 1;
-        NextField::Data(&*self.fieldbuf)
+        NextField::Data(&self.fieldbuf)
     }
 
     /// An unsafe iterator over byte fields.
@@ -778,7 +791,7 @@ impl<R: io::Reader> Reader<R> {
     }
 }
 
-impl<R: io::Reader + io::Seek> Reader<R> {
+impl<R: io::Read + io::Seek> Reader<R> {
     /// Seeks the underlying reader to the file cursor specified.
     ///
     /// This comes with several caveats:
@@ -791,15 +804,16 @@ impl<R: io::Reader + io::Seek> Reader<R> {
     ///
     /// Note that if `pos` is equivalent to the current *parsed* byte offset,
     /// then no seeking is performed. (In this case, `seek` is a no-op.)
-    pub fn seek(&mut self, pos: i64, style: io::SeekStyle) -> CsvResult<()> {
+    pub fn seek(&mut self, pos: u64) -> Result<()> {
         self.has_seeked = true;
-        if pos as u64 == self.byte_offset() {
+        if pos == self.byte_offset() {
             return Ok(())
         }
         self.buffer.clear();
         self.err = None;
-        self.byte_offset = pos as u64;
-        try!(self.buffer.get_mut().seek(pos, style));
+        self.eof = false;
+        self.byte_offset = pos;
+        try!(self.buffer.get_mut().seek(io::SeekFrom::Start(pos)));
         Ok(())
     }
 }
@@ -977,10 +991,10 @@ pub struct UnsafeByteFields<'a, R: 'a> {
 }
 
 #[doc(hidden)]
-impl<'a, R> Iterator for UnsafeByteFields<'a, R> where R: io::Reader {
-    type Item = CsvResult<&'a [u8]>;
+impl<'a, R> Iterator for UnsafeByteFields<'a, R> where R: io::Read {
+    type Item = Result<&'a [u8]>;
 
-    fn next(&mut self) -> Option<CsvResult<&'a [u8]>> {
+    fn next(&mut self) -> Option<Result<&'a [u8]>> {
         unsafe {
             ::std::mem::transmute(self.rdr.next_field().into_iter_result())
         }
@@ -1001,10 +1015,10 @@ pub struct DecodedRecords<'a, R: 'a, D> {
 }
 
 impl<'a, R, D> Iterator for DecodedRecords<'a, R, D>
-        where R: io::Reader, D: Decodable {
-    type Item = CsvResult<D>;
+        where R: io::Read, D: Decodable {
+    type Item = Result<D>;
 
-    fn next(&mut self) -> Option<CsvResult<D>> {
+    fn next(&mut self) -> Option<Result<D>> {
         self.p.next().map(|res| {
             res.and_then(|byte_record| {
                 Decodable::decode(&mut Decoded::new(byte_record))
@@ -1023,10 +1037,10 @@ pub struct StringRecords<'a, R: 'a> {
     p: ByteRecords<'a, R>,
 }
 
-impl<'a, R> Iterator for StringRecords<'a, R> where R: io::Reader {
-    type Item = CsvResult<Vec<String>>;
+impl<'a, R> Iterator for StringRecords<'a, R> where R: io::Read {
+    type Item = Result<Vec<String>>;
 
-    fn next(&mut self) -> Option<CsvResult<Vec<String>>> {
+    fn next(&mut self) -> Option<Result<Vec<String>>> {
         self.p.next().map(|res| {
             res.and_then(|byte_record| {
                 byte_record_to_utf8(byte_record)
@@ -1046,10 +1060,10 @@ pub struct ByteRecords<'a, R: 'a> {
     first: bool,
 }
 
-impl<'a, R> Iterator for ByteRecords<'a, R> where R: io::Reader {
-    type Item = CsvResult<Vec<ByteString>>;
+impl<'a, R> Iterator for ByteRecords<'a, R> where R: io::Read {
+    type Item = Result<Vec<ByteString>>;
 
-    fn next(&mut self) -> Option<CsvResult<Vec<ByteString>>> {
+    fn next(&mut self) -> Option<Result<Vec<ByteString>>> {
         // We check this before checking `done` because the parser could
         // be done after a call to `byte_headers` but before any iterator
         // traversal. Once we start the iterator, we must allow the first
@@ -1100,7 +1114,7 @@ impl<'a, R> Iterator for ByteRecords<'a, R> where R: io::Reader {
     }
 }
 
-fn byte_record_to_utf8(record: Vec<ByteString>) -> CsvResult<Vec<String>> {
+fn byte_record_to_utf8(record: Vec<ByteString>) -> Result<Vec<String>> {
     for bytes in record.iter() {
         if let Err(err) = ::std::str::from_utf8(&**bytes) {
             return Err(Error::Decode(format!(
