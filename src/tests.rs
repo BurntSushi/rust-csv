@@ -186,7 +186,9 @@ parses_to!(empty_lines_interspersed_cr, "\r\ra,b\r\r\rx,y\r\r\rm,n\r",
            vec![vec!["a", "b"], vec!["x", "y"], vec!["m", "n"]]);
 
 parses_to!(term_weird, "zza,bzc,dzz", vec![vec!["a", "b"], vec!["c", "d"]],
-           |rdr: Reader<_>| rdr.record_terminator(RecordTerminator::Any(b'z')));
+           |rdr: Reader<_>| {
+               rdr.record_terminator(RecordTerminator::Any(b'z'))
+           });
 
 parses_to!(ascii_delimited, "a\x1fb\x1ec\x1fd",
            vec![vec!["a", "b"], vec!["c", "d"]],

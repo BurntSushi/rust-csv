@@ -70,8 +70,8 @@ impl<R: io::Read> io::Read for BufReader<R> {
 
 impl<R: io::Read> io::BufRead for BufReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        // If we've reached the end of our internal buffer then we need to fetch
-        // some more data from the underlying reader.
+        // If we've reached the end of our internal buffer then we need to
+        // fetch some more data from the underlying reader.
         if self.buf.position() as usize == self.buf.get_ref().len() {
             self.buf.set_position(0);
             let v = self.buf.get_mut();
@@ -98,15 +98,15 @@ impl<R> fmt::Debug for BufReader<R> where R: fmt::Debug {
 // (uninitialized data), reads into it, and then updates the length.
 //
 // This function is leveraged to efficiently read some bytes into a destination
-// vector without extra copying and taking advantage of the space that's already
-// in `v`.
+// vector without extra copying and taking advantage of the space that's
+// already in `v`.
 //
 // The buffer we're passing down, however, is pointing at uninitialized data
 // (the end of a `Vec`), and many operations will be *much* faster if we don't
 // have to zero it out. In order to prevent LLVM from generating an `undef`
 // value when reads happen from this uninitialized memory, we force LLVM to
-// think it's initialized by sending it through a black box. This should prevent
-// actual undefined behavior after optimizations.
+// think it's initialized by sending it through a black box. This should
+// prevent actual undefined behavior after optimizations.
 fn with_end_to_cap<F>(v: &mut Vec<u8>, f: F) -> io::Result<usize>
         where F: FnOnce(&mut [u8]) -> io::Result<usize> {
     unsafe {
