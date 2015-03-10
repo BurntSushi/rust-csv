@@ -48,7 +48,7 @@ macro_rules! fail_parses_to {
     );
     ($name:ident, $csv:expr, $vec:expr, $config:expr) => (
         #[test]
-        #[should_fail]
+        #[should_panic]
         fn $name() {
             let mut rdr = Reader::from_string($csv).has_headers(false);
             rdr = $config(rdr);
@@ -99,7 +99,7 @@ macro_rules! fail_writes_as {
     );
     ($name:ident, $vec:expr, $csv:expr, $config:expr) => (
         #[test]
-        #[should_fail]
+        #[should_panic]
         fn $name() {
             let mut wtr = $config(Writer::from_memory());
             for row in $vec.into_iter() {
@@ -381,7 +381,7 @@ fn byte_strings_invalid_utf8() {
 }
 
 #[test]
-#[should_fail]
+#[should_panic]
 fn invalid_utf8() {
     let mut d = Reader::from_bytes(b"a\xffbc,xyz").has_headers(false);
     d.records().next().unwrap().unwrap();
