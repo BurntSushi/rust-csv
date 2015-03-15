@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 use std::fs;
-use std::io::{self, Read, ReadExt, Seek};
+use std::io::{self, Read, Seek};
 use test::Bencher;
 
 use Reader;

@@ -177,9 +177,9 @@
 #![doc(html_root_url = "http://burntsushi.net/rustdoc/csv")]
 
 #![deny(missing_docs)]
-#![allow(unused_features)] // some are used in `test` but not in library
 
-#![feature(collections, core, fs, io, path, std_misc, test, unicode)]
+#![cfg_attr(test, feature(test))]
+#![feature(collections, core, io, std_misc, unicode)]
 
 extern crate byteorder;
 extern crate "rustc-serialize" as rustc_serialize;

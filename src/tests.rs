@@ -1,5 +1,5 @@
 use std::borrow::{IntoCow, ToOwned};
-use std::io::{self, ReadExt, Seek, Write};
+use std::io::{self, Read, Seek, Write};
 use {
     Reader, Writer, ByteString, Result,
     RecordTerminator, QuoteStyle,
@@ -395,7 +395,8 @@ fn seeking() {
     let mut buf = io::Cursor::new(data.as_bytes().to_vec());
 
     {
-        let mut d = Reader::from_reader(buf.by_ref()).has_headers(false);
+        let mut d = Reader::from_reader(Read::by_ref(&mut buf))
+                           .has_headers(false);
         let vals =
             d.decode().collect::<Result<Vec<(usize, usize)>>>().unwrap();
         assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
@@ -403,7 +404,8 @@ fn seeking() {
 
     buf.seek(io::SeekFrom::Start(0)).unwrap();
     {
-        let mut d = Reader::from_reader(buf.by_ref()).has_headers(false);
+        let mut d = Reader::from_reader(Read::by_ref(&mut buf))
+                           .has_headers(false);
         let vals =
             d.decode().collect::<Result<Vec<(usize, usize)>>>().unwrap();
         assert_eq!(vals, vec!((1, 2), (3, 4), (5, 6)));
