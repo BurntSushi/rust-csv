@@ -179,7 +179,7 @@
 #![deny(missing_docs)]
 
 #![cfg_attr(test, feature(test))]
-#![feature(collections, core, io, std_misc, unicode)]
+#![feature(core, io, std_misc, unicode)]
 
 extern crate byteorder;
 extern crate "rustc-serialize" as rustc_serialize;

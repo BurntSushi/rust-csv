@@ -429,7 +429,7 @@ impl<W: io::Write> Writer<W> {
 
         buf.push(self.quote);
         loop {
-            match s.position_elem(&self.quote) {
+            match s.iter().position(|&v| v == self.quote) {
                 None => {
                     buf.extend(s.iter().map(|&x|x));
                     break
