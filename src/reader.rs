@@ -166,9 +166,7 @@ impl<R: io::Read> Reader<R> {
 
 impl Reader<fs::File> {
     /// Creates a new CSV reader for the data at the file path given.
-    pub fn from_file<P: AsPath + ?Sized>
-                    (path: &P)
-                    -> Result<Reader<fs::File>> {
+    pub fn from_file<P: AsPath>(path: P) -> Result<Reader<fs::File>> {
         Ok(Reader::from_reader(try!(fs::File::open(path))))
     }
 }

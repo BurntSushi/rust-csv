@@ -110,7 +110,7 @@ impl serialize::Decoder for Decoded {
     fn read_enum_variant<T, F>(&mut self, names: &[&str], mut f: F)
                               -> Result<T>
             where F: FnMut(&mut Decoded, usize) -> Result<T> {
-        for i in range(0, names.len()) {
+        for i in 0..names.len() {
             let cur = try!(self.pop_string());
             self.push_string(cur.clone());
             match f(self, i) {
