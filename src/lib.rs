@@ -95,7 +95,7 @@
 //! sti\xffcker,mortals,7
 //! chocolate,refile,7";
 //!
-//! let mut rdr = csv::Reader::from_bytes(data).has_headers(false);
+//! let mut rdr = csv::Reader::from_bytes(&data[..]).has_headers(false);
 //! for row in rdr.byte_records() {
 //!     let row = row.unwrap();
 //!     println!("{:?}", row);

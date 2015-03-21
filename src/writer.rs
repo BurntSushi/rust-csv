@@ -228,7 +228,7 @@ impl<W: io::Write> Writer<W> {
     ///
     /// ```rust
     /// let mut wtr = csv::Writer::from_memory();
-    /// let result = wtr.write(vec![b"\xff", b"\x00"].into_iter());
+    /// let result = wtr.write(vec![&b"\xff"[..], &b"\x00"[..]].into_iter());
     /// assert!(result.is_ok());
     ///
     /// assert_eq!(wtr.as_bytes(), b"\xff,\x00\n");

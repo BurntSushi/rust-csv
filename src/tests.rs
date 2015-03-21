@@ -372,20 +372,20 @@ fn bytes<'a, S>(bs: S) -> ByteString where S: IntoCow<'a, [u8]> {
 fn byte_strings() {
     let mut d = Reader::from_string("abc,xyz").has_headers(false);
     let r = d.byte_records().next().unwrap().unwrap();
-    assert_eq!(r, vec![bytes(b"abc"), bytes(b"xyz")]);
+    assert_eq!(r, vec![bytes(&b"abc"[..]), bytes(&b"xyz"[..])]);
 }
 
 #[test]
 fn byte_strings_invalid_utf8() {
-    let mut d = Reader::from_bytes(b"a\xffbc,xyz").has_headers(false);
+    let mut d = Reader::from_bytes(&b"a\xffbc,xyz"[..]).has_headers(false);
     let r = d.byte_records().next().unwrap().unwrap();
-    assert_eq!(r, vec![bytes(b"a\xffbc"), bytes(b"xyz")]);
+    assert_eq!(r, vec![bytes(&b"a\xffbc"[..]), bytes(&b"xyz"[..])]);
 }
 
 #[test]
 #[should_panic]
 fn invalid_utf8() {
-    let mut d = Reader::from_bytes(b"a\xffbc,xyz").has_headers(false);
+    let mut d = Reader::from_bytes(&b"a\xffbc,xyz"[..]).has_headers(false);
     d.records().next().unwrap().unwrap();
 }
 

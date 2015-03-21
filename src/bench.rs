@@ -8,7 +8,7 @@ use Reader;
 static CSV_DATA: &'static str = "./examples/data/bench.csv";
 
 fn ordie<T, E: Debug+Display>(r: Result<T, E>) -> T {
-    r.or_else(|e: E| -> Result<T, E> panic!(format!("{:?}", e))).unwrap()
+    r.or_else(|e: E| -> Result<T, E> { panic!(format!("{:?}", e)) }).unwrap()
 }
 
 fn file_to_mem(fp: &str) -> io::Cursor<Vec<u8>> {
