@@ -69,7 +69,7 @@ impl serialize::Encoder for Encoded {
     }
     fn emit_char(&mut self, v: char) -> Result<()> {
         let mut bytes = [0u8; 4];
-        let n = v.encode_utf8(bytes.as_mut_slice()).unwrap_or(0);
+        let n = v.encode_utf8(&mut bytes).unwrap_or(0);
         self.push_bytes(&bytes[..n])
     }
     fn emit_str(&mut self, v: &str) -> Result<()> {

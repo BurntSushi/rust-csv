@@ -179,10 +179,10 @@
 #![deny(missing_docs)]
 
 #![cfg_attr(test, feature(test))]
-#![feature(core, io, std_misc, unicode)]
+#![feature(convert, core, io, into_cow, std_misc, unicode)]
 
 extern crate byteorder;
-extern crate "rustc-serialize" as rustc_serialize;
+extern crate rustc_serialize;
 #[cfg(test)] extern crate test;
 
 use std::error::Error as StdError;

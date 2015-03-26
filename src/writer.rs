@@ -2,7 +2,7 @@ use std::borrow::IntoCow;
 use std::error::FromError;
 use std::fs;
 use std::io::{self, Write};
-use std::path::AsPath;
+use std::path::Path;
 use std::str;
 
 use rustc_serialize::Encodable;
@@ -83,7 +83,7 @@ impl Writer<fs::File> {
     ///
     /// The file is created if it does not already exist and is truncated
     /// otherwise.
-    pub fn from_file<P: AsPath>(path: P) -> Result<Writer<fs::File>> {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Writer<fs::File>> {
         Ok(Writer::from_writer(try!(fs::File::create(path))))
     }
 }
@@ -163,7 +163,7 @@ impl<W: io::Write> Writer<W> {
     /// edit distances computed.
     ///
     /// ```rust
-    /// extern crate "rustc-serialize" as rustc_serialize;
+    /// extern crate rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
     ///

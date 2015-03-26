@@ -1,7 +1,7 @@
 use std::borrow::IntoCow;
 use std::fs;
 use std::io::{self, BufRead};
-use std::path::AsPath;
+use std::path::Path;
 
 use rustc_serialize::Decodable;
 
@@ -166,7 +166,7 @@ impl<R: io::Read> Reader<R> {
 
 impl Reader<fs::File> {
     /// Creates a new CSV reader for the data at the file path given.
-    pub fn from_file<P: AsPath>(path: P) -> Result<Reader<fs::File>> {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Reader<fs::File>> {
         Ok(Reader::from_reader(try!(fs::File::open(path))))
     }
 }
@@ -205,7 +205,7 @@ impl<R: io::Read> Reader<R> {
     /// currently, the *names* of the struct members are irrelevant.)
     ///
     /// ```rust
-    /// extern crate "rustc-serialize" as rustc_serialize;
+    /// extern crate rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
     ///
@@ -231,7 +231,7 @@ impl<R: io::Read> Reader<R> {
     /// valid data in every record (whether it be empty or malformed).
     ///
     /// ```rust
-    /// extern crate "rustc-serialize" as rustc_serialize;
+    /// extern crate rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
     ///
@@ -264,7 +264,7 @@ impl<R: io::Read> Reader<R> {
     /// "tail" of another tuple/struct/`Vec` to capture all remaining fields:
     ///
     /// ```rust
-    /// extern crate "rustc-serialize" as rustc_serialize;
+    /// extern crate rustc_serialize;
     /// # extern crate csv;
     /// # fn main() {
     ///

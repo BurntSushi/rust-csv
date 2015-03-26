@@ -132,7 +132,7 @@ impl ops::Deref for ByteString {
 impl ops::Index<ops::RangeFull> for ByteString {
     type Output = [u8];
 
-    fn index<'a>(&'a self, _: &ops::RangeFull) -> &'a [u8] {
+    fn index<'a>(&'a self, _: ops::RangeFull) -> &'a [u8] {
         &**self
     }
 }
@@ -140,7 +140,7 @@ impl ops::Index<ops::RangeFull> for ByteString {
 impl ops::Index<ops::RangeFrom<usize>> for ByteString {
     type Output = [u8];
 
-    fn index<'a>(&'a self, index: &ops::RangeFrom<usize>) -> &'a [u8] {
+    fn index<'a>(&'a self, index: ops::RangeFrom<usize>) -> &'a [u8] {
         &(&**self)[index.start..]
     }
 }
@@ -148,7 +148,7 @@ impl ops::Index<ops::RangeFrom<usize>> for ByteString {
 impl ops::Index<ops::RangeTo<usize>> for ByteString {
     type Output = [u8];
 
-    fn index<'a>(&'a self, index: &ops::RangeTo<usize>) -> &'a [u8] {
+    fn index<'a>(&'a self, index: ops::RangeTo<usize>) -> &'a [u8] {
         &(&**self)[..index.end]
     }
 }
@@ -156,7 +156,7 @@ impl ops::Index<ops::RangeTo<usize>> for ByteString {
 impl ops::Index<ops::Range<usize>> for ByteString {
     type Output = [u8];
 
-    fn index<'a>(&'a self, index: &ops::Range<usize>) -> &'a [u8] {
+    fn index<'a>(&'a self, index: ops::Range<usize>) -> &'a [u8] {
         &(&**self)[index.start..index.end]
     }
 }

@@ -1,5 +1,5 @@
 extern crate csv;
-extern crate "rustc-serialize" as rustc_serialize;
+extern crate rustc_serialize;
 
 #[derive(RustcDecodable)]
 struct Record {

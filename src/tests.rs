@@ -5,14 +5,15 @@ use {
     RecordTerminator, QuoteStyle,
 };
 
-fn assert_svec_eq<S: Str, T: Str>(got: Vec<Vec<S>>, expected: Vec<Vec<T>>) {
+fn assert_svec_eq<S, T>(got: Vec<Vec<S>>, expected: Vec<Vec<T>>)
+        where S: AsRef<str>, T: AsRef<str> {
     let got: Vec<Vec<&str>> =
         got.iter().map(|row| {
-            row.iter().map(|f| f.as_slice()).collect()
+            row.iter().map(|f| f.as_ref()).collect()
         }).collect();
     let expected: Vec<Vec<&str>> =
         expected.iter().map(|row| {
-            row.iter().map(|f| f.as_slice()).collect()
+            row.iter().map(|f| f.as_ref()).collect()
         }).collect();
 
     println!("got len: {}, expected len: {}", got.len(), expected.len());
