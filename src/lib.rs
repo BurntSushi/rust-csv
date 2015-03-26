@@ -179,7 +179,7 @@
 #![deny(missing_docs)]
 
 #![cfg_attr(test, feature(test))]
-#![feature(convert, core, io, into_cow, std_misc, unicode)]
+#![feature(convert, io, into_cow, std_misc, unicode)]
 
 extern crate byteorder;
 extern crate rustc_serialize;
@@ -307,7 +307,7 @@ impl StdError for Error {
 
     fn cause(&self) -> Option<&StdError> {
         match *self {
-            Error::Io(ref err) => Some(err as &StdError),
+            Error::Io(ref err) => Some(err),
             _ => None,
         }
     }
