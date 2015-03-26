@@ -66,7 +66,7 @@ pub enum QuoteStyle {
 ///     assert!(result.is_ok());
 /// }
 /// ```
-pub struct Writer<W> {
+pub struct Writer<W: Write> {
     buf: io::BufWriter<W>,
     delimiter: u8,
     record_terminator: RecordTerminator,
