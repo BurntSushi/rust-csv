@@ -6,7 +6,7 @@ use std::fmt;
 use std::io::{self, BufRead};
 use std::slice;
 
-static DEFAULT_BUF_SIZE: usize = 1024 * 64;
+static DEFAULT_BUF_SIZE: usize = 1024 * 1024;
 
 /// Wraps a `Read` and buffers input from it
 ///

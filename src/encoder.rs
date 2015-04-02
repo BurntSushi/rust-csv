@@ -1,5 +1,3 @@
-use std::borrow::IntoCow;
-
 use rustc_serialize as serialize;
 
 use {ByteString, Result, Error};
@@ -25,14 +23,14 @@ impl Encoded {
     pub fn unwrap(self) -> Vec<ByteString> { self.record }
 
     fn push_bytes<'a, S>(&mut self, s: S) -> Result<()>
-            where S: IntoCow<'a, [u8]> {
+            where S: Into<Vec<u8>> {
         self.record.push(ByteString::from_bytes(s));
         Ok(())
     }
 
     fn push_string<'a, S>(&mut self, s: S) -> Result<()>
-            where S: IntoCow<'a, str> {
-        self.push_bytes(s.into_cow().into_owned().into_bytes())
+            where S: Into<String> {
+        self.push_bytes(s.into().into_bytes())
     }
 
     fn push_to_string<T: ToString>(&mut self, t: T) -> Result<()> {
@@ -62,15 +60,13 @@ impl serialize::Encoder for Encoded {
         self.push_to_string(v)
     }
     fn emit_f64(&mut self, v: f64) -> Result<()> {
-        self.push_string(::std::f64::to_str_digits(v, 10))
+        self.push_string(float_to_string(v))
     }
     fn emit_f32(&mut self, v: f32) -> Result<()> {
-        self.push_string(::std::f32::to_str_digits(v, 10))
+        self.push_string(float_to_string(v as f64))
     }
     fn emit_char(&mut self, v: char) -> Result<()> {
-        let mut bytes = [0u8; 4];
-        let n = v.encode_utf8(&mut bytes).unwrap_or(0);
-        self.push_bytes(&bytes[..n])
+        self.push_string(format!("{}", v))
     }
     fn emit_str(&mut self, v: &str) -> Result<()> {
         self.push_string(v)
@@ -163,4 +159,9 @@ impl serialize::Encoder for Encoded {
                        where F: FnOnce(&mut Encoded) -> Result<()> {
         unimplemented!()
     }
+}
+
+fn float_to_string(v: f64) -> String {
+    let s: String = format!("{:.10}", v).trim_right_matches('0').into();
+    if s.ends_with('.') { s + "0" } else { s }
 }

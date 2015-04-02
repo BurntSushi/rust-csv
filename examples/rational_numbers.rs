@@ -1,8 +1,6 @@
 //! This example shows how to write your own custom implementation of
 //! `Decodable` to parse rational numbers.
 
-#![feature(core)]
-
 extern crate csv;
 extern crate regex;
 extern crate rustc_serialize;

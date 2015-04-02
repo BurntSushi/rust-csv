@@ -1,4 +1,3 @@
-use std::borrow::{IntoCow, ToOwned};
 use std::default::Default;
 use std::str::FromStr;
 
@@ -66,8 +65,8 @@ impl Decoded {
         self.push(ByteString::from_bytes(s.into_bytes()));
     }
 
-    fn err<'a, T, S>(&self, msg: S) -> Result<T> where S: IntoCow<'a, str> {
-        Err(Error::Decode(msg.into_cow().into_owned()))
+    fn err<'a, T, S>(&self, msg: S) -> Result<T> where S: Into<String> {
+        Err(Error::Decode(msg.into()))
     }
 }
 
@@ -75,7 +74,7 @@ impl serialize::Decoder for Decoded {
     type Error = Error;
 
     fn error(&mut self, err: &str) -> Error {
-        Error::Decode(err.to_owned())
+        Error::Decode(err.into())
     }
     fn read_nil(&mut self) -> Result<()> { unimplemented!() }
     fn read_usize(&mut self) -> Result<usize> { self.pop_from_str() }

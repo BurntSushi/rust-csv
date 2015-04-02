@@ -1,5 +1,3 @@
-use std::borrow::IntoCow;
-use std::error::FromError;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -53,11 +51,11 @@ pub enum QuoteStyle {
 ///
 /// ```rust
 /// let records = vec![
-///     ("sticker", "mortals", 7u),
-///     ("bribed", "personae", 7u),
-///     ("wobbling", "poncing", 4u),
-///     ("interposed", "emmett", 9u),
-///     ("chocolate", "refile", 7u),
+///     ("sticker", "mortals", 7),
+///     ("bribed", "personae", 7),
+///     ("wobbling", "poncing", 4),
+///     ("interposed", "emmett", 9),
+///     ("chocolate", "refile", 7),
 /// ];
 ///
 /// let mut wtr = csv::Writer::from_memory();
@@ -269,7 +267,7 @@ impl<W: io::Write> Writer<W> {
 
     /// Flushes the underlying buffer.
     pub fn flush(&mut self) -> Result<()> {
-        self.buf.flush().map_err(FromError::from_error)
+        self.buf.flush().map_err(From::from)
     }
 }
 
@@ -354,8 +352,8 @@ impl<W: io::Write> Writer<W> {
 }
 
 impl<W: io::Write> Writer<W> {
-    fn err<'a, S, T>(&self, msg: S) -> Result<T> where S: IntoCow<'a, str> {
-        Err(Error::Encode(msg.into_cow().into_owned()))
+    fn err<'a, S, T>(&self, msg: S) -> Result<T> where S: Into<String> {
+        Err(Error::Encode(msg.into()))
     }
 
     fn w_bytes(&mut self, s: &[u8]) -> Result<()> {

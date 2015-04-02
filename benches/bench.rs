@@ -1,9 +1,15 @@
+#![feature(test)]
+
+extern crate csv;
+extern crate rustc_serialize;
+extern crate test;
+
 use std::fmt::{Debug, Display};
 use std::fs;
 use std::io::{self, Read, Seek};
 use test::Bencher;
 
-use Reader;
+use csv::Reader;
 
 static CSV_DATA: &'static str = "./examples/data/bench.csv";
 

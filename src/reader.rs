@@ -1,4 +1,3 @@
-use std::borrow::IntoCow;
 use std::fs;
 use std::io::{self, BufRead};
 use std::path::Path;
@@ -91,7 +90,7 @@ pub struct Reader<R> {
     buffer: BufReader<R>,
     fieldbuf: Vec<u8>, // reusable buffer used to store fields
     state: ParseState, // current state in parsing machine
-    err: Option<Error>, // current error; when `Some`, parsing is done forever
+    errored: bool, // true when an error has occurred, parsing is done
     eof: bool, // true when EOF is reached
 
     // Keep a copy of the first record parsed.
@@ -149,7 +148,7 @@ impl<R: io::Read> Reader<R> {
             buffer: buf,
             fieldbuf: Vec::with_capacity(1024),
             state: StartRecord,
-            err: None,
+            errored: false,
             eof: false,
             first_record: vec![],
             parsing_first_record: true,
@@ -174,14 +173,14 @@ impl Reader<fs::File> {
 impl Reader<io::Cursor<Vec<u8>>> {
     /// Creates a CSV reader for an in memory string buffer.
     pub fn from_string<'a, S>(s: S) -> Reader<io::Cursor<Vec<u8>>>
-            where S: IntoCow<'a, str> {
-        Reader::from_bytes(s.into_cow().into_owned().into_bytes())
+            where S: Into<String> {
+        Reader::from_bytes(s.into().into_bytes())
     }
 
     /// Creates a CSV reader for an in memory buffer of bytes.
     pub fn from_bytes<'a, V>(bytes: V) -> Reader<io::Cursor<Vec<u8>>>
-            where V: IntoCow<'a, [u8]> {
-        Reader::from_reader(io::Cursor::new(bytes.into_cow().into_owned()))
+            where V: Into<Vec<u8>> {
+        Reader::from_reader(io::Cursor::new(bytes.into()))
     }
 }
 
@@ -569,7 +568,7 @@ impl<R: io::Read> Reader<R> {
     /// chocolate,refile,7";
     ///
     /// let mut rdr = csv::Reader::from_string(data);
-    /// let mut count = 0u;
+    /// let mut count = 0u64;
     /// while !rdr.done() {
     ///     loop {
     ///         // This case analysis is necessary because we only want to
@@ -587,7 +586,7 @@ impl<R: io::Read> Reader<R> {
     /// assert_eq!(count, 5);
     /// ```
     pub fn done(&self) -> bool {
-        self.eof || self.err.is_some()
+        self.eof || self.errored
     }
 
     /// An iterator over fields in the current record.
@@ -636,7 +635,7 @@ impl<R: io::Read> Reader<R> {
             if !self.flexible && first_len != self.field_count {
                 let err = self.parse_err(ParseErrorKind::UnequalLengths(
                     self.first_record.len() as u64, self.field_count));
-                self.err = Some(err.clone());
+                self.errored = true;
                 return NextField::Error(err);
             }
             // After processing an EndRecord (and determined there are no
@@ -657,7 +656,7 @@ impl<R: io::Read> Reader<R> {
         //    e.g., EOF in the middle of parsing a field. First we have to
         //    return the field and then return "end of record" and then
         //    EOF on the next call.
-        if self.eof || self.err.is_some() {
+        if self.eof || self.errored {
             // We don't return the error here because it is always returned
             // immediately when it is first found (unless it's EOF, but if it's
             // EOF, we just want to stop the iteration anyway).
@@ -665,6 +664,7 @@ impl<R: io::Read> Reader<R> {
         }
 
         let mut consumed = 0; // tells the buffer how much we consumed
+        let mut err: Option<Error> = None;
         'TOPLOOP: loop {
             // The following code is basically, "fill a buffer with data from
             // the underlying reader if it's empty, and then run the parser
@@ -675,11 +675,11 @@ impl<R: io::Read> Reader<R> {
             // be more simply written with `buf.read_byte()`, but it is much
             // slower.)
             match self.buffer.fill_buf() {
-                Err(err) => {
+                Err(ioerr) => {
                     // The error is processed below.
                     // We don't handle it here because we need to do some
                     // book keeping first.
-                    self.err = Some(Error::Io(err));
+                    err = Some(Error::Io(ioerr));
                     break 'TOPLOOP;
                 }
                 Ok(bs) if bs.len() == 0 => { self.eof = true; break 'TOPLOOP }
@@ -719,9 +719,9 @@ impl<R: io::Read> Reader<R> {
 
         // Handle the error. EOF is a bit tricky, but otherwise, we just stop
         // the parser cold.
-        match (self.eof, &self.err) {
-            (false, &None) => {}
-            (true, &None) => {
+        match (self.eof, err) {
+            (false, None) => {}
+            (true, None) => {
                 // If we get EOF while we're trying to parse a new record
                 // but haven't actually seen any fields yet (i.e., trailing
                 // new lines in a file), then we should immediately stop the
@@ -736,12 +736,13 @@ impl<R: io::Read> Reader<R> {
                 // fallthrough to return current field.
                 // On the next call, `None` will be returned.
             }
-            (false, &Some(ref err)) => {
+            (false, Some(err)) => {
                 // Reset the state to the beginning so that bad errors
                 // are always reported. (i.e., Don't let an EndRecord state
                 // slip in here.)
                 self.state = StartRecord;
-                return NextField::Error(err.clone());
+                self.errored = true;
+                return NextField::Error(err);
             }
             _ => unreachable!(), // can never have EOF and an error
         }
@@ -808,7 +809,7 @@ impl<R: io::Read + io::Seek> Reader<R> {
             return Ok(())
         }
         self.buffer.clear();
-        self.err = None;
+        self.errored = false;
         self.eof = false;
         self.byte_offset = pos;
         try!(self.buffer.get_mut().seek(io::SeekFrom::Start(pos)));

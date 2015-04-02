@@ -178,15 +178,10 @@
 
 #![deny(missing_docs)]
 
-#![cfg_attr(test, feature(test))]
-#![feature(convert, io, into_cow, std_misc, unicode)]
-
 extern crate byteorder;
 extern crate rustc_serialize;
-#[cfg(test)] extern crate test;
 
 use std::error::Error as StdError;
-use std::error::FromError;
 use std::fmt;
 use std::io;
 use std::result;
@@ -211,8 +206,6 @@ mod reader;
 mod writer;
 
 #[cfg(test)]
-mod bench;
-#[cfg(test)]
 mod tests;
 
 /// A convenience type for representing the result of most CSV reader/writer
@@ -220,7 +213,7 @@ mod tests;
 pub type Result<T> = result::Result<T, Error>;
 
 /// An error produced by an operation on CSV data.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum Error {
     /// An error reported by the type-based encoder.
     Encode(String),
@@ -313,14 +306,14 @@ impl StdError for Error {
     }
 }
 
-impl FromError<io::Error> for Error {
-    fn from_error(err: io::Error) -> Error { Error::Io(err) }
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error { Error::Io(err) }
 }
 
-impl FromError<byteorder::Error> for Error {
-    fn from_error(err: byteorder::Error) -> Error {
+impl From<byteorder::Error> for Error {
+    fn from(err: byteorder::Error) -> Error {
         match err {
-            byteorder::Error::Io(err) => FromError::from_error(err),
+            byteorder::Error::Io(err) => From::from(err),
             byteorder::Error::UnexpectedEOF => {
                 Error::Index(format!("Unexpected EOF when reading CSV index."))
             }

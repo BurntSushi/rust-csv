@@ -1,4 +1,4 @@
-use std::borrow::{Borrow, Cow, IntoCow, ToOwned};
+use std::borrow::{Borrow, Cow, ToOwned};
 use std::fmt;
 use std::hash;
 use std::iter::{FromIterator, IntoIterator};
@@ -72,8 +72,8 @@ pub struct ByteString(Vec<u8>);
 
 impl ByteString {
     /// Create a new byte string from a vector or slice of bytes.
-    pub fn from_bytes<'a, S>(bs: S) -> ByteString where S: IntoCow<'a, [u8]> {
-        ByteString(bs.into_cow().into_owned())
+    pub fn from_bytes<'a, S>(bs: S) -> ByteString where S: Into<Vec<u8>> {
+        ByteString(bs.into())
     }
 
     /// Consumes this byte string into a vector of bytes.

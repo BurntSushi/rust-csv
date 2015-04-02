@@ -1,6 +1,5 @@
 #![allow(missing_docs)]
 
-use std::error::FromError;
 use std::io;
 
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
@@ -67,5 +66,5 @@ pub fn create<R: io::Read + io::Seek, W: io::Write>
             }
         }
     }
-    idx_wtr.write_u64::<BigEndian>(count).map_err(FromError::from_error)
+    idx_wtr.write_u64::<BigEndian>(count).map_err(From::from)
 }
