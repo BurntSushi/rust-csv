@@ -23,7 +23,7 @@ use self::ParseState::{
 ///
 /// Generally, you won't need to use this type because `CRLF` is the default,
 /// which is by far the most widely used record terminator.
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 pub enum RecordTerminator {
     /// Parses `\r`, `\n` or `\r\n` as a single record terminator.
     CRLF,
@@ -817,7 +817,7 @@ impl<R: io::Read + io::Seek> Reader<R> {
     }
 }
 
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 struct ParseMachine {
     delimiter: u8,
     record_terminator: RecordTerminator,
@@ -826,7 +826,7 @@ struct ParseMachine {
     double_quote: bool,
 }
 
-#[derive(Copy, Eq, PartialEq, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 enum ParseState {
     StartRecord,
     EndRecord,

@@ -10,7 +10,7 @@ use {
 };
 
 /// The quoting style to use when writing CSV data.
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 pub enum QuoteStyle {
     /// This puts quotes around every field. Always.
     Always,
