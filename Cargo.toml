@@ -1,13 +1,13 @@
 [package]
 name = "csv"
-version = "0.13.8"  #:version
+version = "0.14.0"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 description = "CSV parsing with automatic type based decoding and encoding."
 documentation = "http://burntsushi.net/rustdoc/csv/"
 homepage = "https://github.com/BurntSushi/rust-csv"
 repository = "https://github.com/BurntSushi/rust-csv"
 readme = "README.md"
-keywords = ["csv", "tsv", "comma"]
+keywords = ["csv", "tsv", "comma", "parser", "delimited"]
 license = "Unlicense"
 
 [lib]
