@@ -42,7 +42,7 @@ impl Decoded {
     }
 
     fn pop_string(&mut self) -> Result<String> {
-        {try!(self.pop())}.into_utf8_string().map_err(|bytes| {
+        String::from_utf8(try!(self.pop())).map_err(|bytes| {
             Error::Decode(
                 format!("Could not convert bytes '{:?}' to UTF-8.", bytes))
         })
@@ -62,7 +62,7 @@ impl Decoded {
     }
 
     fn push_string(&mut self, s: String) {
-        self.push(ByteString::from_bytes(s.into_bytes()));
+        self.push(s.into_bytes());
     }
 
     fn err<'a, T, S>(&self, msg: S) -> Result<T> where S: Into<String> {

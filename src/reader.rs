@@ -1,20 +1,18 @@
 use std::fs;
-use std::io::{self, BufRead};
+use std::io;
 use std::path::Path;
+use std::str;
 
 use rustc_serialize::Decodable;
 
-use buffered::BufReader;
 use {
     ByteString, Result, Decoded,
-    Error, ParseError, ParseErrorKind,
+    Error, LocatableError, ParseError,
 };
 
-use self::ParseState::{
-    StartRecord, EndRecord, StartField,
-    RecordTermCR, RecordTermLF, RecordTermAny,
-    InField, InQuotedField, InQuotedFieldEscape, InQuotedFieldQuote,
-};
+use self::State::*;
+
+const BUF_SIZE: usize = 1024 * 128;
 
 /// A record terminator.
 ///
@@ -31,11 +29,22 @@ pub enum RecordTerminator {
     Any(u8),
 }
 
-impl PartialEq<u8> for RecordTerminator {
-    fn eq(&self, other: &u8) -> bool {
+impl RecordTerminator {
+    #[inline]
+    fn is_crlf(&self) -> bool {
         match *self {
-            RecordTerminator::CRLF => *other == b'\r' || *other == b'\n',
-            RecordTerminator::Any(b) => *other == b
+            RecordTerminator::CRLF => true,
+            RecordTerminator::Any(_) => false,
+        }
+    }
+}
+
+impl PartialEq<u8> for RecordTerminator {
+    #[inline]
+    fn eq(&self, &other: &u8) -> bool {
+        match *self {
+            RecordTerminator::CRLF => other == b'\r' || other == b'\n',
+            RecordTerminator::Any(b) => other == b
         }
     }
 }
@@ -85,23 +94,23 @@ impl PartialEq<u8> for RecordTerminator {
 /// }
 /// ```
 pub struct Reader<R> {
-    pmachine: ParseMachine, // various parsing settings
-    flexible: bool, // true => records of varying length are allowed
-    buffer: BufReader<R>,
-    fieldbuf: Vec<u8>, // reusable buffer used to store fields
-    state: ParseState, // current state in parsing machine
-    errored: bool, // true when an error has occurred, parsing is done
-    eof: bool, // true when EOF is reached
-
-    // Keep a copy of the first record parsed.
-    first_record: Vec<ByteString>,
-    parsing_first_record: bool, // true only before first EndRecord state
-
-    // Is set if `seek` is ever called.
-    // This subtlely modifies the behavior of iterators so that there is
-    // no special handling of headers. (After you seek, iterators should
-    // just give whatever records are being parsed.)
-    has_seeked: bool,
+    rdr: R,
+    buf: Vec<u8>,
+    bufi: usize,
+    fieldbuf: Vec<u8>,
+    state: State,
+    eof: bool,
+    first_row: Vec<ByteString>,
+    first_row_done: bool,
+    irecord: u64,
+    ifield: u64,
+    byte_offset: u64,
+    delimiter: u8,
+    quote: u8,
+    escape: Option<u8>,
+    double_quote: bool,
+    record_term: RecordTerminator,
+    flexible: bool,
 
     // When this is true, the first record is interpreted as a "header" row.
     // This is opaque to the raw iterator, but is used in any iterator that
@@ -110,13 +119,7 @@ pub struct Reader<R> {
     // TODO: This is exposed for use in the `index` sub-module. Is that OK?
     #[doc(hidden)]
     pub has_headers: bool,
-
-    // Various book-keeping counts.
-    field_count: u64, // number of fields in current record
-    column: u64, // current column (by byte, *shrug*)
-    line_record: u64, // line at which current record started
-    line_current: u64, // current line
-    byte_offset: u64, // current byte offset
+    has_seeked: bool,
 }
 
 impl<R: io::Read> Reader<R> {
@@ -124,41 +127,26 @@ impl<R: io::Read> Reader<R> {
     ///
     /// The reader is buffered for you automatically.
     pub fn from_reader(rdr: R) -> Reader<R> {
-        Reader::from_buffer(BufReader::new(rdr))
-    }
-
-    /// Creates a new CSV reader from a buffer.
-    ///
-    /// This allows you to create your own buffer with a capacity of your
-    /// choosing. In all other constructors, a buffer with default capacity
-    /// is created for you.
-    ///
-    /// ... but this isn't public right now because we're using our own
-    /// implemented of `BufReader`.
-    fn from_buffer(buf: BufReader<R>) -> Reader<R> {
         Reader {
-            pmachine: ParseMachine {
-                delimiter: b',',
-                record_terminator: RecordTerminator::CRLF,
-                quote: Some(b'"'),
-                escape: b'\\',
-                double_quote: true,
-            },
-            flexible: false,
-            buffer: buf,
+            rdr: rdr,
+            buf: vec![0; BUF_SIZE],
+            bufi: BUF_SIZE,
             fieldbuf: Vec::with_capacity(1024),
             state: StartRecord,
-            errored: false,
             eof: false,
-            first_record: vec![],
-            parsing_first_record: true,
-            has_seeked: false,
-            has_headers: true,
-            field_count: 0,
-            column: 1,
-            line_record: 1,
-            line_current: 1,
+            first_row: vec![],
+            first_row_done: false,
+            irecord: 1,
+            ifield: 1,
             byte_offset: 0,
+            delimiter: b',',
+            quote: b'"',
+            escape: None,
+            double_quote: true,
+            record_term: RecordTerminator::CRLF,
+            flexible: false,
+            has_headers: true,
+            has_seeked: false,
         }
     }
 }
@@ -375,7 +363,7 @@ impl<R: io::Read> Reader<R> {
     ///
     /// The default value is `b','`.
     pub fn delimiter(mut self, delimiter: u8) -> Reader<R> {
-        self.pmachine.delimiter = delimiter;
+        self.delimiter = delimiter;
         self
     }
 
@@ -415,7 +403,7 @@ impl<R: io::Read> Reader<R> {
     /// use `RecordTerminator::Any(b'\n')` to only accept line feeds as
     /// record terminators, or `b'\x1e'` for the ASCII record separator.
     pub fn record_terminator(mut self, term: RecordTerminator) -> Reader<R> {
-        self.pmachine.record_terminator = term;
+        self.record_term = term;
         self
     }
 
@@ -428,33 +416,31 @@ impl<R: io::Read> Reader<R> {
     /// The default value is `b'"'`.
     ///
     /// If `quote` is `None`, then no quoting will be used.
-    pub fn quote(mut self, quote: Option<u8>) -> Reader<R> {
-        self.pmachine.quote = quote;
+    pub fn quote(mut self, quote: u8) -> Reader<R> {
+        self.quote = quote;
         self
     }
 
     /// Set the escape character to use when reading CSV data.
     ///
-    /// This is only used when `double_quote` is set to false.
-    ///
     /// Since the CSV reader is meant to be mostly encoding agnostic, you must
     /// specify the escape as a single ASCII byte.
     ///
-    /// The default value is `b'\\'`.
-    pub fn escape(mut self, escape: u8) -> Reader<R> {
-        self.pmachine.escape = escape;
+    /// When set to `None` (which is the default), the "doubling" escape
+    /// is used for quote character.
+    ///
+    /// When set to something other than `None`, it is used as the escape
+    /// character for quotes. (e.g., `b'\\'`.)
+    pub fn escape(mut self, escape: Option<u8>) -> Reader<R> {
+        self.escape = escape;
         self
     }
 
-    /// Set the quoting escape mechanism.
+    /// Enable double quote escapes.
     ///
-    /// When enabled (which is the default), quotes are escaped by doubling
-    /// them. e.g., `""` resolves to a single `"`.
-    ///
-    /// When disabled, double quotes have no significance. Instead, they can
-    /// be escaped with the escape character (which is `\\` by default).
+    /// When disabled, doubled quotes are not interpreted as escapes.
     pub fn double_quote(mut self, yes: bool) -> Reader<R> {
-        self.pmachine.double_quote = yes;
+        self.double_quote = yes;
         self
     }
 
@@ -466,23 +452,21 @@ impl<R: io::Read> Reader<R> {
     /// Since ASCII delimited text is meant to be unquoted, this also sets
     /// `quote` to `None`.
     pub fn ascii(self) -> Reader<R> {
-        self.quote(None)
-            .double_quote(false)
-            .delimiter(b'\x1f')
+        self.delimiter(b'\x1f')
             .record_terminator(RecordTerminator::Any(b'\x1e'))
     }
 }
 
 /// NextField is the result of parsing a single CSV field.
 ///
-/// This is only useful if you're using the low level `next_field` method.
-pub enum NextField<'a> {
-    /// A single CSV field as a borrow slice of bytes from the
-    /// parser's internal buffer.
-    Data(&'a [u8]),
+/// This is only useful if you're using the low level `next_bytes` method.
+#[derive(Debug)]
+pub enum NextField<'a, T: ?Sized + 'a> {
+    /// A single CSV field as a borrowed slice of the parser's internal buffer.
+    Data(&'a T),
 
     /// A CSV error found during parsing. When an error is found, it is
-    /// first returned. All subsequent calls of `next_field` will return
+    /// first returned. All subsequent calls of `next_bytes` will return
     /// `EndOfCsv`. (EOF is exempt from this. Depending on the state of the
     /// parser, an EOF could trigger `Data`, `EndOfRecord` and `EndOfCsv`,
     /// all in succession.)
@@ -499,9 +483,9 @@ pub enum NextField<'a> {
     EndOfCsv,
 }
 
-impl<'a> NextField<'a> {
+impl<'a, T: ?Sized + ::std::fmt::Debug> NextField<'a, T> {
     /// Transform NextField into an iterator result.
-    pub fn into_iter_result(self) -> Option<Result<&'a [u8]>> {
+    pub fn into_iter_result(self) -> Option<Result<&'a T>> {
         match self {
             NextField::EndOfRecord | NextField::EndOfCsv => None,
             NextField::Error(err) => Some(Err(err)),
@@ -513,6 +497,17 @@ impl<'a> NextField<'a> {
     pub fn is_end(&self) -> bool {
         if let NextField::EndOfCsv = *self { true } else { false }
     }
+
+    /// Returns the underlying field data.
+    ///
+    /// If `NextField` is an error or an end of record/CSV marker, this will
+    /// panic.
+    pub fn unwrap(self) -> &'a T {
+        match self {
+            NextField::Data(field) => field,
+            v => panic!("Cannot unwrap '{:?}'", v),
+        }
+    }
 }
 
 /// These are low level methods for dealing with the raw bytes of CSV records.
@@ -522,17 +517,17 @@ impl<R: io::Read> Reader<R> {
     /// This is just like `headers`, except fields are `ByteString`s instead
     /// of `String`s.
     pub fn byte_headers(&mut self) -> Result<Vec<ByteString>> {
-        if !self.first_record.is_empty() {
-            Ok(self.first_record.clone())
+        if !self.first_row.is_empty() {
+            Ok(self.first_row.clone())
         } else {
             let mut headers = vec![];
             loop {
-                let field = match self.next_field() {
+                let field = match self.next_bytes() {
                     NextField::EndOfRecord | NextField::EndOfCsv => break,
                     NextField::Error(err) => return Err(err),
                     NextField::Data(field) => field,
                 };
-                headers.push(ByteString::from_bytes(field));
+                headers.push(field.to_vec());
             }
             assert!(headers.len() > 0 || self.done());
             Ok(headers)
@@ -543,7 +538,7 @@ impl<R: io::Read> Reader<R> {
     /// of `String`s.
     pub fn byte_records<'a>(&'a mut self) -> ByteRecords<'a, R> {
         let first = self.has_seeked;
-        ByteRecords { p: self, first: first }
+        ByteRecords { p: self, first: first, errored: false }
     }
 
     /// Returns `true` if the CSV parser has reached its final state. When
@@ -574,7 +569,7 @@ impl<R: io::Read> Reader<R> {
     ///         // This case analysis is necessary because we only want to
     ///         // increment the count when `EndOfRecord` is seen. (If the
     ///         // CSV data is empty, then it will never be emitted.)
-    ///         match rdr.next_field() {
+    ///         match rdr.next_bytes() {
     ///             csv::NextField::EndOfCsv => break,
     ///             csv::NextField::EndOfRecord => { count += 1; break; },
     ///             csv::NextField::Error(err) => panic!(err),
@@ -586,7 +581,7 @@ impl<R: io::Read> Reader<R> {
     /// assert_eq!(count, 5);
     /// ```
     pub fn done(&self) -> bool {
-        self.eof || self.errored
+        self.eof
     }
 
     /// An iterator over fields in the current record.
@@ -618,146 +613,142 @@ impl<R: io::Read> Reader<R> {
     ///
     /// let mut rdr = csv::Reader::from_string(data);
     /// while !rdr.done() {
-    ///     while let Some(r) = rdr.next_field().into_iter_result() {
+    ///     while let Some(r) = rdr.next_bytes().into_iter_result() {
     ///         print!("{:?} ", r.unwrap());
     ///     }
     ///     println!("");
     /// }
     /// ```
-    pub fn next_field<'a>(&'a mut self) -> NextField<'a> {
+    pub fn next_bytes(&mut self) -> NextField<[u8]> {
         unsafe { self.fieldbuf.set_len(0); }
-
-        // The EndRecord state indicates what you'd expect: stop the current
-        // iteration, check for same-length records and reset a little
-        // record-based book keeping.
-        if self.state == EndRecord {
-            let first_len = self.first_record.len() as u64;
-            if !self.flexible && first_len != self.field_count {
-                let err = self.parse_err(ParseErrorKind::UnequalLengths(
-                    self.first_record.len() as u64, self.field_count));
-                self.errored = true;
-                return NextField::Error(err);
+        loop {
+            if let Err(err) = self.fill_buf() {
+                return NextField::Error(Error::Io(err));
             }
-            // After processing an EndRecord (and determined there are no
-            // errors), we should always start parsing the next record.
-            self.state = StartRecord;
-            self.parsing_first_record = false;
-            self.line_record = self.line_current;
-            self.field_count = 0;
-            return NextField::EndOfRecord;
-        }
-
-        // Check to see if we've recorded an error and quit parsing if we have.
-        // This serves two purposes:
-        // 1) When CSV parsing reaches an error, it is unrecoverable. So the
-        //    parse function will initially return that error (unless it is
-        //    EOF) and then return `None` indefinitely.
-        // 2) EOF errors are handled specially and can be returned "lazily".
-        //    e.g., EOF in the middle of parsing a field. First we have to
-        //    return the field and then return "end of record" and then
-        //    EOF on the next call.
-        if self.eof || self.errored {
-            // We don't return the error here because it is always returned
-            // immediately when it is first found (unless it's EOF, but if it's
-            // EOF, we just want to stop the iteration anyway).
-            return NextField::EndOfCsv;
-        }
-
-        let mut consumed = 0; // tells the buffer how much we consumed
-        let mut err: Option<Error> = None;
-        'TOPLOOP: loop {
-            // The following code is basically, "fill a buffer with data from
-            // the underlying reader if it's empty, and then run the parser
-            // over each byte in the slice returned."
-            //
-            // This technique is critical for performance, because it lifts
-            // a lot of case analysis off of each byte. (i.e., This loop could
-            // be more simply written with `buf.read_byte()`, but it is much
-            // slower.)
-            match self.buffer.fill_buf() {
-                Err(ioerr) => {
-                    // The error is processed below.
-                    // We don't handle it here because we need to do some
-                    // book keeping first.
-                    err = Some(Error::Io(ioerr));
-                    break 'TOPLOOP;
+            if self.buf.len() == 0 {
+                self.eof = true;
+                if let StartRecord = self.state {
+                    return self.next_eoc();
+                } else if let EndRecord = self.state {
+                    self.state = StartRecord;
+                    return self.next_eor();
+                } else {
+                    self.state = EndRecord;
+                    return self.next_data();
                 }
-                Ok(bs) if bs.len() == 0 => { self.eof = true; break 'TOPLOOP }
-                Ok(bs) => {
-                    // This "batch" processing of bytes is critical for
-                    // performance.
-                    for &b in bs {
-                        let (accept, next) =
-                            self.pmachine.parse_byte(self.state, b);
-                        self.state = next;
-                        if accept { self.fieldbuf.push(b); }
-                        if self.state == EndRecord {
-                            // Don't consume the byte we just read, because
-                            // it is the first byte of the next record.
-                            break 'TOPLOOP;
+            }
+            while self.bufi < self.buf.len() {
+                let c = self.buf[self.bufi];
+                match self.state {
+                    StartRecord => {
+                        if self.is_record_term(c) {
+                            self.bump();
                         } else {
-                            consumed += 1;
-                            self.column += 1;
-                            self.byte_offset += 1;
-                            if b == b'\n' {
-                                self.line_current += 1;
-                                self.column = 1;
-                            }
-                            if self.state == StartField {
-                                break 'TOPLOOP
-                            }
+                            self.state = StartField;
+                        }
+                    }
+                    EndRecord => {
+                        if self.record_term.is_crlf() && c == b'\n' {
+                            self.bump();
+                        }
+                        self.state = StartRecord;
+                        return self.next_eor();
+                    }
+                    StartField => {
+                        self.bump();
+                        if c == self.quote {
+                            self.state = InQuotedField;
+                        } else if c == self.delimiter {
+                            return self.next_data();
+                        } else if self.is_record_term(c) {
+                            self.state = EndRecord;
+                            return self.next_data();
+                        } else {
+                            self.add(c);
+                            self.state = InField;
+                        }
+                    }
+                    InField => {
+                        self.bump();
+                        if c == self.delimiter {
+                            self.state = StartField;
+                            return self.next_data();
+                        } else if self.is_record_term(c) {
+                            self.state = EndRecord;
+                            return self.next_data();
+                        } else {
+                            self.add(c);
+                        }
+                    }
+                    InQuotedField => {
+                        self.bump();
+                        if c == self.quote {
+                            self.state = InDoubleEscapedQuote;
+                        } else if self.escape == Some(c) {
+                            self.state = InEscapedQuote;
+                        } else {
+                            self.add(c);
+                        }
+                    }
+                    InEscapedQuote => {
+                        self.bump();
+                        self.add(c);
+                        self.state = InQuotedField;
+                    }
+                    InDoubleEscapedQuote => {
+                        self.bump();
+                        if self.double_quote && c == self.quote {
+                            self.add(c);
+                            self.state = InQuotedField;
+                        } else if c == self.delimiter {
+                            self.state = StartField;
+                            return self.next_data();
+                        } else if self.is_record_term(c) {
+                            self.state = EndRecord;
+                            return self.next_data();
+                        } else {
+                            self.add(c);
+                            self.state = InField; // degrade gracefully?
                         }
                     }
                 }
             }
-            self.buffer.consume(consumed);
-            consumed = 0;
         }
-        // We get here when we break out of the loop, so make sure the buffer
-        // knows how much we read.
-        self.buffer.consume(consumed);
+    }
 
-        // Handle the error. EOF is a bit tricky, but otherwise, we just stop
-        // the parser cold.
-        match (self.eof, err) {
-            (false, None) => {}
-            (true, None) => {
-                // If we get EOF while we're trying to parse a new record
-                // but haven't actually seen any fields yet (i.e., trailing
-                // new lines in a file), then we should immediately stop the
-                // parser.
-                if self.state == StartRecord {
-                    return NextField::EndOfCsv;
+    /// This is just like `next_bytes` except it converts each field to
+    /// a Unicode string in place.
+    pub fn next_str(&mut self) -> NextField<str> {
+        // This really grates me. Once we call `next_bytes`, we initiate a
+        // *mutable* borrow of `self` that doesn't stop until the return value
+        // goes out of scope. Since we have to return that value, it will never
+        // go out of scope in this function.
+        //
+        // Therefore, we can't get access to any state information after
+        // calling `next_bytes`. But we might need it to report an error.
+        //
+        // One possible way around this is to use interior mutability...
+        let (record, field) = (self.irecord, self.ifield);
+        match self.next_bytes() {
+            NextField::EndOfRecord => NextField::EndOfRecord,
+            NextField::EndOfCsv => NextField::EndOfCsv,
+            NextField::Error(err) => NextField::Error(err),
+            NextField::Data(bytes) => {
+                match str::from_utf8(bytes) {
+                    Ok(s) => NextField::Data(s),
+                    Err(_) => NextField::Error(Error::Parse(LocatableError {
+                        record: record,
+                        field: field,
+                        err: ParseError::InvalidUtf8,
+                    })),
                 }
-                // Otherwise, indicate that we've reached the end of the
-                // record. This will allow the last field to get returned.
-                // Then "EndOfRecord" will get returned. Finally, "EndOfCsv".
-                self.state = EndRecord;
-                // fallthrough to return current field.
-                // On the next call, `None` will be returned.
             }
-            (false, Some(err)) => {
-                // Reset the state to the beginning so that bad errors
-                // are always reported. (i.e., Don't let an EndRecord state
-                // slip in here.)
-                self.state = StartRecord;
-                self.errored = true;
-                return NextField::Error(err);
-            }
-            _ => unreachable!(), // can never have EOF and an error
         }
-        if self.parsing_first_record {
-            // This is only copying bytes for the first record.
-            let bytes = ByteString::from_bytes(&*self.fieldbuf);
-            self.first_record.push(bytes);
-        }
-        self.field_count += 1;
-        NextField::Data(&self.fieldbuf)
     }
 
     /// An unsafe iterator over byte fields.
     ///
-    /// This iterator calls `next_field` at each step.
+    /// This iterator calls `next_bytes` at each step.
     ///
     /// It is (wildly) unsafe because the lifetime yielded for each element
     /// is incorrect. It refers to the lifetime of the CSV reader instead of
@@ -771,23 +762,86 @@ impl<R: io::Read> Reader<R> {
         UnsafeByteFields { rdr: self }
     }
 
-    /// Returns the line at which the current record started.
-    pub fn line(&self) -> u64 {
-        self.line_record
-    }
-
     /// Returns the byte offset at which the current record started.
     pub fn byte_offset(&self) -> u64 {
         self.byte_offset
     }
 
-    fn parse_err(&self, kind: ParseErrorKind) -> Error {
-        Error::Parse(ParseError {
-            line: self.line_record,
-            column: self.column,
-            kind: kind,
-        })
+    #[inline]
+    fn next_data(&mut self) -> NextField<[u8]> {
+        if !self.first_row_done {
+            self.first_row.push(self.fieldbuf.to_vec());
+        }
+        self.ifield += 1;
+        NextField::Data(&self.fieldbuf)
     }
+
+    #[inline]
+    fn next_eor(&mut self) -> NextField<[u8]> {
+        if !self.flexible
+                && self.first_row_done
+                && self.ifield != self.first_row.len() as u64 {
+            return self.parse_error(ParseError::UnequalLengths {
+                expected: self.first_row.len() as u64,
+                got: self.ifield as u64,
+            });
+        }
+        self.irecord += 1;
+        self.ifield = 0;
+        self.first_row_done = true;
+        NextField::EndOfRecord
+    }
+
+    #[inline]
+    fn next_eoc(&self) -> NextField<[u8]> {
+        NextField::EndOfCsv
+    }
+
+    #[inline]
+    fn fill_buf(&mut self) -> io::Result<()> {
+        if self.bufi == self.buf.len() {
+            unsafe { let cap = self.buf.capacity(); self.buf.set_len(cap); }
+            let n = try!(self.rdr.read(&mut self.buf));
+            unsafe { self.buf.set_len(n); }
+            self.bufi = 0;
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn bump(&mut self) {
+        self.bufi += 1;
+        self.byte_offset += 1;
+    }
+
+    #[inline]
+    fn add(&mut self, c: u8) {
+        self.fieldbuf.push(c);
+    }
+
+    #[inline]
+    fn is_record_term(&self, c: u8) -> bool {
+        self.record_term == c
+    }
+
+    fn parse_error(&self, err: ParseError) -> NextField<[u8]> {
+        NextField::Error(Error::Parse(LocatableError {
+            record: self.irecord,
+            field: self.ifield,
+            err: err,
+        }))
+    }
+}
+
+#[derive(Debug)]
+enum State {
+    StartRecord,
+    EndRecord,
+    StartField,
+    InField,
+    InQuotedField,
+    InEscapedQuote,
+    InDoubleEscapedQuote,
 }
 
 impl<R: io::Read + io::Seek> Reader<R> {
@@ -805,182 +859,15 @@ impl<R: io::Read + io::Seek> Reader<R> {
     /// then no seeking is performed. (In this case, `seek` is a no-op.)
     pub fn seek(&mut self, pos: u64) -> Result<()> {
         self.has_seeked = true;
+        self.state = StartRecord;
         if pos == self.byte_offset() {
             return Ok(())
         }
-        self.buffer.clear();
-        self.errored = false;
+        self.bufi = self.buf.len(); // will force a buffer refresh
         self.eof = false;
         self.byte_offset = pos;
-        try!(self.buffer.get_mut().seek(io::SeekFrom::Start(pos)));
+        try!(self.rdr.seek(io::SeekFrom::Start(pos)));
         Ok(())
-    }
-}
-
-#[derive(Clone, Copy)]
-struct ParseMachine {
-    delimiter: u8,
-    record_terminator: RecordTerminator,
-    quote: Option<u8>,
-    escape: u8,
-    double_quote: bool,
-}
-
-#[derive(Clone, Copy, Eq, PartialEq, Debug)]
-enum ParseState {
-    StartRecord,
-    EndRecord,
-    StartField,
-    RecordTermCR,
-    RecordTermLF,
-    RecordTermAny,
-    InField,
-    InQuotedField,
-    InQuotedFieldEscape,
-    InQuotedFieldQuote,
-}
-
-type NextState = (bool, ParseState);
-
-impl ParseMachine {
-    #[inline]
-    fn parse_byte(&self, state: ParseState, b: u8) -> NextState {
-        match state {
-            StartRecord => self.parse_start_record(b),
-            EndRecord => unreachable!(),
-            StartField => self.parse_start_field(b),
-            RecordTermCR => self.parse_record_term_cr(b),
-            RecordTermLF => self.parse_record_term_lf(b),
-            RecordTermAny => self.parse_record_term_any(b),
-            InField => self.parse_in_field(b),
-            InQuotedField => self.parse_in_quoted_field(b),
-            InQuotedFieldEscape => self.parse_in_quoted_field_escape(b),
-            InQuotedFieldQuote => self.parse_in_quoted_field_quote(b),
-        }
-    }
-
-    #[inline]
-    fn parse_start_record(&self, b: u8) -> NextState {
-        if self.is_record_term(b) {
-            // Skip empty new lines.
-            (false, StartRecord)
-        } else {
-            self.parse_start_field(b)
-        }
-    }
-
-    #[inline]
-    fn parse_start_field(&self, b: u8) -> NextState {
-        if self.is_record_term(b) {
-            (false, self.record_term_next_state(b))
-        } else if Some(b) == self.quote {
-            (false, InQuotedField)
-        } else if b == self.delimiter {
-            // empty field, so return in StartField state,
-            // which causes a new empty field to be returned
-            (false, StartField)
-        } else {
-            (true, InField)
-        }
-    }
-
-    #[inline]
-    fn parse_record_term_cr(&self, b: u8) -> NextState {
-        if b == b'\n' {
-            (false, RecordTermLF)
-        } else if b == b'\r' {
-            (false, RecordTermCR)
-        } else {
-            (false, EndRecord)
-        }
-    }
-
-    #[inline]
-    fn parse_record_term_lf(&self, b: u8) -> NextState {
-        if b == b'\r' {
-            (false, RecordTermCR)
-        } else if b == b'\n' {
-            (false, RecordTermLF)
-        } else {
-            (false, EndRecord)
-        }
-    }
-
-    #[inline]
-    fn parse_record_term_any(&self, b: u8) -> NextState {
-        match self.record_terminator {
-            RecordTerminator::CRLF => unreachable!(),
-            RecordTerminator::Any(bb) => {
-                if b == bb {
-                    (false, RecordTermAny)
-                } else {
-                    (false, EndRecord)
-                }
-            }
-        }
-    }
-
-    #[inline]
-    fn parse_in_field(&self, b: u8) -> NextState {
-        if self.is_record_term(b) {
-            (false, self.record_term_next_state(b))
-        } else if b == self.delimiter {
-            (false, StartField)
-        } else {
-            (true, InField)
-        }
-    }
-
-    #[inline]
-    fn parse_in_quoted_field(&self, b: u8) -> NextState {
-        if Some(b) == self.quote {
-            (false, InQuotedFieldQuote)
-        } else if !self.double_quote && b == self.escape {
-            (false, InQuotedFieldEscape)
-        } else {
-            (true, InQuotedField)
-        }
-    }
-
-    #[inline]
-    fn parse_in_quoted_field_escape(&self, _: u8) -> NextState {
-        (true, InQuotedField)
-    }
-
-    #[inline]
-    fn parse_in_quoted_field_quote(self, b: u8) -> NextState {
-        if self.double_quote && Some(b) == self.quote {
-            (true, InQuotedField)
-        } else if b == self.delimiter {
-            (false, StartField)
-        } else if self.is_record_term(b) {
-            (false, self.record_term_next_state(b))
-        } else {
-            // Should we provide a strict variant that disallows
-            // random chars after a quote?
-            (true, InField)
-        }
-    }
-
-    #[inline]
-    fn is_record_term(self, b: u8) -> bool {
-        self.record_terminator == b
-    }
-
-    #[inline]
-    fn record_term_next_state(self, b: u8) -> ParseState {
-        match self.record_terminator {
-            RecordTerminator::CRLF => {
-                if b == b'\r' {
-                    RecordTermCR
-                } else if b == b'\n' {
-                    RecordTermLF
-                } else {
-                    unreachable!()
-                }
-            }
-            RecordTerminator::Any(_) => RecordTermAny,
-        }
     }
 }
 
@@ -995,7 +882,7 @@ impl<'a, R> Iterator for UnsafeByteFields<'a, R> where R: io::Read {
 
     fn next(&mut self) -> Option<Result<&'a [u8]>> {
         unsafe {
-            ::std::mem::transmute(self.rdr.next_field().into_iter_result())
+            ::std::mem::transmute(self.rdr.next_bytes().into_iter_result())
         }
     }
 }
@@ -1057,6 +944,7 @@ impl<'a, R> Iterator for StringRecords<'a, R> where R: io::Read {
 pub struct ByteRecords<'a, R: 'a> {
     p: &'a mut Reader<R>,
     first: bool,
+    errored: bool,
 }
 
 impl<'a, R> Iterator for ByteRecords<'a, R> where R: io::Read {
@@ -1097,16 +985,23 @@ impl<'a, R> Iterator for ByteRecords<'a, R> where R: io::Read {
             }
         }
         // OK, we're done checking the weird first-record-corner-case.
-        if self.p.done() {
+        if self.p.done() || self.errored {
             return None;
         }
-        let mut record = Vec::with_capacity(self.p.first_record.len());
+        let mut record = Vec::with_capacity(self.p.first_row.len());
         loop {
-            match self.p.next_field() {
-                NextField::EndOfRecord | NextField::EndOfCsv => break,
-                NextField::Error(err) => return Some(Err(err)),
-                NextField::Data(field) =>
-                    record.push(ByteString::from_bytes(field)),
+            match self.p.next_bytes() {
+                NextField::EndOfRecord | NextField::EndOfCsv => {
+                    if record.len() == 0 {
+                        return None
+                    }
+                    break
+                }
+                NextField::Error(err) => {
+                    self.errored = true;
+                    return Some(Err(err));
+                }
+                NextField::Data(field) => record.push(field.to_vec()),
             }
         }
         Some(Ok(record))

@@ -444,6 +444,6 @@ impl<W: io::Write> Writer<W> {
             }
         }
         buf.push(self.quote);
-        ByteString::from_bytes(buf)
+        buf
     }
 }

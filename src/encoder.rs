@@ -24,7 +24,7 @@ impl Encoded {
 
     fn push_bytes<'a, S>(&mut self, s: S) -> Result<()>
             where S: Into<Vec<u8>> {
-        self.record.push(ByteString::from_bytes(s));
+        self.record.push(s.into());
         Ok(())
     }
 

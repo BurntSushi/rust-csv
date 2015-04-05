@@ -204,20 +204,20 @@ parses_to!(quote_inner_space, "\" a \"", vec![vec![" a "]]);
 parses_to!(quote_outer_space, "  \"a\"  ", vec![vec!["  \"a\"  "]]);
 
 parses_to!(quote_change, "zaz", vec![vec!["a"]],
-           |rdr: Reader<_>| rdr.quote(Some(b'z')));
+           |rdr: Reader<_>| rdr.quote(b'z'));
 
 // This one is pretty hokey. I don't really know what the "right" behavior is.
 parses_to!(quote_delimiter, ",a,,b", vec![vec!["a,b"]],
-           |rdr: Reader<_>| rdr.quote(Some(b',')));
+           |rdr: Reader<_>| rdr.quote(b','));
 
 // Another hokey one...
 parses_to!(quote_no_escapes, r#""a\"b""#, vec![vec![r#"a\b""#]]);
 parses_to!(quote_escapes_no_double, r#""a""b""#, vec![vec![r#"a"b""#]],
            |rdr: Reader<_>| rdr.double_quote(false));
 parses_to!(quote_escapes, r#""a\"b""#, vec![vec![r#"a"b"#]],
-           |rdr: Reader<_>| rdr.double_quote(false));
+           |rdr: Reader<_>| rdr.escape(Some(b'\\')));
 parses_to!(quote_escapes_change, r#""az"b""#, vec![vec![r#"a"b"#]],
-           |rdr: Reader<_>| rdr.double_quote(false).escape(b'z'));
+           |rdr: Reader<_>| rdr.escape(Some(b'z')));
 
 parses_to!(delimiter_tabs, "a\tb", vec![vec!["a", "b"]],
            |rdr: Reader<_>| rdr.delimiter(b'\t'));
@@ -354,7 +354,7 @@ fn headers_trailing_lf() {
     let mut d = Reader::from_string("a,b,c\n\n\n\n");
     assert_eq!(d.headers().unwrap(),
                vec!("a".to_string(), "b".to_string(), "c".to_string()));
-    assert!(d.next_field().is_end());
+    assert!(d.next_bytes().is_end());
 }
 
 #[test]
@@ -364,9 +364,7 @@ fn headers_eof() {
     assert!(d.done());
 }
 
-fn bytes<'a, S>(bs: S) -> ByteString where S: Into<Vec<u8>> {
-    ByteString::from_bytes(bs)
-}
+fn bytes<'a, S>(bs: S) -> ByteString where S: Into<Vec<u8>> { bs.into() }
 
 #[test]
 fn byte_strings() {
@@ -416,7 +414,7 @@ fn seeking() {
 fn raw_access() {
     let mut rdr = Reader::from_string("1,2");
     let mut fields = vec![];
-    while let Some(field) = rdr.next_field().into_iter_result() {
+    while let Some(field) = rdr.next_bytes().into_iter_result() {
         fields.push(field.unwrap().to_vec());
     }
     assert_eq!(fields[0], b"1".to_vec());

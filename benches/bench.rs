@@ -37,7 +37,7 @@ fn raw_records(b: &mut Bencher) {
     b.iter(|| {
         let mut dec = reader(&mut data);
         while !dec.done() {
-            while let Some(r) = dec.next_field().into_iter_result() {
+            while let Some(r) = dec.next_bytes().into_iter_result() {
                 r.unwrap();
             }
         }

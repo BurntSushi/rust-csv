@@ -2,22 +2,26 @@ package main
 
 import (
 	"encoding/csv"
+	"fmt"
 	"io"
 	"log"
 	"os"
 )
 
-func readAll(r io.Reader) {
+func readAll(r io.Reader) int {
+	fields := 0
 	csvr := csv.NewReader(r)
 	for {
-		_, err := csvr.Read()
+		row, err := csvr.Read()
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			log.Fatal(err)
 		}
+		fields += len(row)
 	}
+	return fields
 }
 
 func main() {
@@ -28,5 +32,5 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	readAll(f)
+	fmt.Println(readAll(f))
 }

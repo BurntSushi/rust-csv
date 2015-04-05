@@ -79,8 +79,7 @@
 //! chocolate,refile,7";
 //!
 //! let mut rdr = csv::Reader::from_string(data).has_headers(false);
-//! for row in rdr.records() {
-//!     let row = row.unwrap();
+//! for row in rdr.records().map(|r| r.unwrap()) {
 //!     println!("{:?}", row);
 //! }
 //! ```
@@ -96,8 +95,7 @@
 //! chocolate,refile,7";
 //!
 //! let mut rdr = csv::Reader::from_bytes(&data[..]).has_headers(false);
-//! for row in rdr.byte_records() {
-//!     let row = row.unwrap();
+//! for row in rdr.byte_records().map(|r| r.unwrap()) {
 //!     println!("{:?}", row);
 //! }
 //! ```
@@ -124,7 +122,7 @@
 //!
 //! let mut rdr = csv::Reader::from_string(data);
 //! while !rdr.done() {
-//!     while let Some(r) = rdr.next_field().into_iter_result() {
+//!     while let Some(r) = rdr.next_bytes().into_iter_result() {
 //!         print!("{:?} ", r.unwrap());
 //!     }
 //!     println!("");
@@ -134,15 +132,23 @@
 //! There is more explanation for how this iterator interface works on the
 //! `Reader` type.
 //!
+//! ## Indexing
+//!
+//! This crate has experimental support for CSV record indexing. It's very
+//! simplistic, but once the index is created, you can seek a `csv::Reader`
+//! to any record instantly. See the
+//! [`csv::index`](/rustdoc/csv/index/index.html)
+//! sub-module for more details and examples.
+//!
 //! ## Compliance with RFC 4180
 //!
 //! [RFC 4180](http://tools.ietf.org/html/rfc4180) seems to the closest thing
-//! to an official specification for CSV.
-//! Currently, the parser in this crate will read a strict superset of
-//! RFC 4180 while the writer will always write CSV data that conforms to
-//! RFC 4180. This approach was taken because CSV data is commonly malformed
-//! and there is nothing worse than trying to read busted CSV data with a
-//! library that says it can't do it.
+//! to an official specification for CSV. Currently, the parser in this crate
+//! will read a strict superset of RFC 4180 while the writer will always write
+//! CSV data that conforms to RFC 4180 (unless configured to do otherwise).
+//! This approach was taken because CSV data is commonly malformed and there is
+//! nothing worse than trying to read busted CSV data with a library that says
+//! it can't do it.
 //!
 //! With that said, a "strict" mode may be added that will only read CSV data
 //! that conforms to RFC 4180.
@@ -153,14 +159,12 @@
 //!     parser. By default, the encoder uses LF line endings but can be
 //!     instructed to use CRLF with the `crlf` method.
 //!   * The first record is read as a "header" by default, but this can be
-//!     disabled by calling `no_headers` before reading any records.
+//!     disabled by calling `has_headers(false)` before reading any records.
 //!     (N.B. The encoder has no explicit support for headers. Simply encode a
 //!     vector of strings instead.)
 //!   * By default, the delimiter is a comma, but it can be changed to any
 //!     **ASCII** byte character with the `delimiter` method (for either
 //!     writing or reading).
-//!   * The decoder interprets `\"` as an escaped quote in addition to the
-//!     standard `""`.
 //!   * By default, both the writer and reader will enforce the invariant
 //!     that all records are the same length. (This is what RFC 4180 demands.)
 //!     If a record with a different length is found, an error is returned.
@@ -186,7 +190,7 @@ use std::fmt;
 use std::io;
 use std::result;
 
-pub use bytestr::{BorrowBytes, ByteString};
+pub use borrow_bytes::BorrowBytes;
 pub use encoder::Encoded;
 pub use decoder::Decoded;
 pub use reader::{
@@ -195,11 +199,16 @@ pub use reader::{
 };
 pub use writer::{Writer, QuoteStyle};
 
-/// An experimental module for processing CSV data in parallel.
+macro_rules! lg {
+    ($($tt:tt)*) => ({
+        use std::io::Write;
+        writeln!(&mut ::std::io::stderr(), $($tt)*).unwrap();
+    });
+}
+
 pub mod index;
 
-mod buffered;
-mod bytestr;
+mod borrow_bytes;
 mod encoder;
 mod decoder;
 mod reader;
@@ -212,6 +221,9 @@ mod tests;
 /// operations.
 pub type Result<T> = result::Result<T, Error>;
 
+/// A convenience type for referring to a plain byte string.
+pub type ByteString = Vec<u8>;
+
 /// An error produced by an operation on CSV data.
 #[derive(Debug)]
 pub enum Error {
@@ -220,40 +232,41 @@ pub enum Error {
     /// An error reported by the type-based decoder.
     Decode(String),
     /// An error reported by the CSV parser.
-    Parse(ParseError),
+    Parse(LocatableError<ParseError>),
     /// An error originating from reading or writing to the underlying buffer.
     Io(io::Error),
     /// An error originating from using a CSV index.
     Index(String),
 }
 
-/// A description of a CSV parse error.
+/// An error tagged with a location at which it occurred.
 #[derive(Clone, Copy, Debug)]
-pub struct ParseError {
-    /// The line number of the parse error.
-    pub line: u64,
-    /// The column (byte offset) of the parse error.
-    pub column: u64,
-    /// The type of parse error.
-    pub kind: ParseErrorKind,
+pub struct LocatableError<T> {
+    /// The record number (starting at 1).
+    pub record: u64,
+    /// The field number (starting at 1).
+    pub field: u64,
+    /// The error.
+    pub err: T,
 }
 
-/// The different types of parse errors.
-///
-/// Currently, the CSV parser is extremely liberal in what it accepts, so
-/// there aren't many possible parse errors. (Instead, there are just
-/// variations in what the parse returns.)
-///
-/// If and when a "strict" mode is added to this crate, this list of errors
-/// will expand.
+/// A description of a CSV parse error.
 #[derive(Clone, Copy, Debug)]
-pub enum ParseErrorKind {
-    /// This error occurs when a record has a different number of fields
-    /// than the first record parsed.
-    UnequalLengths(u64, u64),
-
-    /// This error occurs when parsing CSV data as Unicode.
-    InvalidUTF8,
+pub enum ParseError {
+    /// A record was found that has a different size than other records.
+    ///
+    /// This is only reported when `flexible` is set to `false` on the
+    /// corresponding CSV reader/writer.
+    UnequalLengths {
+        /// Expected a record with this many fields.
+        expected: u64,
+        /// Got a record with this many fields.
+        got: u64,
+    },
+    /// An error occurred when trying to convert a field to a Unicode string.
+    ///
+    /// TODO: Include the real Utf8Error, but it is not stabilized yet.
+    InvalidUtf8,
 }
 
 impl fmt::Display for Error {
@@ -268,20 +281,20 @@ impl fmt::Display for Error {
     }
 }
 
-impl fmt::Display for ParseError {
+impl<T: fmt::Display> fmt::Display for LocatableError<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CSV parse error:{}:{}: {}",
-               self.line, self.column, self.kind)
+        write!(f, "CSV error (at record {}, field {}): {}",
+               self.record, self.field, self.err)
     }
 }
 
-impl fmt::Display for ParseErrorKind {
+impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ParseErrorKind::UnequalLengths(first, cur) =>
+            ParseError::UnequalLengths { expected, got } =>
                 write!(f, "First record has length {}, but found record \
-                           with length {}.", first, cur),
-            ParseErrorKind::InvalidUTF8 =>
+                           with length {}.", expected, got),
+            ParseError::InvalidUtf8 =>
                 write!(f, "Invalid UTF8 encoding."),
         }
     }

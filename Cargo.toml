@@ -12,6 +12,14 @@ license = "Unlicense"
 
 [lib]
 name = "csv"
+bench = false
+
+[[bin]]
+name = "bench-large"
+path = "bench_large/huge.rs"
+test = false
+bench = false
+doc = false
 
 [dependencies]
 byteorder = "*"
@@ -23,3 +31,7 @@ regex = "*"
 [profile.bench]
 opt-level = 3
 lto = true  # this doesn't seem to work... why?
+
+[profile.release]
+opt-level = 3
+lto = true
