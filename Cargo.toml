@@ -8,7 +8,7 @@ homepage = "https://github.com/BurntSushi/rust-csv"
 repository = "https://github.com/BurntSushi/rust-csv"
 readme = "README.md"
 keywords = ["csv", "tsv", "comma", "parser", "delimited"]
-license = "Unlicense"
+license = "Unlicense/MIT"
 
 [lib]
 name = "csv"
