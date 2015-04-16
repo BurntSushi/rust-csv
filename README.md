@@ -13,6 +13,7 @@ You can also see how it compares to other parsers in
 [ewanhiggs' CSV game](https://bitbucket.org/ewanhiggs/csv-game).
 
 [![Build status](https://api.travis-ci.org/BurntSushi/rust-csv.png)](https://travis-ci.org/BurntSushi/rust-csv)
+[![](http://meritbadge.herokuapp.com/csv)](https://crates.io/crates/csv)
 
 Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
 
