@@ -9,5 +9,5 @@ script:
   - cargo build --verbose
   - cargo test --verbose
   - if [ "$TEST_SUITE" = "suite_nightly" ]; then
-      cargo bench --verbose
+      cargo bench --verbose;
     fi
