@@ -22,11 +22,11 @@ bench = false
 doc = false
 
 [dependencies]
-byteorder = "*"
-rustc-serialize = "*"
+byteorder = "0.3"
+rustc-serialize = "0.3"
 
 [dev-dependencies]
-regex = "*"
+regex = "0.1"
 
 [profile.bench]
 opt-level = 3

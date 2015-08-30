@@ -88,7 +88,7 @@ Add it to your `Cargo.toml` like so:
 
 ```toml
 [dependencies]
-csv = "*"
+csv = "0.14"
 ```
 
 
