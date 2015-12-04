@@ -114,6 +114,8 @@ number of records in a CSV file:
 ```rust
 extern crate csv;
 
+use csv::NextField;
+
 fn main() {
     let fpath = ::std::env::args().nth(1).unwrap();
     let mut rdr = csv::Reader::from_file(fpath).unwrap();
@@ -123,7 +125,7 @@ fn main() {
             NextField::EndOfCsv => break,
             NextField::EndOfRecord => { count += 1; break; }
             NextField::Data(_) => {}
-            NextField::Error(err) => fail!(err),
+            NextField::Error(err) => panic!(err),
         }
     }
     println!("{}", count);
