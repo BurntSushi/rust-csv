@@ -117,7 +117,7 @@ impl<W: io::Write> Writer<W> {
 
 impl Writer<Vec<u8>> {
     /// Creates a new CSV writer that writes to an in memory buffer. At any
-    /// time, `to_string` or `to_bytes` can be called to retrieve the
+    /// time, `as_string` or `as_bytes` can be called to retrieve the
     /// cumulative CSV data.
     pub fn from_memory() -> Writer<Vec<u8>> {
         Writer::from_writer(Vec::with_capacity(1024 * 64))
@@ -130,7 +130,7 @@ impl Writer<Vec<u8>> {
             Err(err) => panic!("Error flushing to Vec<u8>: {}", err),
             // This seems suspicious. If the client only writes `String`
             // values, then this can never fail. If the client is writing
-            // byte strings, then they should be calling `to_bytes` instead.
+            // byte strings, then they should be calling `as_bytes` instead.
             Ok(()) => str::from_utf8(&**self.buf.get_ref()).unwrap(),
         }
     }
@@ -141,6 +141,24 @@ impl Writer<Vec<u8>> {
             // shouldn't panic with Vec<u8>
             Err(err) => panic!("Error flushing to Vec<u8>: {}", err),
             Ok(()) => &**self.buf.get_ref(),
+        }
+    }
+
+    /// Convert the Writer into a string of written CSV data
+    pub fn into_string(self) -> String {
+        // This seems suspicious. If the client only writes `String`
+        // values, then this can never fail. If the client is writing
+        // byte strings, then they should be calling `to_bytes` instead.
+        String::from_utf8(self.into_bytes()).unwrap()
+    }
+
+    /// Convert the Writer into a vector of encoded CSV bytes.
+    pub fn into_bytes(mut self) -> Vec<u8> {
+        match self.buf.flush() {
+            // shouldn't panic with Vec<u8>
+            Err(err) => panic!("Error flushing to Vec<u8>: {}", err),
+            // won't panic with in-memory writer (i.e. Vec<u8>)
+            Ok(()) => self.buf.into_inner().unwrap(),
         }
     }
 }
