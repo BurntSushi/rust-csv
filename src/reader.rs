@@ -93,6 +93,7 @@ impl PartialEq<u8> for RecordTerminator {
 ///     println!("{:?}", row);
 /// }
 /// ```
+#[derive(Clone)]
 pub struct Reader<R> {
     rdr: R,
     buf: Vec<u8>,
