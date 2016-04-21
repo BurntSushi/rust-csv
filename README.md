@@ -175,28 +175,27 @@ use std::io::{self, Write};
 use csv::index::{Indexed, create_index};
 
 fn main() {
-  let data = "
-  h1,h2,h3
-  a,b,c
-  d,e,f
-  g,h,i
-  ";
+    let data = "
+h1,h2,h3
+a,b,c
+d,e,f
+g,h,i";
 
-  let new_csv_rdr = || csv::Reader::from_string(data);
+    let new_csv_rdr = || csv::Reader::from_string(data);
 
-  let mut index_data = io::Cursor::new(Vec::new());
-  create_index(new_csv_rdr(), index_data.by_ref()).unwrap();
-  let mut index = Indexed::open(new_csv_rdr(), index_data).unwrap();
+    let mut index_data = io::Cursor::new(Vec::new());
+    create_index(new_csv_rdr(), index_data.by_ref()).unwrap();
+    let mut index = Indexed::open(new_csv_rdr(), index_data).unwrap();
 
-  // Seek to the second record and read its data. This is done *without*
-  // reading the first record.
-  index.seek(1).unwrap();
+    // Seek to the second record and read its data. This is done *without*
+    // reading the first record.
+    index.seek(1).unwrap();
 
-  // Read the first row at this position (which is the second record).
-  // Since `Indexed` derefs to a `csv::Reader`, we can call CSV reader methods
-  // on it directly.
-  let row = index.records().next().unwrap().unwrap();
+    // Read the first row at this position (which is the second record).
+    // Since `Indexed` derefs to a `csv::Reader`, we can call CSV reader methods
+    // on it directly.
+    let row = index.records().next().unwrap().unwrap();
 
-  assert_eq!(row, vec!["d", "e", "f"]);
+    assert_eq!(row, vec!["d", "e", "f"]);
 }
 ```
