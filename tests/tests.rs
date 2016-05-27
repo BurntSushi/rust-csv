@@ -1,8 +1,14 @@
+#![cfg_attr(feature = "serde", feature(custom_derive, plugin))]
+#![cfg_attr(feature = "serde", plugin(serde_macros))]
+
+extern crate csv;
+
+#[cfg(feature = "rustc-serialize")]
+extern crate rustc_serialize;
+
+use csv::*;
+
 use std::io::{self, Read, Seek, Write};
-use {
-    Reader, Writer, ByteString, Result,
-    RecordTerminator, QuoteStyle,
-};
 
 fn assert_svec_eq<S, T>(got: Vec<Vec<S>>, expected: Vec<Vec<T>>)
         where S: AsRef<str>, T: AsRef<str> {
@@ -235,9 +241,24 @@ parses_to!(flexible_rows2, "a,b\nx", vec![vec!["a", "b"], vec!["x"]],
 fail_parses_to!(nonflexible, "a\nx,y", vec![]);
 fail_parses_to!(nonflexible2, "a,b\nx", vec![]);
 
-#[derive(Debug, RustcDecodable, RustcEncodable, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "rustc-serialize", derive(RustcDecodable, RustcEncodable))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 enum Val { Unsigned(usize), Signed(isize), Bool(bool) }
 
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "rustc-serialize", derive(RustcDecodable, RustcEncodable))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+struct TestStruct {
+    myint: i32,
+    myuint: usize,
+    mystr: String,
+    mybool: bool,
+    myenum: Val,
+    mytuple: (i32, usize, String, bool, Val)
+}
+
+decodes_to!(decode_bools, "false, true, false", (bool, bool, bool), vec![(false, true, false)]);
 decodes_to!(decode_int, "1", (usize,), vec![(1usize,)]);
 decodes_to!(decode_many_int, "1,2", (usize, i16), vec![(1usize, 2i16)]);
 decodes_to!(decode_float, "1,1.0,1.5",
@@ -249,13 +270,23 @@ decodes_to!(decode_opt_int, "a", (Option<usize>,), vec![(None,)]);
 decodes_to!(decode_opt_float, "a", (Option<f64>,), vec![(None,)]);
 decodes_to!(decode_opt_char, "ab", (Option<char>,), vec![(None,)]);
 decodes_to!(decode_opt_empty, "\"\"", (Option<String>,), vec![(None,)]);
-
 decodes_to!(decode_val, "false,-5,5", (Val, Val, Val),
             vec![(Val::Bool(false), Val::Signed(-5), Val::Unsigned(5))]);
 decodes_to!(decode_opt_val, "1.0", (Option<Val>,), vec![(None,)]);
 
 decodes_to!(decode_tail, "abc,1,2,3,4", (String, Vec<usize>),
             vec![("abc".into(), vec![1usize, 2, 3, 4])]);
+decodes_to!(decode_struct,
+            "-98765, 12345,\"abc\",true,12345,-98765,12345,\"abc\",false,-12345",
+            TestStruct,
+            vec![TestStruct {
+                myint: -98765,
+                myuint: 12345,
+                mystr: String::from("abc"),
+                mybool: true,
+                myenum: Val::Unsigned(12345),
+                mytuple: (-98765, 12345, String::from("abc"), false, Val::Signed(-12345))
+            }]);
 
 writes_as!(wtr_one_record_one_field, vec![vec!["a"]], "a\n");
 writes_as!(wtr_one_record_many_field, vec![vec!["a", "b"]], "a,b\n");
@@ -325,6 +356,16 @@ encodes_as!(encode_some, vec![(Some(true),)], "true\n");
 encodes_as!(encode_val,
             vec![(Val::Bool(false), Val::Signed(-5), Val::Unsigned(5))],
             "false,-5,5\n");
+encodes_as!(encode_struct,
+            vec![TestStruct {
+                myint: -98765,
+                myuint: 12345,
+                mystr: String::from("abc"),
+                mybool: true,
+                myenum: Val::Unsigned(12345),
+                mytuple: (-98765, 12345, String::from("abc"), false, Val::Signed(-12345))
+            }],
+            "-98765,12345,abc,true,12345,-98765,12345,abc,false,-12345\n");
 
 #[test]
 fn no_headers_no_skip_one_record() {

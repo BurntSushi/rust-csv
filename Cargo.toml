@@ -7,7 +7,7 @@ documentation = "http://burntsushi.net/rustdoc/csv/"
 homepage = "https://github.com/BurntSushi/rust-csv"
 repository = "https://github.com/BurntSushi/rust-csv"
 readme = "README.md"
-keywords = ["csv", "tsv", "comma", "parser", "delimited"]
+keywords = ["csv", "tsv", "comma", "parser", "delimited", "serde"]
 license = "Unlicense/MIT"
 
 [lib]
@@ -23,10 +23,12 @@ doc = false
 
 [dependencies]
 byteorder = "0.3"
-rustc-serialize = "0.3"
+rustc-serialize = { version = "0.3", optional = true }
+serde = { version = "0.7.7", optional = true }
 
 [dev-dependencies]
 regex = "0.1"
+serde_macros = "0.7.7"
 
 [profile.bench]
 opt-level = 3
@@ -35,3 +37,6 @@ lto = true  # this doesn't seem to work... why?
 [profile.release]
 opt-level = 3
 lto = true
+
+[features]
+default = ["rustc-serialize"]

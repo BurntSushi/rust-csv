@@ -91,6 +91,56 @@ Add it to your `Cargo.toml` like so:
 csv = "0.14"
 ```
 
+### Serde support
+By default, this crate uses `rustc-serialize` for the encoding and decoding of types.
+There is also experimental support for the future-standard rust serializer
+[serde](https://github.com/serde-rs/serde). It can be enabled with by updating
+your Cargo.toml like so:
+
+```toml
+[dependencies]
+csv = {version = "0.14", features = ["serde"], default-features = false}
+```
+
+`serde` enables some powerful features such as the ability to skip or ignore
+fields. Otherwise the API is unchanged.
+
+Example usage (note: requires rust-nightly due to `custom_derive` plugins):
+
+```toml
+# Cargo.toml
+[dependencies]
+csv = {version = "0.14", features = ["serde"], default-features = false}
+serde = "0.7.7"
+serde_macros = "0.7.7"
+```
+```rust
+// main.rs
+#![feature(custom_derive, plugin)]
+#![plugin(serde_macros)]
+
+extern crate csv;
+extern crate serde;
+
+#[derive(Serialize, Deserialize)]
+struct Record {
+    #[serde(skip_deserializing)]
+    row_id: usize,  // Will default to zero
+    v1: i32,
+    v2: i32
+}
+
+fn main() {
+    let data = "10,20\n20,30\n30,40\n";
+    let mut rdr = csv::Reader::from_string(data).has_headers(false);
+    let mut records: Vec<Record> = rdr.decode().map(|dec| dec.unwrap()).collect();
+    // Add an index value to each row
+    records.iter_mut().enumerate().map(|(ix, r)| r.row_id = ix).collect::<Vec<_>>();
+    let mut writer = csv::Writer::from_memory();
+    records.into_iter().map(|r| writer.encode(r).unwrap()).collect::<Vec<_>>();
+    assert_eq!(writer.as_string(), "0,10,20\n1,20,30\n2,30,40\n")
+}
+```
 
 ### Performance and benchmarks
 
