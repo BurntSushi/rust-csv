@@ -10,7 +10,6 @@ matrix:
     - rust: beta
       env: FEATURES="serde" TEST_FEATURES="serde-test"
 script:
-  - echo $TRAVIS_RUST_VERSION
   - cargo build --verbose --no-default-features --features $FEATURES
   - cargo test --verbose --no-default-features --features $TEST_FEATURES --lib --test tests
   - if [[ $FEATURES == "rustc-serialize" ]]; then
