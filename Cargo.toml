@@ -26,9 +26,12 @@ byteorder = "0.3"
 rustc-serialize = { version = "0.3", optional = true }
 serde = { version = "0.7.7", optional = true }
 
+# Only used for tests. Would like to put in dev-dependencies but unfortunately
+# won't even compile on beta branch
+serde_macros = { version = "0.7.7", optional = true }
+
 [dev-dependencies]
 regex = "0.1"
-serde_macros = "0.7.7"
 
 [profile.bench]
 opt-level = 3
@@ -40,3 +43,4 @@ lto = true
 
 [features]
 default = ["rustc-serialize"]
+serde-test = ["serde", "serde_macros"]
