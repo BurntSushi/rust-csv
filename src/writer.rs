@@ -3,7 +3,11 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::str;
 
+#[cfg(feature = "rustc-serialize")]
 use rustc_serialize::Encodable;
+
+#[cfg(feature = "serde")]
+use serde::Serialize as Encodable;   // FIXME this feels like an ugly hack
 
 use {
     BorrowBytes, ByteString, Result, Encoded, Error, RecordTerminator,
@@ -206,7 +210,8 @@ impl<W: io::Write> Writer<W> {
     /// ```
     pub fn encode<E>(&mut self, e: E) -> Result<()> where E: Encodable {
         let mut erecord = Encoded::new();
-        try!(e.encode(&mut erecord));
+        // abstract over rustc_deserialize and serde
+        try!(encode(e, &mut erecord));
         self.write(erecord.unwrap().into_iter())
     }
 
@@ -464,4 +469,16 @@ impl<W: io::Write> Writer<W> {
         buf.push(self.quote);
         buf
     }
+}
+
+#[inline]
+#[cfg(feature = "rustc-serialize")]
+fn encode<E>(e: E, erecord: &mut Encoded) -> Result<()> where E: Encodable {
+    e.encode(erecord)
+}
+
+#[inline]
+#[cfg(feature = "serde")]
+fn encode<E>(e: E, erecord: &mut Encoded) -> Result<()> where E: Encodable {
+    e.serialize(erecord)
 }

@@ -3,12 +3,17 @@
 
 extern crate csv;
 extern crate regex;
+#[cfg(feature = "rustc-serialize")]
 extern crate rustc_serialize;
+#[cfg(feature = "serde")]
+extern crate serde;
 
 use std::str;
 
 use regex::Regex;
-use rustc_serialize::{Decodable, Decoder};
+
+#[cfg(feature = "serde")]
+use serde::{Error, Deserializer};
 
 #[derive(Debug)]
 struct Rational {
@@ -16,8 +21,9 @@ struct Rational {
     denominator: i64,
 }
 
-impl Decodable for Rational {
-    fn decode<D: Decoder>(d: &mut D) -> Result<Rational, D::Error> {
+#[cfg(feature = "rustc-serialize")]
+impl rustc_serialize::Decodable for Rational {
+    fn decode<D: rustc_serialize::Decoder>(d: &mut D) -> Result<Rational, D::Error> {
         let field = try!(d.read_str());
         // This uses the `FromStr` impl below.
         match field.parse() {
@@ -25,6 +31,26 @@ impl Decodable for Rational {
             Err(_) => Err(d.error(&*format!(
                 "Could not parse '{}' as a rational.", field))),
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Deserialize for Rational {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Rational, D::Error> {
+        use std::marker::PhantomData;
+        struct Visitor<D: Deserializer>(PhantomData<D>);
+        impl<D: Deserializer> serde::de::Visitor for Visitor<D> {
+            type Value = Rational;
+            fn visit_str<E: Error>(&mut self, field: &str) -> Result<Rational, E> {
+                // This uses the `FromStr` impl below.
+                match field.parse() {
+                    Ok(rat) => Ok(rat),
+                    Err(_) => Err(E::custom(
+                            format!("Could not parse '{}' as a rational.", field))),
+                }
+            }
+        }
+        d.deserialize_str(Visitor::<D>(PhantomData))
     }
 }
 

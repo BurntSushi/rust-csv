@@ -3,7 +3,11 @@ use std::io;
 use std::path::Path;
 use std::str;
 
+#[cfg(feature = "rustc-serialize")]
 use rustc_serialize::Decodable;
+
+#[cfg(feature = "serde")]
+use serde::Deserialize as Decodable;   // FIXME this feels like and ugly hack
 
 use {
     ByteString, Result, Decoded,
@@ -907,7 +911,8 @@ impl<'a, R, D> Iterator for DecodedRecords<'a, R, D>
     fn next(&mut self) -> Option<Result<D>> {
         self.p.next().map(|res| {
             res.and_then(|byte_record| {
-                Decodable::decode(&mut Decoded::new(byte_record))
+                // abstract over rustc_deserialize and serde
+                decode(&mut Decoded::new(byte_record))
             })
         })
     }
@@ -1017,4 +1022,16 @@ fn byte_record_to_utf8(record: Vec<ByteString>) -> Result<Vec<String>> {
         }
     }
     Ok(unsafe { ::std::mem::transmute(record) })
+}
+
+#[inline]
+#[cfg(feature = "rustc-serialize")]
+fn decode<D: Decodable>(d: &mut Decoded) -> Result<D> {
+    Decodable::decode(d)
+}
+
+#[inline]
+#[cfg(feature = "serde")]
+fn decode<D: Decodable>(d: &mut Decoded) -> Result<D> {
+    Decodable::deserialize(d)
 }

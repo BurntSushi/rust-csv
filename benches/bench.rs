@@ -1,7 +1,13 @@
 #![feature(test)]
 
+#![cfg_attr(feature = "serde-test", feature(custom_derive, plugin))]
+#![cfg_attr(feature = "serde-test", plugin(serde_macros))]
+
 extern crate csv;
+
+#[cfg(feature = "rustc-serialize")]
 extern crate rustc_serialize;
+
 extern crate test;
 
 use std::fmt::{Debug, Display};
@@ -65,7 +71,8 @@ fn string_records(b: &mut Bencher) {
 }
 
 #[allow(dead_code)]
-#[derive(RustcDecodable)]
+#[cfg_attr(feature = "rustc-serialize", derive(RustcDecodable))]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
 struct Play {
     gameid: String,
     qtr: i32,

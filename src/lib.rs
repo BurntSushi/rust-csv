@@ -183,7 +183,12 @@
 #![deny(missing_docs)]
 
 extern crate byteorder;
+
+#[cfg(feature = "rustc-serialize")]
 extern crate rustc_serialize;
+
+#[cfg(feature = "serde")]
+extern crate serde;
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -191,13 +196,12 @@ use std::io;
 use std::result;
 
 pub use borrow_bytes::BorrowBytes;
-pub use encoder::Encoded;
-pub use decoder::Decoded;
+pub use common::{Encoded, Decoded};
+pub use writer::{Writer, QuoteStyle};
 pub use reader::{
     Reader, DecodedRecords, StringRecords, ByteRecords, NextField,
     RecordTerminator,
 };
-pub use writer::{Writer, QuoteStyle};
 
 macro_rules! lg {
     ($($tt:tt)*) => ({
@@ -207,15 +211,16 @@ macro_rules! lg {
 }
 
 pub mod index;
-
 mod borrow_bytes;
-mod encoder;
-mod decoder;
+mod common;
 mod reader;
 mod writer;
 
-#[cfg(test)]
-mod tests;
+#[cfg(feature = "rustc-serialize")]
+mod rustc_serialize_impl;
+
+#[cfg(feature = "serde")]
+mod serde_impl;
 
 /// A convenience type for representing the result of most CSV reader/writer
 /// operations.
@@ -331,5 +336,23 @@ impl From<byteorder::Error> for Error {
                 Error::Index(format!("Unexpected EOF when reading CSV index."))
             }
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::ser::Error for Error {
+    fn custom<T: Into<String>>(msg: T) -> Error {
+        Error::Encode(msg.into())
+    }
+}
+#[cfg(feature = "serde")]
+impl serde::de::Error for Error {
+    fn custom<T: Into<String>>(msg: T) -> Self {
+        Error::Decode(msg.into())
+    }
+
+    fn end_of_stream() -> Self {
+        // FIXME better type/message?
+        Error::Decode(String::from("Unexpected end of stream"))
     }
 }

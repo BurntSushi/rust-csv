@@ -1,7 +1,12 @@
+#![cfg_attr(feature = "serde", feature(custom_derive, plugin))]
+#![cfg_attr(feature = "serde", plugin(serde_macros))]
+
 extern crate csv;
+#[cfg(feature = "rustc-serialize")]
 extern crate rustc_serialize;
 
-#[derive(RustcDecodable)]
+#[cfg_attr(feature = "rustc-serialize", derive(RustcDecodable))]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
 struct Record {
     s1: String,
     s2: String,

@@ -1,8 +1,13 @@
+#![cfg_attr(feature = "serde", feature(custom_derive, plugin))]
+#![cfg_attr(feature = "serde", plugin(serde_macros))]
+
 extern crate csv;
+#[cfg(feature = "rustc-serialize")]
 extern crate rustc_serialize;
 
 #[allow(dead_code)]
-#[derive(RustcDecodable)]
+#[cfg_attr(feature = "rustc-serialize", derive(RustcDecodable))]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
 struct Play {
     gameid: String,
     qtr: u32,

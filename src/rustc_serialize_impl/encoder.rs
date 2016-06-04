@@ -1,42 +1,7 @@
 use rustc_serialize as serialize;
+use {Result, Error};
 
-use {ByteString, Result, Error};
-
-/// A record to be encoded.
-///
-/// This is a "wrapper" type that allows the `Encoder` machinery from the
-/// `serialize` crate to encode a *single* CSV record from your custom types.
-///
-/// Generally, you should not need to use this type directly. Instead, you
-/// should prefer the `encode` or `encode_all` methods defined on `CsvWriter`.
-pub struct Encoded {
-    record: Vec<ByteString>,
-}
-
-impl Encoded {
-    /// Creates a new encodable record. The value returned can be passed to
-    /// `Encodable::encode`.
-    pub fn new() -> Encoded { Encoded { record: vec![] } }
-
-    /// Once a record has been encoded into this value, `unwrap` can be used
-    /// to access the raw CSV record.
-    pub fn unwrap(self) -> Vec<ByteString> { self.record }
-
-    fn push_bytes<'a, S>(&mut self, s: S) -> Result<()>
-            where S: Into<Vec<u8>> {
-        self.record.push(s.into());
-        Ok(())
-    }
-
-    fn push_string<'a, S>(&mut self, s: S) -> Result<()>
-            where S: Into<String> {
-        self.push_bytes(s.into().into_bytes())
-    }
-
-    fn push_to_string<T: ToString>(&mut self, t: T) -> Result<()> {
-        self.push_string(t.to_string())
-    }
-}
+use common::{Encoded, EncodedHelper, float_to_string};
 
 impl serialize::Encoder for Encoded {
     type Error = Error;
@@ -159,9 +124,4 @@ impl serialize::Encoder for Encoded {
                        where F: FnOnce(&mut Encoded) -> Result<()> {
         unimplemented!()
     }
-}
-
-fn float_to_string(v: f64) -> String {
-    let s: String = format!("{:.10}", v).trim_right_matches('0').into();
-    if s.ends_with('.') { s + "0" } else { s }
 }
