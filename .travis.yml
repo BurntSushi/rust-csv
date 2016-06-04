@@ -1,13 +1,21 @@
 language: rust
+rust:
+  - "nightly"
+  - "beta"
+env:
+  - FEATURES="serde" TEST_FEATURES="serde-test"
+  - FEATURES="rustc-serialize" TEST_FEATURES="rustc-serialize"
 matrix:
-  include:
-    - rust: "nightly"
-      env: TEST_SUITE=suite_nightly
-    - rust: "beta"
-      env: TEST_SUITE=suite_beta
+  exclude:
+    - rust: beta
+      env: FEATURES="serde" TEST_FEATURES="serde-test"
 script:
-  - cargo build --verbose
-  - cargo test --verbose
-  - if [ "$TEST_SUITE" = "suite_nightly" ]; then
-      cargo bench --verbose;
+  - echo $TRAVIS_RUST_VERSION
+  - cargo build --verbose --no-default-features --features $FEATURES
+  - cargo test --verbose --no-default-features --features $TEST_FEATURES --lib --test tests
+  - if [[ $FEATURES == "rustc-serialize" ]]; then
+      cargo test --verbose --no-default-features --features $TEST_FEATURES --doc;
+    fi
+  - if [[ $TRAVIS_RUST_VERSION == "nightly" ]]; then
+      cargo bench --verbose --no-default-features --features $TEST_FEATURES;
     fi

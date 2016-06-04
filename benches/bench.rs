@@ -1,7 +1,7 @@
 #![feature(test)]
 
-#![cfg_attr(feature = "serde", feature(custom_derive, plugin))]
-#![cfg_attr(feature = "serde", plugin(serde_macros))]
+#![cfg_attr(feature = "serde-test", feature(custom_derive, plugin))]
+#![cfg_attr(feature = "serde-test", plugin(serde_macros))]
 
 extern crate csv;
 
