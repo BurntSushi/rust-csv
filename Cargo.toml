@@ -22,7 +22,7 @@ bench = false
 doc = false
 
 [dependencies]
-byteorder = "0.3"
+byteorder = "0.5"
 rustc-serialize = "0.3"
 
 [dev-dependencies]

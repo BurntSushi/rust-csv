@@ -322,14 +322,3 @@ impl StdError for Error {
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error { Error::Io(err) }
 }
-
-impl From<byteorder::Error> for Error {
-    fn from(err: byteorder::Error) -> Error {
-        match err {
-            byteorder::Error::Io(err) => From::from(err),
-            byteorder::Error::UnexpectedEOF => {
-                Error::Index(format!("Unexpected EOF when reading CSV index."))
-            }
-        }
-    }
-}
