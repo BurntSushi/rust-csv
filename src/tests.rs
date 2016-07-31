@@ -358,6 +358,27 @@ fn headers_trailing_lf() {
 }
 
 #[test]
+fn extra_record_crlf() {
+    let mut d = Reader::from_string("foo\n1\n").has_headers(false);
+    assert_eq!("foo", d.next_str().into_iter_result().unwrap().unwrap());
+    assert!(d.next_str().into_iter_result().is_none());
+    assert_eq!("1", d.next_str().into_iter_result().unwrap().unwrap());
+    assert!(d.next_str().into_iter_result().is_none());
+    assert!(!d.done());
+    assert!(d.next_str().into_iter_result().is_none());
+    assert!(d.done());
+
+    let mut d = Reader::from_string("foo\r\n1\r\n").has_headers(false);
+    assert_eq!("foo", d.next_str().into_iter_result().unwrap().unwrap());
+    assert!(d.next_str().into_iter_result().is_none());
+    assert_eq!("1", d.next_str().into_iter_result().unwrap().unwrap());
+    assert!(d.next_str().into_iter_result().is_none());
+    assert!(!d.done());
+    assert!(d.next_str().into_iter_result().is_none());
+    assert!(d.done());
+}
+
+#[test]
 fn headers_eof() {
     let mut d = Reader::from_string("");
     assert!(d.headers().is_ok());
