@@ -363,8 +363,9 @@ fn extra_record_crlf() {
     assert_eq!("foo", d.next_str().into_iter_result().unwrap().unwrap());
     assert!(d.next_str().into_iter_result().is_none());
     assert_eq!("1", d.next_str().into_iter_result().unwrap().unwrap());
-    assert!(d.next_str().into_iter_result().is_none());
     assert!(!d.done());
+    assert!(d.next_str().into_iter_result().is_none());
+    assert!(d.done());
     assert!(d.next_str().into_iter_result().is_none());
     assert!(d.done());
 
@@ -372,8 +373,9 @@ fn extra_record_crlf() {
     assert_eq!("foo", d.next_str().into_iter_result().unwrap().unwrap());
     assert!(d.next_str().into_iter_result().is_none());
     assert_eq!("1", d.next_str().into_iter_result().unwrap().unwrap());
-    assert!(d.next_str().into_iter_result().is_none());
     assert!(!d.done());
+    assert!(d.next_str().into_iter_result().is_none());
+    assert!(d.done());
     assert!(d.next_str().into_iter_result().is_none());
     assert!(d.done());
 }

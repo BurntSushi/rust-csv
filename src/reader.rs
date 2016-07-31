@@ -626,8 +626,8 @@ impl<R: io::Read> Reader<R> {
                 return NextField::Error(Error::Io(err));
             }
             if self.buf.len() == 0 {
+                self.eof = true;
                 if let StartRecord = self.state {
-                    self.eof = true;
                     return self.next_eoc();
                 } else if let EndRecord = self.state {
                     self.state = StartRecord;
@@ -648,9 +648,6 @@ impl<R: io::Read> Reader<R> {
                         }
                     }
                     EndRecord => {
-                        if self.record_term.is_crlf() && c == b'\n' {
-                            self.bump();
-                        }
                         self.state = StartRecord;
                         return self.next_eor();
                     }
@@ -661,6 +658,7 @@ impl<R: io::Read> Reader<R> {
                         } else if c == self.delimiter {
                             return self.next_data();
                         } else if self.is_record_term(c) {
+                            self.bump_eor(c);
                             self.state = EndRecord;
                             return self.next_data();
                         } else {
@@ -674,6 +672,7 @@ impl<R: io::Read> Reader<R> {
                             self.state = StartField;
                             return self.next_data();
                         } else if self.is_record_term(c) {
+                            self.bump_eor(c);
                             self.state = EndRecord;
                             return self.next_data();
                         } else {
@@ -704,6 +703,7 @@ impl<R: io::Read> Reader<R> {
                             self.state = StartField;
                             return self.next_data();
                         } else if self.is_record_term(c) {
+                            self.bump_eor(c);
                             self.state = EndRecord;
                             return self.next_data();
                         } else {
@@ -812,6 +812,16 @@ impl<R: io::Read> Reader<R> {
     fn bump(&mut self) {
         self.bufi += 1;
         self.byte_offset += 1;
+    }
+
+    #[inline]
+    fn bump_eor(&mut self, c: u8) {
+        if !self.record_term.is_crlf() || c != b'\r' {
+            return;
+        }
+        if self.buf.get(self.bufi) == Some(&b'\n') {
+            self.bump();
+        }
     }
 
     #[inline]
