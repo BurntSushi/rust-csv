@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::str;
 
+use memchr::memchr;
 use rustc_serialize::Encodable;
 
 use {
@@ -443,7 +444,7 @@ impl<W: io::Write> Writer<W> {
 
         buf.push(self.quote);
         loop {
-            match s.iter().position(|&v| v == self.quote) {
+            match memchr(self.quote, s) {
                 None => {
                     buf.extend_from_slice(s);
                     break
