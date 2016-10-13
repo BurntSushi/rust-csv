@@ -183,6 +183,7 @@
 #![deny(missing_docs)]
 
 extern crate byteorder;
+extern crate memchr;
 extern crate rustc_serialize;
 
 use std::error::Error as StdError;

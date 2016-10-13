@@ -24,6 +24,7 @@ doc = false
 [dependencies]
 byteorder = "0.5"
 rustc-serialize = "0.3"
+memchr = "0.1.11"
 
 [dev-dependencies]
 regex = "0.1"
