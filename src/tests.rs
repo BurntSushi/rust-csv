@@ -461,3 +461,53 @@ fn scratch() {
         let _ = writeln!(&mut io::stderr(), "{:?}", row);
     }
 }
+
+#[test]
+#[cfg(feature = "multiline")]
+fn multiline_and_flexible() {
+    let mut rdr = Reader::from_string("h1,h2\n1,\"unclosed\n2,no_quotes").has_headers(false).flexible(true).multiline(true);
+    let mut record_count = 0;
+    for row in rdr.records() {
+        let _ = writeln!(&mut io::stderr(), "{:?}", row.unwrap());
+        record_count = record_count + 1;
+    }
+    assert_eq!(record_count, 2);
+}
+
+#[test]
+#[should_panic]
+#[cfg(feature = "multiline")]
+fn multiline_and_not_flexible() {
+    let mut rdr = Reader::from_string("h1,h2\n1,\"unclosed\n2,no_quotes").has_headers(false).flexible(false).multiline(true);
+    let mut record_count = 0;
+    for row in rdr.records() {
+        let _ = writeln!(&mut io::stderr(), "{:?}", row.unwrap());
+        record_count = record_count + 1;
+    }
+    assert_eq!(record_count, 3);
+}
+
+#[test]
+#[cfg(feature = "multiline")]
+fn not_multiline_and_flexible() {
+    let mut rdr = Reader::from_string("h1,h2\n1,\"unclosed\n2,no_quotes").has_headers(false).flexible(true).multiline(false);
+    let mut record_count = 0;
+    for row in rdr.records() {
+        let _ = writeln!(&mut io::stderr(), "{:?}", row.unwrap());
+        record_count = record_count + 1;
+    }
+    assert_eq!(record_count, 3);
+}
+
+#[test]
+#[should_panic]
+#[cfg(feature = "multiline")]
+fn not_multiline_and_not_flexible() {
+    let mut rdr = Reader::from_string("h1,h2\n1,\"unclosed\n2,no_quotes").has_headers(false).flexible(false).multiline(false);
+    let mut record_count = 0;
+    for row in rdr.records() {
+        let _ = writeln!(&mut io::stderr(), "{:?}", row.unwrap());
+        record_count = record_count + 1;
+    }
+    assert_eq!(record_count, 3);
+}
