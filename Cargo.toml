@@ -21,6 +21,9 @@ test = false
 bench = false
 doc = false
 
+[features]
+multiline = []
+
 [dependencies]
 byteorder = "0.5"
 rustc-serialize = "0.3"
