@@ -22,17 +22,9 @@ bench = false
 doc = false
 
 [dependencies]
-byteorder = "0.5"
+byteorder = "1"
 rustc-serialize = "0.3"
-memchr = "0.1.11"
+memchr = "1"
 
 [dev-dependencies]
-regex = "0.1"
-
-[profile.bench]
-opt-level = 3
-lto = true  # this doesn't seem to work... why?
-
-[profile.release]
-opt-level = 3
-lto = true
+regex = "0.2"

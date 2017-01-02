@@ -37,8 +37,8 @@ impl str::FromStr for Rational {
         let re = Regex::new(r"^([0-9]+)\s*/\s*([0-9]+)$").unwrap();
         re.captures(s)
           .map(|caps| Rational {
-              numerator: caps.at(1).unwrap().parse().unwrap(),
-              denominator: caps.at(2).unwrap().parse().unwrap(),
+              numerator: caps[1].parse().unwrap(),
+              denominator: caps[2].parse().unwrap(),
           })
           .ok_or(format!("Could not parse '{}' as a rational.", s))
     }
