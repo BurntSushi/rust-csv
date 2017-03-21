@@ -311,7 +311,7 @@ impl<R: io::Read> Reader<R> {
     /// Returns a *copy* of the first record in the CSV data as strings.
     ///
     /// This method may be called at any time and regardless of whether
-    /// `no_headers` is set or not.
+    /// `has_headers` is set or not.
     ///
     /// ### Example
     ///
@@ -329,7 +329,7 @@ impl<R: io::Read> Reader<R> {
     /// assert_eq!(rows[0], vec![s("1"), s("2"), s("3")]);
     /// ```
     ///
-    /// Note that if `no_headers` is called on the CSV reader, the rows
+    /// Note that if `has_headers` is called on the CSV reader, the rows
     /// returned in this example include the first record:
     ///
     /// ```rust
