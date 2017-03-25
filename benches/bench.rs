@@ -11,14 +11,8 @@ use test::Bencher;
 
 use csv::{Reader};
 
-static NFL: &'static str =
-    include_str!("../examples/data/bench/nfl.csv");
-static GAME: &'static str =
-    include_str!("../examples/data/bench/game.csv");
-static POP: &'static str =
-    include_str!("../examples/data/bench/worldcitiespop.csv");
-static MBTA: &'static str =
-    include_str!("../examples/data/bench/gtfs-mbta-stop-times.csv");
+static CSV_DATA: &'static str = "./examples/data/bench.csv";
+static CSV_DATA_GAME: &'static str = "./examples/data/game.csv";
 
 #[derive(Debug, RustcDecodable, PartialEq)]
 struct NFLRowOwned {
@@ -64,47 +58,42 @@ struct MBTARowOwned {
     timepoint: i32,
 }
 
-macro_rules! bench {
-    ($name:ident, $data:ident, $counter:ident, $result:expr) => {
-        #[bench]
-        fn $name(b: &mut Bencher) {
-            let data = $data.as_bytes();
-            b.bytes = data.len() as u64;
-            b.iter(|| {
-                let mut rdr = Reader::from_reader(data)
-                    .has_headers(false);
-                assert_eq!($counter(&mut rdr), $result);
-            })
+#[bench]
+fn raw_records_nfl(b: &mut Bencher) {
+    let mut data = file_to_mem(CSV_DATA);
+    b.bytes = data.get_ref().len() as u64;
+    b.iter(|| {
+        let mut dec = reader(&mut data);
+        while !dec.done() {
+            while let Some(r) = dec.next_bytes().into_iter_result() {
+                r.unwrap();
+            }
         }
     };
 }
 
-macro_rules! bench_decode {
-    (no_headers,
-     $name:ident, $data:ident, $counter:ident, $type:ty, $result:expr) => {
-        #[bench]
-        fn $name(b: &mut Bencher) {
-            let data = $data.as_bytes();
-            b.bytes = data.len() as u64;
-            b.iter(|| {
-                let mut rdr = Reader::from_reader(data)
-                    .has_headers(false);
-                assert_eq!($counter::<_, $type>(&mut rdr), $result);
-            })
+#[bench]
+fn raw_records_game(b: &mut Bencher) {
+    let mut data = file_to_mem(CSV_DATA_GAME);
+    b.bytes = data.get_ref().len() as u64;
+    b.iter(|| {
+        let mut dec = reader(&mut data);
+        while !dec.done() {
+            while let Some(r) = dec.next_bytes().into_iter_result() {
+                r.unwrap();
+            }
         }
-    };
-    ($name:ident, $data:ident, $counter:ident, $type:ty, $result:expr) => {
-        #[bench]
-        fn $name(b: &mut Bencher) {
-            let data = $data.as_bytes();
-            b.bytes = data.len() as u64;
-            b.iter(|| {
-                let mut rdr = Reader::from_reader(data)
-                    .has_headers(true);
-                assert_eq!($counter::<_, $type>(&mut rdr), $result);
-            })
-        }
-    };
+    })
+}
+
+#[bench]
+fn byte_records(b: &mut Bencher) {
+    let mut data = file_to_mem(CSV_DATA);
+    b.bytes = data.get_ref().len() as u64;
+    b.iter(|| {
+        let mut dec = reader(&mut data);
+        for r in dec.byte_records() { let _ = r.unwrap(); }
+    })
 }
 
 bench_decode!(

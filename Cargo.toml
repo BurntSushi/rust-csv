@@ -2,24 +2,17 @@
 name = "csv"
 version = "0.15.0"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
-description = "CSV parsing with automatic type based decoding and encoding."
+description = "Fast CSV parsing with support for serde."
 documentation = "http://burntsushi.net/rustdoc/csv/"
 homepage = "https://github.com/BurntSushi/rust-csv"
 repository = "https://github.com/BurntSushi/rust-csv"
 readme = "README.md"
-keywords = ["csv", "tsv", "comma", "parser", "delimited"]
+keywords = ["csv", "comma", "parser", "delimited", "serde"]
 license = "Unlicense/MIT"
 
 [lib]
 name = "csv"
 bench = false
-
-[[bin]]
-name = "bench-large"
-path = "bench_large/huge.rs"
-test = false
-bench = false
-doc = false
 
 [dependencies]
 byteorder = "1"
