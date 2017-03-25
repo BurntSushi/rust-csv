@@ -1,25 +1,23 @@
 [package]
-name = "csv"
-version = "1.0.0-beta.1"  #:version
+name = "csv-core"
+version = "0.1.0"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
-description = "Fast CSV parsing with support for serde."
-documentation = "http://burntsushi.net/rustdoc/csv/"
+description = "Bare bones CSV parsing with no_std support."
+documentation = "https://docs.rs/csv-core"
 homepage = "https://github.com/BurntSushi/rust-csv"
 repository = "https://github.com/BurntSushi/rust-csv"
 readme = "README.md"
-keywords = ["csv", "comma", "parser", "delimited", "serde"]
+keywords = ["csv", "comma", "parser", "delimited", "no_std"]
 license = "Unlicense/MIT"
 
 [lib]
 bench = false
 
 [dependencies]
-csv-core = { path = "csv-core", version = "0.1.0" }
-serde = "1.0.7"
+memchr = { version = "1", default-features = false }
 
 [dev-dependencies]
-serde_derive = "1"
-serde_bytes = "0.10"
+arrayvec = { version = "0.3", default-features = false }
 
 [profile.release]
 debug = true

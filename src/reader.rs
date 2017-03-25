@@ -1,1030 +1,2463 @@
-use std::fs;
-use std::io;
+use std::fs::File;
+use std::io::{self, BufRead, Seek};
+use std::marker::PhantomData;
 use std::path::Path;
-use std::str;
+use std::result;
 
-use rustc_serialize::Decodable;
-
-use {
-    ByteString, Result, Decoded,
-    Error, LocatableError, ParseError,
+use csv_core::{
+    Reader as CoreReader, ReaderBuilder as CoreReaderBuilder, Terminator,
 };
+use serde::de::DeserializeOwned;
 
-use self::State::*;
+use byte_record::{self, ByteRecord, Position};
+use error::{Error, Result, Utf8Error};
+use string_record::{self, StringRecord};
 
-const BUF_SIZE: usize = 1024 * 128;
-
-/// A record terminator.
+/// Builds a CSV reader with various configuration knobs.
 ///
-/// Ideally, this would just be a `u8` like any other delimiter, but a useful
-/// CSV parser must special case CRLF handling. Hence, this enum.
-///
-/// Generally, you won't need to use this type because `CRLF` is the default,
-/// which is by far the most widely used record terminator.
-#[derive(Clone, Copy)]
-pub enum RecordTerminator {
-    /// Parses `\r`, `\n` or `\r\n` as a single record terminator.
-    CRLF,
-    /// Parses the byte given as a record terminator.
-    Any(u8),
-}
-
-impl RecordTerminator {
-    #[inline]
-    fn is_crlf(&self) -> bool {
-        match *self {
-            RecordTerminator::CRLF => true,
-            RecordTerminator::Any(_) => false,
-        }
-    }
-}
-
-impl PartialEq<u8> for RecordTerminator {
-    #[inline]
-    fn eq(&self, &other: &u8) -> bool {
-        match *self {
-            RecordTerminator::CRLF => other == b'\r' || other == b'\n',
-            RecordTerminator::Any(b) => other == b
-        }
-    }
-}
-
-/// A CSV reader.
-///
-/// This reader parses CSV data and exposes records via iterators.
-///
-/// ### Example
-///
-/// This example shows how to do type-based decoding for each record in the
-/// CSV data.
-///
-/// ```rust
-/// let data = "
-/// sticker,mortals,7
-/// bribed,personae,7
-/// wobbling,poncing,4
-/// interposed,emmett,9
-/// chocolate,refile,7";
-///
-/// let mut rdr = csv::Reader::from_string(data).has_headers(false);
-/// for row in rdr.decode() {
-///     let (n1, n2, dist): (String, String, u32) = row.unwrap();
-///     println!("{}, {}: {}", n1, n2, dist);
-/// }
-/// ```
-///
-/// Here's another example that parses tab-delimited values with records of
-/// varying length:
-///
-/// ```rust
-/// let data = "
-/// sticker\tmortals\t7
-/// bribed\tpersonae\t7
-/// wobbling
-/// interposed\temmett\t9
-/// chocolate\trefile\t7";
-///
-/// let mut rdr = csv::Reader::from_string(data)
-///                           .has_headers(false)
-///                           .delimiter(b'\t')
-///                           .flexible(true);
-/// for row in rdr.records() {
-///     let row = row.unwrap();
-///     println!("{:?}", row);
-/// }
-/// ```
-pub struct Reader<R> {
-    rdr: R,
-    buf: Vec<u8>,
-    bufi: usize,
-    fieldbuf: Vec<u8>,
-    state: State,
-    eof: bool,
-    first_row: Vec<ByteString>,
-    first_row_done: bool,
-    irecord: u64,
-    ifield: u64,
-    byte_offset: u64,
-    delimiter: u8,
-    quote: u8,
-    escape: Option<u8>,
-    double_quote: bool,
-    record_term: RecordTerminator,
+/// This builder can be used to tweak the field delimiter, record terminator
+/// and more. Once a CSV `Reader` is built, its configuration cannot be
+/// changed.
+#[derive(Debug)]
+pub struct ReaderBuilder {
+    capacity: usize,
     flexible: bool,
-
-    // When this is true, the first record is interpreted as a "header" row.
-    // This is opaque to the raw iterator, but is used in any iterator that
-    // allocates.
-    //
-    // TODO: This is exposed for use in the `index` sub-module. Is that OK?
-    #[doc(hidden)]
-    pub has_headers: bool,
-    has_seeked: bool,
+    has_headers: bool,
+    /// The underlying CSV parser builder.
+    ///
+    /// We explicitly put this on the heap because CoreReaderBuilder embeds an
+    /// entire DFA transition table, which along with other things, tallies up
+    /// to almost 500 bytes on the stack.
+    builder: Box<CoreReaderBuilder>,
 }
 
-impl<R: io::Read> Reader<R> {
-    /// Creates a new CSV reader from an arbitrary `io::Read`.
-    ///
-    /// The reader is buffered for you automatically.
-    pub fn from_reader(rdr: R) -> Reader<R> {
-        Reader {
-            rdr: rdr,
-            buf: vec![0; BUF_SIZE],
-            bufi: BUF_SIZE,
-            fieldbuf: Vec::with_capacity(1024),
-            state: StartRecord,
-            eof: false,
-            first_row: vec![],
-            first_row_done: false,
-            irecord: 1,
-            ifield: 1,
-            byte_offset: 0,
-            delimiter: b',',
-            quote: b'"',
-            escape: None,
-            double_quote: true,
-            record_term: RecordTerminator::CRLF,
+impl Default for ReaderBuilder {
+    fn default() -> ReaderBuilder {
+        ReaderBuilder {
+            capacity: 8 * (1<<10),
             flexible: false,
             has_headers: true,
-            has_seeked: false,
+            builder: Box::new(CoreReaderBuilder::default()),
         }
     }
 }
 
-impl Reader<fs::File> {
-    /// Creates a new CSV reader for the data at the file path given.
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Reader<fs::File>> {
-        Ok(Reader::from_reader(try!(fs::File::open(path))))
-    }
-}
-
-impl Reader<io::Cursor<Vec<u8>>> {
-    /// Creates a CSV reader for an in memory string buffer.
-    pub fn from_string<'a, S>(s: S) -> Reader<io::Cursor<Vec<u8>>>
-            where S: Into<String> {
-        Reader::from_bytes(s.into().into_bytes())
-    }
-
-    /// Creates a CSV reader for an in memory buffer of bytes.
-    pub fn from_bytes<'a, V>(bytes: V) -> Reader<io::Cursor<Vec<u8>>>
-            where V: Into<Vec<u8>> {
-        Reader::from_reader(io::Cursor::new(bytes.into()))
-    }
-}
-
-impl<R: io::Read> Reader<R> {
-    /// Uses type-based decoding to read a single record from CSV data.
+impl ReaderBuilder {
+    /// Create a new builder for configuring CSV parsing.
     ///
-    /// The type that is being decoded into should correspond to *one full
-    /// CSV record*. A tuple, struct or `Vec` fit this category. A tuple,
-    /// struct or `Vec` should consist of primitive types like integers,
-    /// floats, characters and strings which map to single fields. If a field
-    /// cannot be decoded into the type requested, an error is returned.
+    /// To convert a builder into a reader, call one of the methods starting
+    /// with `from_`.
     ///
-    /// Enums are also supported in a limited way. Namely, its variants must
-    /// have exactly `1` parameter each. Each variant decodes based on its
-    /// constituent type and variants are tried in the order that they appear
-    /// in their `enum` definition. See below for examples.
+    /// # Example
     ///
-    /// ### Examples
-    ///
-    /// This example shows how to decode records into a struct. (Note that
-    /// currently, the *names* of the struct members are irrelevant.)
-    ///
-    /// ```rust
-    /// extern crate rustc_serialize;
-    /// # extern crate csv;
-    /// # fn main() {
-    ///
-    /// #[derive(RustcDecodable)]
-    /// struct Pair {
-    ///     name1: String,
-    ///     name2: String,
-    ///     dist: u32,
-    /// }
-    ///
-    /// let mut rdr = csv::Reader::from_string("foo,bar,1\nfoo,baz,2")
-    ///                           .has_headers(false);
-    /// // Instantiating a specific type when decoding is usually necessary.
-    /// let rows = rdr.decode().collect::<csv::Result<Vec<Pair>>>().unwrap();
-    ///
-    /// assert_eq!(rows[0].dist, 1);
-    /// assert_eq!(rows[1].dist, 2);
-    /// # }
     /// ```
+    /// extern crate csv;
     ///
-    /// We can get a little crazier with custon enum types or `Option` types.
-    /// An `Option` type in particular is useful when a column doesn't contain
-    /// valid data in every record (whether it be empty or malformed).
+    /// use std::error::Error;
+    /// use csv::{ReaderBuilder, StringRecord};
     ///
-    /// ```rust
-    /// extern crate rustc_serialize;
-    /// # extern crate csv;
-    /// # fn main() {
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///";
+    ///     let mut rdr = ReaderBuilder::new().from_reader(data.as_bytes());
     ///
-    /// #[derive(RustcDecodable, PartialEq, Debug)]
-    /// struct MyUint(u32);
-    ///
-    /// #[derive(RustcDecodable, PartialEq, Debug)]
-    /// enum Number { Integer(i64), Float(f64) }
-    ///
-    /// #[derive(RustcDecodable)]
-    /// struct Row {
-    ///     name1: String,
-    ///     name2: String,
-    ///     dist: Option<MyUint>,
-    ///     dist2: Number,
-    /// }
-    ///
-    /// let mut rdr = csv::Reader::from_string("foo,bar,1,1\nfoo,baz,,1.5")
-    ///                           .has_headers(false);
-    /// let rows = rdr.decode().collect::<csv::Result<Vec<Row>>>().unwrap();
-    ///
-    /// assert_eq!(rows[0].dist, Some(MyUint(1)));
-    /// assert_eq!(rows[1].dist, None);
-    /// assert_eq!(rows[0].dist2, Number::Integer(1));
-    /// assert_eq!(rows[1].dist2, Number::Float(1.5));
-    /// # }
-    /// ```
-    ///
-    /// Finally, as a special case, a tuple/struct/`Vec` can be used as the
-    /// "tail" of another tuple/struct/`Vec` to capture all remaining fields:
-    ///
-    /// ```rust
-    /// extern crate rustc_serialize;
-    /// # extern crate csv;
-    /// # fn main() {
-    ///
-    /// #[derive(RustcDecodable)]
-    /// struct Pair {
-    ///     name1: String,
-    ///     name2: String,
-    ///     attrs: Vec<u32>,
-    /// }
-    ///
-    /// let mut rdr = csv::Reader::from_string("a,b,1,2,3,4\ny,z,5,6,7,8")
-    ///                           .has_headers(false);
-    /// let rows = rdr.decode().collect::<csv::Result<Vec<Pair>>>().unwrap();
-    ///
-    /// assert_eq!(rows[0].attrs, vec![1,2,3,4]);
-    /// assert_eq!(rows[1].attrs, vec![5,6,7,8]);
-    /// # }
-    /// ```
-    ///
-    /// If a tuple/struct/`Vec` appears any where other than the "tail" of a
-    /// record, then the behavior is undefined. (You'll likely get a runtime
-    /// error. I believe this is a limitation of the current decoding machinery
-    /// in the `serialize` crate.)
-    /// ```
-    pub fn decode<'a, D: Decodable>(&'a mut self) -> DecodedRecords<'a, R, D> {
-        DecodedRecords {
-            p: self.byte_records(),
-            _phantom: ::std::marker::PhantomData,
-        }
-    }
-
-    /// Returns an iterator of records in the CSV data where each field is
-    /// a `String`.
-    ///
-    /// ### Example
-    ///
-    /// This is your standard CSV interface with no type decoding magic.
-    ///
-    /// ```rust
-    /// let data = "
-    /// sticker,mortals,7
-    /// bribed,personae,7
-    /// wobbling,poncing,4
-    /// interposed,emmett,9
-    /// chocolate,refile,7";
-    ///
-    /// let mut rdr = csv::Reader::from_string(data).has_headers(false);
-    /// for row in rdr.records() {
-    ///     let row = row.unwrap();
-    ///     println!("{:?}", row);
+    ///     let records = rdr
+    ///         .records()
+    ///         .collect::<Result<Vec<StringRecord>, csv::Error>>()?;
+    ///     assert_eq!(records, vec![
+    ///         vec!["Boston", "United States", "4628910"],
+    ///         vec!["Concord", "United States", "42695"],
+    ///     ]);
+    ///     Ok(())
     /// }
     /// ```
-    pub fn records<'a>(&'a mut self) -> StringRecords<'a, R> {
-        StringRecords { p: self.byte_records() }
+    pub fn new() -> ReaderBuilder {
+        ReaderBuilder::default()
     }
 
-    /// Returns a *copy* of the first record in the CSV data as strings.
+    /// Build a CSV parser from this configuration that reads data from the
+    /// given file path.
     ///
-    /// This method may be called at any time and regardless of whether
-    /// `has_headers` is set or not.
+    /// If there was a problem opening the file at the given path, then this
+    /// returns the corresponding error.
     ///
-    /// ### Example
+    /// # Example
     ///
-    /// ```rust
-    /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3");
+    /// ```no_run
+    /// extern crate csv;
     ///
-    /// let headers1 = rdr.headers().unwrap();
-    /// let rows = rdr.records().collect::<csv::Result<Vec<_>>>().unwrap();
-    /// let headers2 = rdr.headers().unwrap();
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
     ///
-    /// let s = |s: &'static str| s.to_string();
-    /// assert_eq!(headers1, headers2);
-    /// assert_eq!(headers1, vec![s("a"), s("b"), s("c")]);
-    /// assert_eq!(rows.len(), 1);
-    /// assert_eq!(rows[0], vec![s("1"), s("2"), s("3")]);
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut rdr = ReaderBuilder::new().from_path("foo.csv")?;
+    ///     for result in rdr.records() {
+    ///         let record = result?;
+    ///         println!("{:?}", record);
+    ///     }
+    ///     Ok(())
+    /// }
     /// ```
-    ///
-    /// Note that if `has_headers` is called on the CSV reader, the rows
-    /// returned in this example include the first record:
-    ///
-    /// ```rust
-    /// let mut rdr = csv::Reader::from_string("a,b,c\n1,2,3")
-    ///                           .has_headers(false);
-    ///
-    /// let headers1 = rdr.headers().unwrap();
-    /// let rows = rdr.records().collect::<csv::Result<Vec<_>>>().unwrap();
-    /// let headers2 = rdr.headers().unwrap();
-    ///
-    /// let s = |s: &'static str| s.to_string();
-    /// assert_eq!(headers1, headers2);
-    /// assert_eq!(headers1, vec![s("a"), s("b"), s("c")]);
-    ///
-    /// // The header rows are now part of the record iterators.
-    /// assert_eq!(rows.len(), 2);
-    /// assert_eq!(rows[0], headers1);
-    /// assert_eq!(rows[1], vec![s("1"), s("2"), s("3")]);
-    /// ```
-    pub fn headers(&mut self) -> Result<Vec<String>> {
-        byte_record_to_utf8(try!(self.byte_headers()))
+    pub fn from_path<P: AsRef<Path>>(&self, path: P) -> Result<Reader<File>> {
+        Ok(Reader::new(self, File::open(path)?))
     }
-}
 
-impl<R: io::Read> Reader<R> {
-    /// The delimiter to use when reading CSV data.
+    /// Build a CSV parser from this configuration that reads data from `rdr`.
     ///
-    /// Since the CSV reader is meant to be mostly encoding agnostic, you must
-    /// specify the delimiter as a single ASCII byte. For example, to read
-    /// tab-delimited data, you would use `b'\t'`.
+    /// Note that the CSV reader is buffered automatically, so you should not
+    /// wrap `rdr` in a buffered reader like `io::BufReader`.
     ///
-    /// The default value is `b','`.
-    pub fn delimiter(mut self, delimiter: u8) -> Reader<R> {
-        self.delimiter = delimiter;
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///";
+    ///     let mut rdr = ReaderBuilder::new().from_reader(data.as_bytes());
+    ///     for result in rdr.records() {
+    ///         let record = result?;
+    ///         println!("{:?}", record);
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn from_reader<R: io::Read>(&self, rdr: R) -> Reader<R> {
+        Reader::new(self, rdr)
+    }
+
+    /// The field delimiter to use when parsing CSV.
+    ///
+    /// The default is `b','`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city;country;pop
+    ///Boston;United States;4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .delimiter(b';')
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn delimiter(&mut self, delimiter: u8) -> &mut ReaderBuilder {
+        self.builder.delimiter(delimiter);
         self
     }
 
     /// Whether to treat the first row as a special header row.
     ///
     /// By default, the first row is treated as a special header row, which
-    /// means it is excluded from iterators returned by the `decode`, `records`
-    /// or `byte_records` methods. When `yes` is set to `false`, the first row
-    /// is included in those iterators.
+    /// means the header is never returned by any of the record reading methods
+    /// or iterators. When this is disabled (`yes` set to `false`), the first
+    /// row is not treated specially.
     ///
-    /// Note that the `headers` method is unaffected by whether this is set.
-    pub fn has_headers(mut self, yes: bool) -> Reader<R> {
+    /// Note that the `headers` and `byte_headers` methods are unaffected by
+    /// whether this is set. Those methods always return the first record.
+    ///
+    /// # Example
+    ///
+    /// This example shows what happens when `has_headers` is disabled.
+    /// Namely, the first row is treated just like any other row.
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .has_headers(false)
+    ///         .from_reader(data.as_bytes());
+    ///     let mut iter = rdr.records();
+    ///
+    ///     // Read the first record.
+    ///     if let Some(result) = iter.next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["city", "country", "pop"]);
+    ///     } else {
+    ///         return Err(From::from(
+    ///             "expected at least two records but got none"));
+    ///     }
+    ///
+    ///     // Read the second record.
+    ///     if let Some(result) = iter.next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///     } else {
+    ///         return Err(From::from(
+    ///             "expected at least two records but got one"))
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn has_headers(&mut self, yes: bool) -> &mut ReaderBuilder {
         self.has_headers = yes;
         self
     }
 
-    /// Whether to allow flexible length records when reading CSV data.
+    /// Whether the number of fields in records is allowed to change or not.
     ///
-    /// When this is set to `true`, records in the CSV data can have different
-    /// lengths. By default, this is disabled, which will cause the CSV reader
-    /// to return an error if it tries to read a record that has a different
-    /// length than the first record that it read.
-    pub fn flexible(mut self, yes: bool) -> Reader<R> {
+    /// When disabled (which is the default), parsing CSV data will return an
+    /// error if a record is found with a number of fields different from the
+    /// number of fields in a previous record.
+    ///
+    /// When enabled, this error checking is turned off.
+    ///
+    /// # Example: flexible records enabled
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     // Notice that the first row is missing the population count.
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .flexible(true)
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// # Example: flexible records disabled
+    ///
+    /// This shows the error that appears when records of unequal length
+    /// are found and flexible records have been disabled (which is the
+    /// default).
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     // Notice that the first row is missing the population count.
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .flexible(false)
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(Err(err)) = rdr.records().next() {
+    ///         match err {
+    ///             csv::Error::UnequalLengths { expected_len, len, .. } => {
+    ///                 // The header row has 3 fields...
+    ///                 assert_eq!(expected_len, 3);
+    ///                 // ... but the first row has only 2 fields.
+    ///                 assert_eq!(len, 2);
+    ///                 Ok(())
+    ///             }
+    ///             wrong => {
+    ///                 Err(From::from(format!(
+    ///                     "expected UnequalLengths error but got {:?}",
+    ///                     wrong)))
+    ///             }
+    ///         }
+    ///     } else {
+    ///         Err(From::from(
+    ///             "expected at least one errored record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn flexible(&mut self, yes: bool) -> &mut ReaderBuilder {
         self.flexible = yes;
         self
     }
 
-    /// Set the record terminator to use when reading CSV data.
+    /// The record terminator to use when parsing CSV.
     ///
-    /// In the vast majority of situations, you'll want to use the default
-    /// value, `RecordTerminator::CRLF`, which automatically handles `\r`,
-    /// `\n` or `\r\n` as record terminators. (Notably, this is a special
-    /// case since two characters can correspond to a single terminator token.)
+    /// A record terminator can be any single byte. The default is a special
+    /// value, `Terminator::CRLF`, which treats any occurrence of `\r`, `\n`
+    /// or `\r\n` as a single record terminator.
     ///
-    /// However, you may use `RecordTerminator::Any` to specify any ASCII
-    /// character to use as the record terminator. For example, you could
-    /// use `RecordTerminator::Any(b'\n')` to only accept line feeds as
-    /// record terminators, or `b'\x1e'` for the ASCII record separator.
-    pub fn record_terminator(mut self, term: RecordTerminator) -> Reader<R> {
-        self.record_term = term;
+    /// # Example: `$` as a record terminator
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{ReaderBuilder, Terminator};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "city,country,pop$Boston,United States,4628910";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .terminator(Terminator::Any(b'$'))
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn terminator(
+        &mut self,
+        term: Terminator,
+    ) -> &mut ReaderBuilder {
+        self.builder.terminator(term);
         self
     }
 
-    /// Set the quote character to use when reading CSV data.
+    /// The quote character to use when parsing CSV.
     ///
-    /// Since the CSV reader is meant to be mostly encoding agnostic, you must
-    /// specify the quote as a single ASCII byte. For example, to read
-    /// single quoted data, you would use `b'\''`.
+    /// The default is `b'"'`.
     ///
-    /// The default value is `b'"'`.
+    /// # Example: single quotes instead of double quotes
     ///
-    /// If `quote` is `None`, then no quoting will be used.
-    pub fn quote(mut self, quote: u8) -> Reader<R> {
-        self.quote = quote;
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,'United States',4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .quote(b'\'')
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn quote(&mut self, quote: u8) -> &mut ReaderBuilder {
+        self.builder.quote(quote);
         self
     }
 
-    /// Set the escape character to use when reading CSV data.
+    /// The escape character to use when parsing CSV.
     ///
-    /// Since the CSV reader is meant to be mostly encoding agnostic, you must
-    /// specify the escape as a single ASCII byte.
+    /// In some variants of CSV, quotes are escaped using a special escape
+    /// character like `\` (instead of escaping quotes by doubling them).
     ///
-    /// When set to `None` (which is the default), the "doubling" escape
-    /// is used for quote character.
+    /// By default, recognizing these idiosyncratic escapes is disabled.
     ///
-    /// When set to something other than `None`, it is used as the escape
-    /// character for quotes. (e.g., `b'\\'`.)
-    pub fn escape(mut self, escape: Option<u8>) -> Reader<R> {
-        self.escape = escape;
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,\"The \\\"United\\\" States\",4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .escape(Some(b'\\'))
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec![
+    ///             "Boston", "The \"United\" States", "4628910",
+    ///         ]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn escape(&mut self, escape: Option<u8>) -> &mut ReaderBuilder {
+        self.builder.escape(escape);
         self
     }
 
     /// Enable double quote escapes.
     ///
-    /// When disabled, doubled quotes are not interpreted as escapes.
-    pub fn double_quote(mut self, yes: bool) -> Reader<R> {
-        self.double_quote = yes;
+    /// This is enabled by default, but it may be disabled. When disabled,
+    /// doubled quotes are not interpreted as escapes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,\"The \"\"United\"\" States\",4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .double_quote(false)
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec![
+    ///             "Boston", "The \"United\"\" States\"", "4628910",
+    ///         ]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn double_quote(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.builder.double_quote(yes);
         self
     }
 
-    /// A convenience method for reading ASCII delimited text.
+    /// The comment character to use when parsing CSV.
+    ///
+    /// If the start of a record begins with the byte given here, then that
+    /// line is ignored by the CSV parser.
+    ///
+    /// This is disabled by default.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///#Concord,United States,42695
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .comment(Some(b'#'))
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn comment(&mut self, comment: Option<u8>) -> &mut ReaderBuilder {
+        self.builder.comment(comment);
+        self
+    }
+
+    /// A convenience method for specifying a configuration to read ASCII
+    /// delimited text.
     ///
     /// This sets the delimiter and record terminator to the ASCII unit
-    /// separator (`\x1f`) and record separator (`\x1e`), respectively.
+    /// separator (`\x1F`) and record separator (`\x1E`), respectively.
     ///
-    /// Since ASCII delimited text is meant to be unquoted, this also sets
-    /// `quote` to `None`.
-    pub fn ascii(self) -> Reader<R> {
-        self.delimiter(b'\x1f')
-            .record_terminator(RecordTerminator::Any(b'\x1e'))
-    }
-}
-
-/// NextField is the result of parsing a single CSV field.
-///
-/// This is only useful if you're using the low level `next_bytes` method.
-#[derive(Debug)]
-pub enum NextField<'a, T: ?Sized + 'a> {
-    /// A single CSV field as a borrowed slice of the parser's internal buffer.
-    Data(&'a T),
-
-    /// A CSV error found during parsing. When an error is found, it is
-    /// first returned. All subsequent calls of `next_bytes` will return
-    /// `EndOfCsv`. (EOF is exempt from this. Depending on the state of the
-    /// parser, an EOF could trigger `Data`, `EndOfRecord` and `EndOfCsv`,
-    /// all in succession.)
+    /// # Example
     ///
-    /// In general, once `EndOfCsv` is returned, no other return value is
-    /// possible on subsequent calls.
-    Error(Error),
-
-    /// Indicates the end of a record.
-    EndOfRecord,
-
-    /// Indicates the end of the CSV data. Once this state is entered, the
-    /// parser can never leave it.
-    EndOfCsv,
-}
-
-impl<'a, T: ?Sized + ::std::fmt::Debug> NextField<'a, T> {
-    /// Transform NextField into an iterator result.
-    pub fn into_iter_result(self) -> Option<Result<&'a T>> {
-        match self {
-            NextField::EndOfRecord | NextField::EndOfCsv => None,
-            NextField::Error(err) => Some(Err(err)),
-            NextField::Data(field) => Some(Ok(field)),
-        }
-    }
-
-    /// Returns true if and only if the end of CSV data has been reached.
-    pub fn is_end(&self) -> bool {
-        if let NextField::EndOfCsv = *self { true } else { false }
-    }
-
-    /// Returns the underlying field data.
+    /// ```
+    /// extern crate csv;
     ///
-    /// If `NextField` is an error or an end of record/CSV marker, this will
-    /// panic.
-    pub fn unwrap(self) -> &'a T {
-        match self {
-            NextField::Data(field) => field,
-            v => panic!("Cannot unwrap '{:?}'", v),
-        }
-    }
-}
-
-/// These are low level methods for dealing with the raw bytes of CSV records.
-/// You should only need to use these when you need the performance or if
-/// your CSV data isn't UTF-8 encoded.
-impl<R: io::Read> Reader<R> {
-    /// This is just like `headers`, except fields are `ByteString`s instead
-    /// of `String`s.
-    pub fn byte_headers(&mut self) -> Result<Vec<ByteString>> {
-        if !self.first_row.is_empty() {
-            Ok(self.first_row.clone())
-        } else {
-            let mut headers = vec![];
-            loop {
-                let field = match self.next_bytes() {
-                    NextField::EndOfRecord | NextField::EndOfCsv => break,
-                    NextField::Error(err) => return Err(err),
-                    NextField::Data(field) => field,
-                };
-                headers.push(field.to_vec());
-            }
-            assert!(headers.len() > 0 || self.done());
-            Ok(headers)
-        }
-    }
-
-    /// This is just like `records`, except fields are `ByteString`s instead
-    /// of `String`s.
-    pub fn byte_records<'a>(&'a mut self) -> ByteRecords<'a, R> {
-        let first = self.has_seeked;
-        ByteRecords { p: self, first: first, errored: false }
-    }
-
-    /// Returns `true` if the CSV parser has reached its final state. When
-    /// this method returns `true`, all iterators will always return `None`.
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
     ///
-    /// This is not needed in typical usage since the record iterators will
-    /// stop for you when the parser completes. This method is useful when
-    /// you're accessing the parser's lowest-level iterator.
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city\x1Fcountry\x1Fpop\x1EBoston\x1FUnited States\x1F4628910";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .ascii()
+    ///         .from_reader(data.as_bytes());
     ///
-    /// ### Example
-    ///
-    /// This is the *fastest* way to compute the number of records in CSV data
-    /// using this crate. (It is fast because it does not allocate space for
-    /// every field.)
-    ///
-    /// ```rust
-    /// let data = "
-    /// sticker,mortals,7
-    /// bribed,personae,7
-    /// wobbling,poncing,4
-    /// interposed,emmett,9
-    /// chocolate,refile,7";
-    ///
-    /// let mut rdr = csv::Reader::from_string(data);
-    /// let mut count = 0u64;
-    /// while !rdr.done() {
-    ///     loop {
-    ///         // This case analysis is necessary because we only want to
-    ///         // increment the count when `EndOfRecord` is seen. (If the
-    ///         // CSV data is empty, then it will never be emitted.)
-    ///         match rdr.next_bytes() {
-    ///             csv::NextField::EndOfCsv => break,
-    ///             csv::NextField::EndOfRecord => { count += 1; break; },
-    ///             csv::NextField::Error(err) => panic!(err),
-    ///             csv::NextField::Data(_) => {}
-    ///         }
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
     ///     }
     /// }
-    ///
-    /// assert_eq!(count, 5);
     /// ```
-    pub fn done(&self) -> bool {
-        self.eof
+    pub fn ascii(&mut self) -> &mut ReaderBuilder {
+        self.builder.ascii();
+        self
     }
 
-    /// An iterator over fields in the current record.
-    ///
-    /// This provides low level access to CSV records as raw byte slices.
-    /// Namely, no allocation is performed. Unlike other iterators in this
-    /// crate, this yields *fields* instead of records. Notably, this cannot
-    /// implement the `Iterator` trait safely. As such, it cannot be used with
-    /// a `for` loop.
-    ///
-    /// See the documentation for the `NextField` type on how the iterator
-    /// works.
-    ///
-    /// This iterator always returns all records (i.e., it won't skip the
-    /// header row).
-    ///
-    /// ### Example
-    ///
-    /// This method is most useful when used in conjunction with the the
-    /// `done` method:
-    ///
-    /// ```rust
-    /// let data = "
-    /// sticker,mortals,7
-    /// bribed,personae,7
-    /// wobbling,poncing,4
-    /// interposed,emmett,9
-    /// chocolate,refile,7";
-    ///
-    /// let mut rdr = csv::Reader::from_string(data);
-    /// while !rdr.done() {
-    ///     while let Some(r) = rdr.next_bytes().into_iter_result() {
-    ///         print!("{:?} ", r.unwrap());
-    ///     }
-    ///     println!("");
-    /// }
-    /// ```
-    pub fn next_bytes(&mut self) -> NextField<[u8]> {
-        unsafe { self.fieldbuf.set_len(0); }
-        loop {
-            if let Err(err) = self.fill_buf() {
-                return NextField::Error(Error::Io(err));
-            }
-            if self.buf.len() == 0 {
-                self.eof = true;
-                if let StartRecord = self.state {
-                    return self.next_eoc();
-                } else if let EndRecord = self.state {
-                    self.state = StartRecord;
-                    return self.next_eor();
-                } else {
-                    self.state = EndRecord;
-                    return self.next_data();
-                }
-            }
-            while self.bufi < self.buf.len() {
-                let c = self.buf[self.bufi];
-                match self.state {
-                    StartRecord => {
-                        if self.is_record_term(c) {
-                            self.bump();
-                        } else {
-                            self.state = StartField;
-                        }
-                    }
-                    EndRecord => {
-                        self.state = StartRecord;
-                        return self.next_eor();
-                    }
-                    StartField => {
-                        self.bump();
-                        if c == self.quote {
-                            self.state = InQuotedField;
-                        } else if c == self.delimiter {
-                            return self.next_data();
-                        } else if self.is_record_term(c) {
-                            self.bump_eor(c);
-                            self.state = EndRecord;
-                            return self.next_data();
-                        } else {
-                            self.add(c);
-                            self.state = InField;
-                        }
-                    }
-                    InField => {
-                        self.bump();
-                        if c == self.delimiter {
-                            self.state = StartField;
-                            return self.next_data();
-                        } else if self.is_record_term(c) {
-                            self.bump_eor(c);
-                            self.state = EndRecord;
-                            return self.next_data();
-                        } else {
-                            self.add(c);
-                        }
-                    }
-                    InQuotedField => {
-                        self.bump();
-                        if c == self.quote {
-                            self.state = InDoubleEscapedQuote;
-                        } else if self.escape == Some(c) {
-                            self.state = InEscapedQuote;
-                        } else {
-                            self.add(c);
-                        }
-                    }
-                    InEscapedQuote => {
-                        self.bump();
-                        self.add(c);
-                        self.state = InQuotedField;
-                    }
-                    InDoubleEscapedQuote => {
-                        self.bump();
-                        if self.double_quote && c == self.quote {
-                            self.add(c);
-                            self.state = InQuotedField;
-                        } else if c == self.delimiter {
-                            self.state = StartField;
-                            return self.next_data();
-                        } else if self.is_record_term(c) {
-                            self.bump_eor(c);
-                            self.state = EndRecord;
-                            return self.next_data();
-                        } else {
-                            self.add(c);
-                            self.state = InField; // degrade gracefully?
-                        }
-                    }
-                }
-            }
-        }
+    /// Set the capacity (in bytes) of the buffer used in the CSV reader.
+    /// This defaults to a reasonable setting.
+    pub fn buffer_capacity(&mut self, capacity: usize) -> &mut ReaderBuilder {
+        self.capacity = capacity;
+        self
     }
 
-    /// This is just like `next_bytes` except it converts each field to
-    /// a Unicode string in place.
-    pub fn next_str(&mut self) -> NextField<str> {
-        // This really grates me. Once we call `next_bytes`, we initiate a
-        // *mutable* borrow of `self` that doesn't stop until the return value
-        // goes out of scope. Since we have to return that value, it will never
-        // go out of scope in this function.
-        //
-        // Therefore, we can't get access to any state information after
-        // calling `next_bytes`. But we might need it to report an error.
-        //
-        // One possible way around this is to use interior mutability...
-        let (record, field) = (self.irecord, self.ifield);
-        match self.next_bytes() {
-            NextField::EndOfRecord => NextField::EndOfRecord,
-            NextField::EndOfCsv => NextField::EndOfCsv,
-            NextField::Error(err) => NextField::Error(err),
-            NextField::Data(bytes) => {
-                match str::from_utf8(bytes) {
-                    Ok(s) => NextField::Data(s),
-                    Err(_) => NextField::Error(Error::Parse(LocatableError {
-                        record: record,
-                        field: field,
-                        err: ParseError::InvalidUtf8,
-                    })),
-                }
-            }
-        }
-    }
-
-    /// An unsafe iterator over byte fields.
+    /// Enable or disable the NFA for parsing CSV.
     ///
-    /// This iterator calls `next_bytes` at each step.
-    ///
-    /// It is (wildly) unsafe because the lifetime yielded for each element
-    /// is incorrect. It refers to the lifetime of the CSV reader instead of
-    /// the lifetime of the internal buffer. Which means you can `collect`
-    /// it into a vector and obliterate memory safety.
-    ///
-    /// The reason it exists is because it appears extremely difficult to write
-    /// a fast streaming iterator. (But iterators are wildly convenient.)
+    /// This is intended to be a debug option. The NFA is always slower than
+    /// the DFA.
     #[doc(hidden)]
-    pub unsafe fn byte_fields<'a>(&'a mut self) -> UnsafeByteFields<'a, R> {
-        UnsafeByteFields { rdr: self }
-    }
-
-    /// Returns the byte offset at which the current record started.
-    pub fn byte_offset(&self) -> u64 {
-        self.byte_offset
-    }
-
-    #[inline]
-    fn next_data(&mut self) -> NextField<[u8]> {
-        if !self.first_row_done {
-            self.first_row.push(self.fieldbuf.to_vec());
-        }
-        self.ifield += 1;
-        NextField::Data(&self.fieldbuf)
-    }
-
-    #[inline]
-    fn next_eor(&mut self) -> NextField<[u8]> {
-        if !self.flexible
-                && self.first_row_done
-                && self.ifield != self.first_row.len() as u64 {
-            return self.parse_error(ParseError::UnequalLengths {
-                expected: self.first_row.len() as u64,
-                got: self.ifield as u64,
-            });
-        }
-        self.irecord += 1;
-        self.ifield = 0;
-        self.first_row_done = true;
-        NextField::EndOfRecord
-    }
-
-    #[inline]
-    fn next_eoc(&self) -> NextField<[u8]> {
-        NextField::EndOfCsv
-    }
-
-    #[inline]
-    fn fill_buf(&mut self) -> io::Result<()> {
-        if self.bufi == self.buf.len() {
-            unsafe { let cap = self.buf.capacity(); self.buf.set_len(cap); }
-            let n = try!(self.rdr.read(&mut self.buf));
-            unsafe { self.buf.set_len(n); }
-            self.bufi = 0;
-        }
-        Ok(())
-    }
-
-    #[inline]
-    fn bump(&mut self) {
-        self.bufi += 1;
-        self.byte_offset += 1;
-    }
-
-    #[inline]
-    fn bump_eor(&mut self, c: u8) {
-        if !self.record_term.is_crlf() || c != b'\r' {
-            return;
-        }
-        if self.buf.get(self.bufi) == Some(&b'\n') {
-            self.bump();
-        }
-    }
-
-    #[inline]
-    fn add(&mut self, c: u8) {
-        self.fieldbuf.push(c);
-    }
-
-    #[inline]
-    fn is_record_term(&self, c: u8) -> bool {
-        self.record_term == c
-    }
-
-    fn parse_error(&self, err: ParseError) -> NextField<[u8]> {
-        NextField::Error(Error::Parse(LocatableError {
-            record: self.irecord,
-            field: self.ifield,
-            err: err,
-        }))
+    pub fn nfa(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.builder.nfa(yes);
+        self
     }
 }
 
+/// A already configured CSV reader.
+///
+/// A CSV reader takes as input CSV data and transforms that into standard Rust
+/// values. The most flexible way to read CSV data is as a sequence of records,
+/// where a record is a sequence of fields and each field is a string. However,
+/// a reader can also deserialize CSV data into Rust types like `i64` or
+/// `(String, f64, f64, f64)` or even a custom struct automatically using
+/// Serde.
+///
+/// # Configuration
+///
+/// A CSV reader has a couple convenient constructor methods like `from_path`
+/// and `from_reader`. However, if you want to configure the CSV reader to use
+/// a different delimiter or quote character (among many other things), then
+/// you should use a [`ReaderBuilder`](struct.ReaderBuilder.html) to construct
+/// a `Reader`. For example, to change the field delimiter:
+///
+/// ```
+/// extern crate csv;
+///
+/// use std::error::Error;
+/// use csv::ReaderBuilder;
+///
+/// # fn main() { example().unwrap(); }
+/// fn example() -> Result<(), Box<Error>> {
+///     let data = "\
+///city;country;pop
+///Boston;United States;4628910
+///";
+///     let mut rdr = ReaderBuilder::new()
+///         .delimiter(b';')
+///         .from_reader(data.as_bytes());
+///
+///     if let Some(result) = rdr.records().next() {
+///         let record = result?;
+///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+///         Ok(())
+///     } else {
+///         Err(From::from("expected at least one record but got none"))
+///     }
+/// }
+/// ```
+///
+/// # Error handling
+///
+/// In general, CSV *parsing* does not ever return an error. That is, there is
+/// no such thing as malformed CSV data. Instead, this reader will prioritize
+/// finding a parse over rejecting CSV data that it does not understand. This
+/// choice was inspired by other popular CSV parsers, but also because it is
+/// pragmatic. CSV data varies wildly, so even if the CSV data is malformed,
+/// it might still be possible to work with the data. In the land of CSV, there
+/// is no "right" or "wrong," only "right" and "less right."
+///
+/// With that said, a number of errors can occur while reading CSV data:
+///
+/// * By default, all records in CSV data must have the same number of fields.
+///   If a record is found with a different number of fields than a prior
+///   record, then an error is returned. This behavior can be disabled by
+///   enabling flexible parsing via the `flexible` method on
+///   [`ReaderBuilder`](struct.ReaderBuilder.html).
+/// * When reading CSV data from a resource (like a file), it is possible for
+///   reading from the underlying resource to fail. This will return an error.
+/// * When reading CSV data into `String` or `&str` fields (e.g., via a
+///   [`StringRecord`](struct.StringRecord.html)), UTF-8 is strictly
+///   enforced. If CSV data is invalid UTF-8, then an error is returned. If
+///   you want to read invalid UTF-8, then you should use the byte oriented
+///   APIs such as [`ByteRecord`](struct.ByteRecord.html). If you need explicit
+///   support for another encoding entirely, then you'll need to use another
+///   crate to transcode your CSV data to UTF-8 before parsing it.
+/// * When using Serde to deserialize CSV data into Rust types, it is possible
+///   for a number of additional errors to occur. For example, deserializing
+///   a field `xyz` into an `i32` field will result in an error.
+///
+/// For more details on the precise semantics of errors, see the
+/// [`Error`](enum.Error.html) type.
 #[derive(Debug)]
-enum State {
-    StartRecord,
-    EndRecord,
-    StartField,
-    InField,
-    InQuotedField,
-    InEscapedQuote,
-    InDoubleEscapedQuote,
+pub struct Reader<R> {
+    /// The underlying CSV parser.
+    ///
+    /// We explicitly put this on the heap because CoreReader embeds an entire
+    /// DFA transition table, which along with other things, tallies up to
+    /// almost 500 bytes on the stack.
+    core: Box<CoreReader>,
+    /// The underlying reader.
+    rdr: io::BufReader<R>,
+    /// Various state tracking.
+    ///
+    /// There is more state embedded in the `CoreReader`.
+    state: ReaderState,
+}
+
+#[derive(Debug)]
+struct ReaderState {
+    /// When set, this contains the first row of any parsed CSV data.
+    ///
+    /// This is always populated, regardless of whether `has_headers` is set.
+    headers: Option<Headers>,
+    /// When set, the first row of parsed CSV data is excluded from things
+    /// that read records, like iterators and `read_record`.
+    has_headers: bool,
+    /// When set, there is no restriction on the length of records. When not
+    /// set, every record must have the same number of fields, or else an error
+    /// is reported.
+    flexible: bool,
+    /// The number of fields in the first record parsed.
+    first_field_count: Option<u64>,
+    /// The current position of the parser.
+    ///
+    /// Note that this position is only observable by callers at the start
+    /// of a record. More granular positions are not supported.
+    cur_pos: Position,
+    /// Whether the first record has been read or not.
+    first: bool,
+    /// Whether the reader has been seeked or not.
+    seeked: bool,
+    /// Whether EOF of the underlying reader has been reached or not.
+    eof: bool,
+}
+
+/// Headers encapsulates any data associated with the headers of CSV data.
+///
+/// The headers always correspond to the first row.
+#[derive(Debug)]
+struct Headers {
+    /// The header, as raw bytes.
+    byte_record: ByteRecord,
+    /// The header, as valid UTF-8 (or a UTF-8 error).
+    string_record: result::Result<StringRecord, Utf8Error>,
+}
+
+impl Reader<Reader<File>> {
+    /// Create a new CSV parser with a default configuration for the given
+    /// file path.
+    ///
+    /// To customize CSV parsing, use a `ReaderBuilder`.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::Reader;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut rdr = Reader::from_path("foo.csv")?;
+    ///     for result in rdr.records() {
+    ///         let record = result?;
+    ///         println!("{:?}", record);
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Reader<File>> {
+        ReaderBuilder::new().from_path(path)
+    }
+}
+
+impl<R: io::Read> Reader<R> {
+    /// Create a new CSV reader given a builder and a source of underlying
+    /// bytes.
+    fn new(builder: &ReaderBuilder, rdr: R) -> Reader<R> {
+        Reader {
+            core: Box::new(builder.builder.build()),
+            rdr: io::BufReader::with_capacity(builder.capacity, rdr),
+            state: ReaderState {
+                headers: None,
+                has_headers: builder.has_headers,
+                flexible: builder.flexible,
+                first_field_count: None,
+                cur_pos: Position::new(),
+                first: false,
+                seeked: false,
+                eof: false,
+            },
+        }
+    }
+
+    /// Create a new CSV parser with a default configuration for the given
+    /// reader.
+    ///
+    /// To customize CSV parsing, use a `ReaderBuilder`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::Reader;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///     for result in rdr.records() {
+    ///         let record = result?;
+    ///         println!("{:?}", record);
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn from_reader(rdr: R) -> Reader<R> {
+        ReaderBuilder::new().from_reader(rdr)
+    }
+
+    /// Returns a borrowed iterator over deserialized records.
+    ///
+    /// Each item yielded by this iterator is a `Result<D, Error>`.
+    /// Therefore, in order to access the record, callers must handle the
+    /// possibility of error (typically with `try!` or `?`).
+    ///
+    /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
+    /// default), then this does not include the first record. Additionally,
+    /// if `has_headers` is enabled, then deserializing into a struct will
+    /// automatically align the values in each row to the fields of a struct
+    /// based on the header row.
+    ///
+    /// # Example
+    ///
+    /// This shows how to deserialize CSV data into normal Rust structs. The
+    /// fields of the header row are used to match up the values in each row
+    /// to the fields of the struct.
+    ///
+    /// ```
+    /// extern crate csv;
+    /// #[macro_use]
+    /// extern crate serde_derive;
+    ///
+    /// use std::error::Error;
+    /// use csv::Reader;
+    ///
+    /// #[derive(Debug, Deserialize, Eq, PartialEq)]
+    /// struct Row {
+    ///     city: String,
+    ///     country: String,
+    ///     #[serde(rename = "popcount")]
+    ///     population: u64,
+    /// }
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,popcount
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///     let mut iter = rdr.deserialize();
+    ///
+    ///     if let Some(result) = iter.next() {
+    ///         let record: Row = result?;
+    ///         assert_eq!(record, Row {
+    ///             city: "Boston".to_string(),
+    ///             country: "United States".to_string(),
+    ///             population: 4628910,
+    ///         });
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// # Rules
+    ///
+    /// For the most part, any Rust type that maps straight-forwardly to a CSV
+    /// record is supported. This includes maps, structs, tuples and tuple
+    /// structs. Other Rust types, such as `Vec`s, arrays, and enums have
+    /// a more complicated story. In general, when working with CSV data, one
+    /// should avoid *nested sequences* as much as possible.
+    ///
+    /// Maps, structs, tuples and tuple structs map to CSV records in a simple
+    /// way. Tuples and tuple structs decode their fields in the order that
+    /// they are defined. Structs will do the same only if `has_headers` has
+    /// been disabled using [`ReaderBuilder`](struct.ReaderBuilder.html),
+    /// otherwise, structs and maps are deserialized based on the fields
+    /// defined in the header row. (If there is no header row, then
+    /// deserializing into a map will result in an error.)
+    ///
+    /// Nested sequences are supported in a limited capacity. Namely, they
+    /// are flattened. As a result, it's often useful to use a `Vec` to capture
+    /// a "tail" of fields in a record:
+    ///
+    /// ```
+    /// extern crate csv;
+    /// #[macro_use]
+    /// extern crate serde_derive;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// #[derive(Debug, Deserialize, Eq, PartialEq)]
+    /// struct Row {
+    ///     label: String,
+    ///     values: Vec<i32>,
+    /// }
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "foo,1,2,3";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .has_headers(false)
+    ///         .from_reader(data.as_bytes());
+    ///     let mut iter = rdr.deserialize();
+    ///
+    ///     if let Some(result) = iter.next() {
+    ///         let record: Row = result?;
+    ///         assert_eq!(record, Row {
+    ///             label: "foo".to_string(),
+    ///             values: vec![1, 2, 3],
+    ///         });
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// In the above example, adding another field to the `Row` struct after
+    /// the `values` field will result in a deserialization error. This is
+    /// because the deserializer doesn't know when to stop reading fields
+    /// into the `values` vector, so it will consume the rest of the fields in
+    /// the record leaving none left over for the additional field.
+    ///
+    /// Finally, simple enums in Rust can be deserialized as well. Namely,
+    /// enums must either be variants with no arguments or variants with a
+    /// single argument. Variants with no arguments are deserialized based on
+    /// which variant name the field matches. Variants with a single argument
+    /// are deserialized based on which variant can store the data. The latter
+    /// is only supported when using "untagged" enum deserialization. The
+    /// following example shows both forms in action:
+    ///
+    /// ```
+    /// extern crate csv;
+    /// #[macro_use]
+    /// extern crate serde_derive;
+    ///
+    /// use std::error::Error;
+    /// use csv::Reader;
+    ///
+    /// #[derive(Debug, Deserialize, PartialEq)]
+    /// struct Row {
+    ///     label: Label,
+    ///     value: Number,
+    /// }
+    ///
+    /// #[derive(Debug, Deserialize, PartialEq)]
+    /// #[serde(rename_all = "lowercase")]
+    /// enum Label {
+    ///     Celsius,
+    ///     Fahrenheit,
+    /// }
+    ///
+    /// #[derive(Debug, Deserialize, PartialEq)]
+    /// #[serde(untagged)]
+    /// enum Number {
+    ///     Integer(i64),
+    ///     Float(f64),
+    /// }
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///label,value
+    ///celsius,22.2222
+    ///fahrenheit,72
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///     let mut iter = rdr.deserialize();
+    ///
+    ///     // Read the first record.
+    ///     if let Some(result) = iter.next() {
+    ///         let record: Row = result?;
+    ///         assert_eq!(record, Row {
+    ///             label: Label::Celsius,
+    ///             value: Number::Float(22.2222),
+    ///         });
+    ///     } else {
+    ///         return Err(From::from(
+    ///             "expected at least two records but got none"));
+    ///     }
+    ///
+    ///     // Read the second record.
+    ///     if let Some(result) = iter.next() {
+    ///         let record: Row = result?;
+    ///         assert_eq!(record, Row {
+    ///             label: Label::Fahrenheit,
+    ///             value: Number::Integer(72),
+    ///         });
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from(
+    ///             "expected at least two records but got only one"))
+    ///     }
+    /// }
+    /// ```
+    pub fn deserialize<D>(&mut self) -> DeserializeRecordsIter<R, D>
+            where D: DeserializeOwned
+    {
+        DeserializeRecordsIter::new(self)
+    }
+
+    /// Returns an owned iterator over deserialized records.
+    ///
+    /// Each item yielded by this iterator is a `Result<D, Error>`.
+    /// Therefore, in order to access the record, callers must handle the
+    /// possibility of error (typically with `try!` or `?`).
+    ///
+    /// This is mostly useful when you want to return a CSV iterator or store
+    /// it somewhere.
+    ///
+    /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
+    /// default), then this does not include the first record. Additionally,
+    /// if `has_headers` is enabled, then deserializing into a struct will
+    /// automatically align the values in each row to the fields of a struct
+    /// based on the header row.
+    ///
+    /// For more detailed deserialization rules, see the documentation on the
+    /// `deserialize` method.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    /// #[macro_use]
+    /// extern crate serde_derive;
+    ///
+    /// use std::error::Error;
+    /// use csv::Reader;
+    ///
+    /// #[derive(Debug, Deserialize, Eq, PartialEq)]
+    /// struct Row {
+    ///     city: String,
+    ///     country: String,
+    ///     #[serde(rename = "popcount")]
+    ///     population: u64,
+    /// }
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,popcount
+    ///Boston,United States,4628910
+    ///";
+    ///     let rdr = Reader::from_reader(data.as_bytes());
+    ///     let mut iter = rdr.into_deserialize();
+    ///
+    ///     if let Some(result) = iter.next() {
+    ///         let record: Row = result?;
+    ///         assert_eq!(record, Row {
+    ///             city: "Boston".to_string(),
+    ///             country: "United States".to_string(),
+    ///             population: 4628910,
+    ///         });
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn into_deserialize<D>(self) -> DeserializeRecordsIntoIter<R, D>
+            where D: DeserializeOwned
+    {
+        DeserializeRecordsIntoIter::new(self)
+    }
+
+    /// Returns a borrowed iterator over all records as strings.
+    ///
+    /// Each item yielded by this iterator is a `Result<StringRecord, Error>`.
+    /// Therefore, in order to access the record, callers must handle the
+    /// possibility of error (typically with `try!` or `?`).
+    ///
+    /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
+    /// default), then this does not include the first record.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::Reader;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///     let mut iter = rdr.records();
+    ///
+    ///     if let Some(result) = iter.next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn records(&mut self) -> StringRecordsIter<R> {
+        StringRecordsIter::new(self)
+    }
+
+    /// Returns an owned iterator over all records as strings.
+    ///
+    /// Each item yielded by this iterator is a `Result<StringRecord, Error>`.
+    /// Therefore, in order to access the record, callers must handle the
+    /// possibility of error (typically with `try!` or `?`).
+    ///
+    /// This is mostly useful when you want to return a CSV iterator or store
+    /// it somewhere.
+    ///
+    /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
+    /// default), then this does not include the first record.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::Reader;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let rdr = Reader::from_reader(data.as_bytes());
+    ///     let mut iter = rdr.into_records();
+    ///
+    ///     if let Some(result) = iter.next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn into_records(self) -> StringRecordsIntoIter<R> {
+        StringRecordsIntoIter::new(self)
+    }
+
+    /// Returns a borrowed iterator over all records as raw bytes.
+    ///
+    /// Each item yielded by this iterator is a `Result<ByteRecord, Error>`.
+    /// Therefore, in order to access the record, callers must handle the
+    /// possibility of error (typically with `try!` or `?`).
+    ///
+    /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
+    /// default), then this does not include the first record.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::Reader;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///     let mut iter = rdr.byte_records();
+    ///
+    ///     if let Some(result) = iter.next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn byte_records(&mut self) -> ByteRecordsIter<R> {
+        ByteRecordsIter::new(self)
+    }
+
+    /// Returns an owned iterator over all records as raw bytes.
+    ///
+    /// Each item yielded by this iterator is a `Result<ByteRecord, Error>`.
+    /// Therefore, in order to access the record, callers must handle the
+    /// possibility of error (typically with `try!` or `?`).
+    ///
+    /// This is mostly useful when you want to return a CSV iterator or store
+    /// it somewhere.
+    ///
+    /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
+    /// default), then this does not include the first record.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::Reader;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let rdr = Reader::from_reader(data.as_bytes());
+    ///     let mut iter = rdr.into_byte_records();
+    ///
+    ///     if let Some(result) = iter.next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn into_byte_records(self) -> ByteRecordsIntoIter<R> {
+        ByteRecordsIntoIter::new(self)
+    }
+
+    /// Returns a reference to the first row read by this parser.
+    ///
+    /// If no row has been read yet, then this will force parsing of the first
+    /// row.
+    ///
+    /// If there was a problem parsing the row or if it wasn't valid UTF-8,
+    /// then this returns an error.
+    ///
+    /// If the underlying reader emits EOF before any data, then this returns
+    /// an empty record.
+    ///
+    /// Note that this method may be used regardless of whether `has_headers`
+    /// was enabled (but it is enabled by default).
+    ///
+    /// # Example
+    ///
+    /// This example shows how to get the header row of CSV data. Notice that
+    /// the header row does not appear as a record in the iterator!
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::Reader;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///
+    ///     // We can read the headers before iterating.
+    ///     {
+    ///         // `headers` borrows from the reader, so we put this in its
+    ///         // own scope. That way, the borrow ends before we try iterating
+    ///         // below. Alternatively, we could clone the headers.
+    ///         let headers = rdr.headers()?;
+    ///         assert_eq!(headers, vec!["city", "country", "pop"]);
+    ///     }
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///     } else {
+    ///         return Err(From::from(
+    ///             "expected at least one record but got none"))
+    ///     }
+    ///
+    ///     // We can also read the headers after iterating.
+    ///     let headers = rdr.headers()?;
+    ///     assert_eq!(headers, vec!["city", "country", "pop"]);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn headers(&mut self) -> Result<&StringRecord> {
+        if self.state.headers.is_none() {
+            let mut record = ByteRecord::new();
+            self.read_byte_record_impl(&mut record)?;
+            self.set_headers_impl(Err(record));
+        }
+        let headers = self.state.headers.as_ref().unwrap();
+        match headers.string_record {
+            Ok(ref record) => Ok(record),
+            Err(ref err) => Err(Error::Utf8 {
+                pos: headers.byte_record.position().map(Clone::clone),
+                err: err.clone(),
+            }),
+        }
+    }
+
+    /// Returns a reference to the first row read by this parser as raw bytes.
+    ///
+    /// If no row has been read yet, then this will force parsing of the first
+    /// row.
+    ///
+    /// If there was a problem parsing the row then this returns an error.
+    ///
+    /// If the underlying reader emits EOF before any data, then this returns
+    /// an empty record.
+    ///
+    /// Note that this method may be used regardless of whether `has_headers`
+    /// was enabled (but it is enabled by default).
+    ///
+    /// # Example
+    ///
+    /// This example shows how to get the header row of CSV data. Notice that
+    /// the header row does not appear as a record in the iterator!
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::Reader;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///
+    ///     // We can read the headers before iterating.
+    ///     {
+    ///         // `headers` borrows from the reader, so we put this in its
+    ///         // own scope. That way, the borrow ends before we try iterating
+    ///         // below. Alternatively, we could clone the headers.
+    ///         let headers = rdr.byte_headers()?;
+    ///         assert_eq!(headers, vec!["city", "country", "pop"]);
+    ///     }
+    ///
+    ///     if let Some(result) = rdr.byte_records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///     } else {
+    ///         return Err(From::from(
+    ///             "expected at least one record but got none"))
+    ///     }
+    ///
+    ///     // We can also read the headers after iterating.
+    ///     let headers = rdr.byte_headers()?;
+    ///     assert_eq!(headers, vec!["city", "country", "pop"]);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn byte_headers(&mut self) -> Result<&ByteRecord> {
+        if self.state.headers.is_none() {
+            let mut record = ByteRecord::new();
+            self.read_byte_record_impl(&mut record)?;
+            self.set_headers_impl(Err(record));
+        }
+        Ok(&self.state.headers.as_ref().unwrap().byte_record)
+    }
+
+    /// Set the headers of this CSV parser manually.
+    ///
+    /// This overrides any other setting (including `set_byte_headers`). Any
+    /// automatic detection of headers is disabled. This may be called at any
+    /// time.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{Reader, StringRecord};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///
+    ///     assert_eq!(rdr.headers()?, vec!["city", "country", "pop"]);
+    ///     rdr.set_headers(StringRecord::from(vec!["a", "b", "c"]));
+    ///     assert_eq!(rdr.headers()?, vec!["a", "b", "c"]);
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn set_headers(&mut self, headers: StringRecord) {
+        self.set_headers_impl(Ok(headers));
+    }
+
+    /// Set the headers of this CSV parser manually as raw bytes.
+    ///
+    /// This overrides any other setting (including `set_headers`). Any
+    /// automatic detection of headers is disabled. This may be called at any
+    /// time.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{Reader, ByteRecord};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///
+    ///     assert_eq!(rdr.byte_headers()?, vec!["city", "country", "pop"]);
+    ///     rdr.set_byte_headers(ByteRecord::from(vec!["a", "b", "c"]));
+    ///     assert_eq!(rdr.byte_headers()?, vec!["a", "b", "c"]);
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn set_byte_headers(&mut self, headers: ByteRecord) {
+        self.set_headers_impl(Err(headers));
+    }
+
+    fn set_headers_impl(
+        &mut self,
+        headers: result::Result<StringRecord, ByteRecord>,
+    ) {
+        // If we have string headers, then get byte headers. But if we have
+        // byte headers, then get the string headers (or a UTF-8 error).
+        let (str_headers, byte_headers) = match headers {
+            Ok(string) => {
+                let bytes = string.clone().into_byte_record();
+                (Ok(string), bytes)
+            }
+            Err(bytes) => {
+                match StringRecord::from_byte_record(bytes.clone()) {
+                    Ok(str_headers) => (Ok(str_headers), bytes),
+                    Err(err) => (Err(err.utf8_error().clone()), bytes),
+                }
+            }
+        };
+        self.state.headers = Some(Headers {
+            byte_record: byte_headers,
+            string_record: str_headers,
+        });
+    }
+
+    /// Read a single row into the given record. Returns false when no more
+    /// records could be read.
+    ///
+    /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
+    /// default), then this will never read the first record.
+    ///
+    /// This method is useful when you want to read records as fast as
+    /// as possible. It's less ergonomic than an iterator, but it permits the
+    /// caller to reuse the `StringRecord` allocation, which usually results
+    /// in higher throughput.
+    ///
+    /// Records read via this method are guaranteed to have a position set
+    /// on them, even if the reader is at EOF or if an error is returned.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{Reader, StringRecord};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///     let mut record = StringRecord::new();
+    ///
+    ///     if rdr.read_record(&mut record)? {
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn read_record(&mut self, record: &mut StringRecord) -> Result<bool> {
+        string_record::read(self, record)
+    }
+
+    /// Read a single row into the given byte record. Returns false when no
+    /// more records could be read.
+    ///
+    /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
+    /// default), then this will never read the first record.
+    ///
+    /// This method is useful when you want to read records as fast as
+    /// as possible. It's less ergonomic than an iterator, but it permits the
+    /// caller to reuse the `ByteRecord` allocation, which usually results
+    /// in higher throughput.
+    ///
+    /// Records read via this method are guaranteed to have a position set
+    /// on them, even if the reader is at EOF or if an error is returned.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{ByteRecord, Reader};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///     let mut record = ByteRecord::new();
+    ///
+    ///     if rdr.read_byte_record(&mut record)? {
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn read_byte_record(
+        &mut self,
+        record: &mut ByteRecord,
+    ) -> Result<bool> {
+        if !self.state.seeked && !self.state.has_headers && !self.state.first {
+            // If the caller indicated "no headers" and we haven't yielded the
+            // first record yet, then we should yield our header row if we have
+            // one.
+            if let Some(ref headers) = self.state.headers {
+                self.state.first = true;
+                record.clone_from(&headers.byte_record);
+                return Ok(!record.is_empty());
+            }
+        }
+        let ok = self.read_byte_record_impl(record)?;
+        self.state.first = true;
+        if !self.state.seeked && self.state.headers.is_none() {
+            self.set_headers_impl(Err(record.clone()));
+            // If the end user indicated that we have headers, then we should
+            // never return the first row. Instead, we should attempt to
+            // read and return the next one.
+            if self.state.has_headers {
+                return self.read_byte_record_impl(record);
+            }
+        }
+        Ok(ok)
+    }
+
+    /// Read a byte record from the underlying CSV reader, without accounting
+    /// for headers.
+    #[inline(always)]
+    fn read_byte_record_impl(
+        &mut self,
+        record: &mut ByteRecord,
+    ) -> Result<bool> {
+        use csv_core::ReadRecordResult::*;
+
+        record.clear();
+        record.set_position(Some(self.state.cur_pos.clone()));
+        if self.state.eof {
+            return Ok(false);
+        }
+        let (mut outlen, mut endlen) = (0, 0);
+        loop {
+            let (res, nin, nout, nend) = {
+                let input = self.rdr.fill_buf()?;
+                let (mut fields, mut ends) = byte_record::as_parts(record);
+                self.core.read_record(
+                    input, &mut fields[outlen..], &mut ends[endlen..])
+            };
+            self.rdr.consume(nin);
+            let byte = self.state.cur_pos.byte();
+            self.state.cur_pos
+                .set_byte(byte + nin as u64)
+                .set_line(self.core.line());
+            outlen += nout;
+            endlen += nend;
+            match res {
+                InputEmpty => continue,
+                OutputFull => {
+                    byte_record::expand_fields(record);
+                    continue;
+                }
+                OutputEndsFull => {
+                    byte_record::expand_ends(record);
+                    continue;
+                }
+                Record => {
+                    byte_record::set_len(record, endlen);
+                    self.state.add_record(record)?;
+                    return Ok(true);
+                }
+                End => {
+                    self.state.eof = true;
+                    return Ok(false);
+                }
+            }
+        }
+    }
+
+    /// Return the current position of this CSV reader.
+    ///
+    /// The byte offset in the position returned can be used to `seek` this
+    /// reader. In particular, seeking to a position returned here on the same
+    /// data will result in parsing the same subsequent record.
+    ///
+    /// # Example: reading the position
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use std::io;
+    /// use csv::{Reader, Position};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,popcount
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///";
+    ///     let rdr = Reader::from_reader(io::Cursor::new(data));
+    ///     let mut iter = rdr.into_records();
+    ///     let mut pos = Position::new();
+    ///     loop {
+    ///         // Read the position immediately before each record.
+    ///         let next_pos = iter.reader().position().clone();
+    ///         if iter.next().is_none() {
+    ///             break;
+    ///         }
+    ///         pos = next_pos;
+    ///     }
+    ///
+    ///     // `pos` should now be the position immediately before the last
+    ///     // record.
+    ///     assert_eq!(pos.byte(), 51);
+    ///     assert_eq!(pos.line(), 3);
+    ///     assert_eq!(pos.record(), 2);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn position(&self) -> &Position {
+        &self.state.cur_pos
+    }
+
+    /// Returns true if and only if this reader has been exhausted.
+    ///
+    /// When this returns true, no more records can be read from this reader
+    /// (unless it has been seeked to another position).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use std::io;
+    /// use csv::{Reader, Position};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,popcount
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///";
+    ///     let mut rdr = Reader::from_reader(io::Cursor::new(data));
+    ///     assert!(!rdr.is_done());
+    ///     for result in rdr.records() {
+    ///         let _ = result?;
+    ///     }
+    ///     assert!(rdr.is_done());
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn is_done(&self) -> bool {
+        self.state.eof
+    }
+
+    /// Returns true if and only if this reader has been configured to
+    /// interpret the first record as a header record.
+    pub fn has_headers(&self) -> bool {
+        self.state.has_headers
+    }
+
+    /// Returns a reference to the underlying reader.
+    pub fn get_ref(&self) -> &R {
+        self.rdr.get_ref()
+    }
+
+    /// Returns a mutable reference to the underlying reader.
+    pub fn get_mut(&mut self) -> &mut R {
+        self.rdr.get_mut()
+    }
+
+    /// Unwraps this CSV reader, returning the underlying reader.
+    ///
+    /// Note that any leftover data inside this reader's internal buffer is
+    /// lost.
+    pub fn into_inner(self) -> R {
+        self.rdr.into_inner()
+    }
 }
 
 impl<R: io::Read + io::Seek> Reader<R> {
-    /// Seeks the underlying reader to the file cursor specified.
+    /// Seeks the underlying reader to the position given.
     ///
-    /// This comes with several caveats:
+    /// This comes with a few caveats:
     ///
-    /// * The existing buffer is dropped and a new one is created.
-    /// * If you seek to a position other than the start of a record, you'll
-    ///   probably get an incorrect parse. (This is *not* unsafe.)
+    /// * Any internal buffer associated with this reader is cleared.
+    /// * If the given position does not correspond to a position immediately
+    ///   before the start of a record, then the behavior of this reader is
+    ///   unspecified.
+    /// * Any special logic that skips the first record in the CSV reader
+    ///   when reading or iterating over records is disabled.
     ///
-    /// Mostly, this is intended for use with the `index` sub module.
+    /// If the given position has a byte offset equivalent to the current
+    /// position, then no seeking is performed.
     ///
-    /// Note that if `pos` is equivalent to the current *parsed* byte offset,
-    /// then no seeking is performed. (In this case, `seek` is a no-op.)
-    pub fn seek(&mut self, pos: u64) -> Result<()> {
-        self.has_seeked = true;
-        self.state = StartRecord;
-        if pos == self.byte_offset() {
-            return Ok(())
+    /// If the header row has not already been read, then this will attempt
+    /// to read the header row before seeking. Therefore, it is possible that
+    /// this returns an error associated with reading CSV data.
+    ///
+    /// Note that seeking is performed based only on the byte offset in the
+    /// given position. Namely, the record or line numbers in the position may
+    /// be incorrect, but this will cause any future position generated by
+    /// this CSV reader to be similarly incorrect.
+    ///
+    /// # Example: seek to parse a record twice
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use std::io;
+    /// use csv::{Reader, Position};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,popcount
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///";
+    ///     let rdr = Reader::from_reader(io::Cursor::new(data));
+    ///     let mut iter = rdr.into_records();
+    ///     let mut pos = Position::new();
+    ///     loop {
+    ///         // Read the position immediately before each record.
+    ///         let next_pos = iter.reader().position().clone();
+    ///         if iter.next().is_none() {
+    ///             break;
+    ///         }
+    ///         pos = next_pos;
+    ///     }
+    ///
+    ///     // Now seek the reader back to `pos`. This will let us read the
+    ///     // last record again.
+    ///     iter.reader_mut().seek(pos)?;
+    ///     let mut iter = iter.into_reader().into_records();
+    ///     if let Some(result) = iter.next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Concord", "United States", "42695"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn seek(&mut self, pos: Position) -> Result<()> {
+        self.byte_headers()?;
+        self.state.seeked = true;
+        if pos.byte() == self.state.cur_pos.byte() {
+            return Ok(());
         }
-        self.bufi = self.buf.len(); // will force a buffer refresh
-        self.eof = false;
-        self.byte_offset = pos;
-        try!(self.rdr.seek(io::SeekFrom::Start(pos)));
+        self.rdr.seek(io::SeekFrom::Start(pos.byte()))?;
+        self.core.reset();
+        self.core.set_line(pos.line());
+        self.state.cur_pos = pos;
+        self.state.eof = false;
+        Ok(())
+    }
+
+    /// This is like `seek`, but provides direct control over how the seeking
+    /// operation is performed via `io::SeekFrom`.
+    ///
+    /// The `pos` position given *should* correspond the position indicated
+    /// by `seek_from`, but there is no requirement. If the `pos` position
+    /// given is incorrect, then the position information returned by this
+    /// reader will be similarly incorrect.
+    ///
+    /// If the header row has not already been read, then this will attempt
+    /// to read the header row before seeking. Therefore, it is possible that
+    /// this returns an error associated with reading CSV data.
+    ///
+    /// Unlike `seek`, this will always cause an actual seek to be performed.
+    pub fn seek_raw(
+        &mut self,
+        seek_from: io::SeekFrom,
+        pos: Position,
+    ) -> Result<()> {
+        self.byte_headers()?;
+        self.state.seeked = true;
+        self.rdr.seek(seek_from)?;
+        self.core.reset();
+        self.core.set_line(pos.line());
+        self.state.cur_pos = pos;
+        self.state.eof = false;
         Ok(())
     }
 }
 
-#[doc(hidden)]
-pub struct UnsafeByteFields<'a, R: 'a> {
-    rdr: &'a mut Reader<R>,
-}
-
-#[doc(hidden)]
-impl<'a, R> Iterator for UnsafeByteFields<'a, R> where R: io::Read {
-    type Item = Result<&'a [u8]>;
-
-    fn next(&mut self) -> Option<Result<&'a [u8]>> {
-        unsafe {
-            ::std::mem::transmute(self.rdr.next_bytes().into_iter_result())
+impl ReaderState {
+    #[inline(always)]
+    fn add_record(&mut self, record: &ByteRecord) -> Result<()> {
+        let i = self.cur_pos.record();
+        self.cur_pos.set_record(i.checked_add(1).unwrap());
+        if !self.flexible {
+            match self.first_field_count {
+                None => self.first_field_count = Some(record.len() as u64),
+                Some(expected) => {
+                    if record.len() as u64 != expected {
+                        return Err(Error::UnequalLengths {
+                            pos: record.position().map(Clone::clone),
+                            expected_len: expected,
+                            len: record.len() as u64,
+                        });
+                    }
+                }
+            }
         }
+        Ok(())
     }
 }
 
-/// An iterator of decoded records.
+/// An owned iterator over deserialized records.
 ///
-/// The lifetime parameter `'a` refers to the lifetime of the underlying
-/// CSV reader.
-///
-/// The `R` type parameter refers to the type of the underlying reader.
-///
-/// The `D` type parameter refers to the decoded type.
-pub struct DecodedRecords<'a, R: 'a, D> {
-    p: ByteRecords<'a, R>,
-    _phantom: ::std::marker::PhantomData<D>,
+/// The type parameter `R` refers to the underlying `io::Read` type, and `D`
+/// refers to the type that this iterator will deserialize a record into.
+pub struct DeserializeRecordsIntoIter<R, D> {
+    rdr: Reader<R>,
+    rec: StringRecord,
+    headers: Option<StringRecord>,
+    _priv: PhantomData<D>,
 }
 
-impl<'a, R, D> Iterator for DecodedRecords<'a, R, D>
-        where R: io::Read, D: Decodable {
+impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
+    fn new(mut rdr: Reader<R>) -> DeserializeRecordsIntoIter<R, D> {
+        let headers =
+            if !rdr.state.has_headers {
+                None
+            } else {
+                rdr.headers().ok().map(Clone::clone)
+            };
+        DeserializeRecordsIntoIter {
+            rdr: rdr,
+            rec: StringRecord::new(),
+            headers: headers,
+            _priv: PhantomData,
+        }
+    }
+
+    /// Return a reference to the underlying CSV reader.
+    pub fn reader(&self) -> &Reader<R> {
+        &self.rdr
+    }
+
+    /// Return a mutable reference to the underlying CSV reader.
+    pub fn reader_mut(&mut self) -> &mut Reader<R> {
+        &mut self.rdr
+    }
+
+    /// Drop this iterator and return the underlying CSV reader.
+    pub fn into_reader(self) -> Reader<R> {
+        self.rdr
+    }
+}
+
+impl<R: io::Read, D: DeserializeOwned>
+    Iterator for DeserializeRecordsIntoIter<R, D>
+{
     type Item = Result<D>;
 
     fn next(&mut self) -> Option<Result<D>> {
-        self.p.next().map(|res| {
-            res.and_then(|byte_record| {
-                Decodable::decode(&mut Decoded::new(byte_record))
-            })
-        })
+        match self.rdr.read_record(&mut self.rec) {
+            Err(err) => Some(Err(err)),
+            Ok(false) => None,
+            Ok(true) => Some(self.rec.deserialize(self.headers.as_ref())),
+        }
     }
 }
 
-/// An iterator of `String` records.
+/// A borrowed iterator over deserialized records.
 ///
-/// The lifetime parameter `'a` refers to the lifetime of the underlying
-/// CSV reader.
-///
-/// The `R` type parameter refers to the type of the underlying reader.
-pub struct StringRecords<'a, R: 'a> {
-    p: ByteRecords<'a, R>,
+/// The lifetime parameter `'r` refers to the lifetime of the underlying
+/// CSV `Reader`. The type parameter `R` refers to the underlying `io::Read`
+/// type, and `D` refers to the type that this iterator will deserialize a
+/// record into.
+pub struct DeserializeRecordsIter<'r, R: 'r, D> {
+    rdr: &'r mut Reader<R>,
+    rec: StringRecord,
+    headers: Option<StringRecord>,
+    _priv: PhantomData<D>,
 }
 
-impl<'a, R> Iterator for StringRecords<'a, R> where R: io::Read {
-    type Item = Result<Vec<String>>;
+impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
+    fn new(rdr: &'r mut Reader<R>) -> DeserializeRecordsIter<'r, R, D> {
+        let headers =
+            if !rdr.state.has_headers {
+                None
+            } else {
+                rdr.headers().ok().map(Clone::clone)
+            };
+        DeserializeRecordsIter {
+            rdr: rdr,
+            rec: StringRecord::new(),
+            headers: headers,
+            _priv: PhantomData,
+        }
+    }
 
-    fn next(&mut self) -> Option<Result<Vec<String>>> {
-        self.p.next().map(|res| {
-            res.and_then(|byte_record| {
-                byte_record_to_utf8(byte_record)
-            })
-        })
+    /// Return a reference to the underlying CSV reader.
+    pub fn reader(&self) -> &Reader<R> {
+        &self.rdr
+    }
+
+    /// Return a mutable reference to the underlying CSV reader.
+    pub fn reader_mut(&mut self) -> &mut Reader<R> {
+        &mut self.rdr
     }
 }
 
-/// An iterator of `ByteString` records.
-///
-/// The lifetime parameter `'a` refers to the lifetime of the underlying
-/// CSV reader.
-///
-/// The `R` type parameter refers to the type of the underlying reader.
-pub struct ByteRecords<'a, R: 'a> {
-    p: &'a mut Reader<R>,
-    first: bool,
-    errored: bool,
+impl<'r, R: io::Read, D: DeserializeOwned>
+    Iterator for DeserializeRecordsIter<'r, R, D>
+{
+    type Item = Result<D>;
+
+    fn next(&mut self) -> Option<Result<D>> {
+        match self.rdr.read_record(&mut self.rec) {
+            Err(err) => Some(Err(err)),
+            Ok(false) => None,
+            Ok(true) => Some(self.rec.deserialize(self.headers.as_ref())),
+        }
+    }
 }
 
-impl<'a, R> Iterator for ByteRecords<'a, R> where R: io::Read {
-    type Item = Result<Vec<ByteString>>;
+/// An owned iterator over records as strings.
+pub struct StringRecordsIntoIter<R> {
+    rdr: Reader<R>,
+    rec: StringRecord,
+}
 
-    fn next(&mut self) -> Option<Result<Vec<ByteString>>> {
-        // We check this before checking `done` because the parser could
-        // be done after a call to `byte_headers` but before any iterator
-        // traversal. Once we start the iterator, we must allow the first
-        // row to be returned if the caller has said that this CSV data
-        // has no headers.
-        if !self.first {
-            // Never do this special first record processing again.
-            self.first = true;
+impl<R: io::Read> StringRecordsIntoIter<R> {
+    fn new(rdr: Reader<R>) -> StringRecordsIntoIter<R> {
+        StringRecordsIntoIter { rdr: rdr, rec: StringRecord::new() }
+    }
 
-            // Always consume the header record. This let's us choose to
-            // return it or ignore it and move on to the next record.
-            // If headers have been read before this point, then this is
-            // equivalent to a harmless clone (and no parser progression).
-            let headers = self.p.byte_headers();
+    /// Return a reference to the underlying CSV reader.
+    pub fn reader(&self) -> &Reader<R> {
+        &self.rdr
+    }
 
-            // If the header row is empty, then the CSV data contains
-            // no records. Never return zero-length records!
-            if headers.as_ref().map(|r| r.is_empty()).unwrap_or(false) {
-                assert!(self.p.done());
-                return None;
+    /// Return a mutable reference to the underlying CSV reader.
+    pub fn reader_mut(&mut self) -> &mut Reader<R> {
+        &mut self.rdr
+    }
+
+    /// Drop this iterator and return the underlying CSV reader.
+    pub fn into_reader(self) -> Reader<R> {
+        self.rdr
+    }
+}
+
+impl<R: io::Read> Iterator for StringRecordsIntoIter<R> {
+    type Item = Result<StringRecord>;
+
+    fn next(&mut self) -> Option<Result<StringRecord>> {
+        match self.rdr.read_record(&mut self.rec) {
+            Err(err) => Some(Err(err)),
+            Ok(true) => Some(Ok(self.rec.clone())),
+            Ok(false) => None,
+        }
+    }
+}
+
+/// A borrowed iterator over records as strings.
+///
+/// The lifetime parameter `'r` refers to the lifetime of the underlying
+/// CSV `Reader`.
+pub struct StringRecordsIter<'r, R: 'r> {
+    rdr: &'r mut Reader<R>,
+    rec: StringRecord,
+}
+
+impl<'r, R: io::Read> StringRecordsIter<'r, R> {
+    fn new(rdr: &'r mut Reader<R>) -> StringRecordsIter<'r, R> {
+        StringRecordsIter { rdr: rdr, rec: StringRecord::new() }
+    }
+
+    /// Return a reference to the underlying CSV reader.
+    pub fn reader(&self) -> &Reader<R> {
+        &self.rdr
+    }
+
+    /// Return a mutable reference to the underlying CSV reader.
+    pub fn reader_mut(&mut self) -> &mut Reader<R> {
+        &mut self.rdr
+    }
+}
+
+impl<'r, R: io::Read> Iterator for StringRecordsIter<'r, R> {
+    type Item = Result<StringRecord>;
+
+    fn next(&mut self) -> Option<Result<StringRecord>> {
+        match self.rdr.read_record(&mut self.rec) {
+            Err(err) => Some(Err(err)),
+            Ok(true) => Some(Ok(self.rec.clone())),
+            Ok(false) => None,
+        }
+    }
+}
+
+/// An owned iterator over records as raw bytes.
+pub struct ByteRecordsIntoIter<R> {
+    rdr: Reader<R>,
+    rec: ByteRecord,
+}
+
+impl<R: io::Read> ByteRecordsIntoIter<R> {
+    fn new(rdr: Reader<R>) -> ByteRecordsIntoIter<R> {
+        ByteRecordsIntoIter { rdr: rdr, rec: ByteRecord::new() }
+    }
+
+    /// Return a reference to the underlying CSV reader.
+    pub fn reader(&self) -> &Reader<R> {
+        &self.rdr
+    }
+
+    /// Return a mutable reference to the underlying CSV reader.
+    pub fn reader_mut(&mut self) -> &mut Reader<R> {
+        &mut self.rdr
+    }
+
+    /// Drop this iterator and return the underlying CSV reader.
+    pub fn into_reader(self) -> Reader<R> {
+        self.rdr
+    }
+}
+
+impl<R: io::Read> Iterator for ByteRecordsIntoIter<R> {
+    type Item = Result<ByteRecord>;
+
+    fn next(&mut self) -> Option<Result<ByteRecord>> {
+        match self.rdr.read_byte_record(&mut self.rec) {
+            Err(err) => Some(Err(err)),
+            Ok(true) => Some(Ok(self.rec.clone())),
+            Ok(false) => None,
+        }
+    }
+}
+
+/// A borrowed iterator over records as raw bytes.
+///
+/// The lifetime parameter `'r` refers to the lifetime of the underlying
+/// CSV `Reader`.
+pub struct ByteRecordsIter<'r, R: 'r> {
+    rdr: &'r mut Reader<R>,
+    rec: ByteRecord,
+}
+
+impl<'r, R: io::Read> ByteRecordsIter<'r, R> {
+    fn new(rdr: &'r mut Reader<R>) -> ByteRecordsIter<'r, R> {
+        ByteRecordsIter { rdr: rdr, rec: ByteRecord::new() }
+    }
+
+    /// Return a reference to the underlying CSV reader.
+    pub fn reader(&self) -> &Reader<R> {
+        &self.rdr
+    }
+
+    /// Return a mutable reference to the underlying CSV reader.
+    pub fn reader_mut(&mut self) -> &mut Reader<R> {
+        &mut self.rdr
+    }
+}
+
+impl<'r, R: io::Read> Iterator for ByteRecordsIter<'r, R> {
+    type Item = Result<ByteRecord>;
+
+    fn next(&mut self) -> Option<Result<ByteRecord>> {
+        match self.rdr.read_byte_record(&mut self.rec) {
+            Err(err) => Some(Err(err)),
+            Ok(true) => Some(Ok(self.rec.clone())),
+            Ok(false) => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use byte_record::ByteRecord;
+    use error::Error;
+    use string_record::StringRecord;
+
+    use super::{ReaderBuilder, Position};
+
+    fn b(s: &str) -> &[u8] { s.as_bytes() }
+    fn s(b: &[u8]) -> &str { ::std::str::from_utf8(b).unwrap() }
+
+    fn newpos(byte: u64, line: u64, record: u64) -> Position {
+        let mut p = Position::new();
+        p.set_byte(byte).set_line(line).set_record(record);
+        p
+    }
+
+    macro_rules! assert_match {
+        ($e:expr, $p:pat) => {{
+            match $e {
+                $p => {}
+                e => panic!("match failed, got {:?}", e),
             }
-
-            // This is important. If the client says this CSV data has no
-            // headers but calls `headers` before iterating records (which is
-            // perfectly valid), then we need to make sure to return that
-            // first record.
-            //
-            // If the client says the CSV data has headers, then the first
-            // record should always be ignored.
-            if !self.p.has_headers {
-                return Some(headers);
-            }
-        }
-        // OK, we're done checking the weird first-record-corner-case.
-        if self.p.done() || self.errored {
-            return None;
-        }
-        let mut record = Vec::with_capacity(self.p.first_row.len());
-        loop {
-            match self.p.next_bytes() {
-                NextField::EndOfRecord | NextField::EndOfCsv => {
-                    if record.len() == 0 {
-                        return None
-                    }
-                    break
-                }
-                NextField::Error(err) => {
-                    self.errored = true;
-                    return Some(Err(err));
-                }
-                NextField::Data(field) => record.push(field.to_vec()),
-            }
-        }
-        Some(Ok(record))
+        }}
     }
-}
 
-fn byte_record_to_utf8(record: Vec<ByteString>) -> Result<Vec<String>> {
-    for bytes in record.iter() {
-        if let Err(err) = ::std::str::from_utf8(&**bytes) {
-            return Err(Error::Decode(format!(
-                "Could not decode the following bytes as UTF-8 \
-                 because {}: {:?}", err.to_string(), bytes)));
+    #[test]
+    fn read_byte_record() {
+        let data = b("foo,\"b,ar\",baz\nabc,mno,xyz");
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(data);
+        let mut rec = ByteRecord::new();
+
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("foo", s(&rec[0]));
+        assert_eq!("b,ar", s(&rec[1]));
+        assert_eq!("baz", s(&rec[2]));
+
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("abc", s(&rec[0]));
+        assert_eq!("mno", s(&rec[1]));
+        assert_eq!("xyz", s(&rec[2]));
+
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
+    }
+
+    #[test]
+    fn read_record_unequal_fails() {
+        let data = b("foo\nbar,baz");
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(data);
+        let mut rec = ByteRecord::new();
+
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert_eq!(1, rec.len());
+        assert_eq!("foo", s(&rec[0]));
+
+        match rdr.read_byte_record(&mut rec) {
+            Err(Error::UnequalLengths {
+                expected_len: 1,
+                pos,
+                len: 2,
+            }) => {
+                assert_eq!(pos, Some(newpos(4, 2, 1)));
+            }
+            wrong => panic!("match failed, got {:?}", wrong),
         }
     }
-    Ok(unsafe { ::std::mem::transmute(record) })
+
+    #[test]
+    fn read_record_unequal_ok() {
+        let data = b("foo\nbar,baz");
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_reader(data);
+        let mut rec = ByteRecord::new();
+
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert_eq!(1, rec.len());
+        assert_eq!("foo", s(&rec[0]));
+
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert_eq!(2, rec.len());
+        assert_eq!("bar", s(&rec[0]));
+        assert_eq!("baz", s(&rec[1]));
+
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
+    }
+
+    // This tests that even if we get a CSV error, we can continue reading
+    // if we want.
+    #[test]
+    fn read_record_unequal_continue() {
+        let data = b("foo\nbar,baz\nquux");
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(data);
+        let mut rec = ByteRecord::new();
+
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert_eq!(1, rec.len());
+        assert_eq!("foo", s(&rec[0]));
+
+        match rdr.read_byte_record(&mut rec) {
+            Err(Error::UnequalLengths {
+                expected_len: 1,
+                pos,
+                len: 2,
+            }) => {
+                assert_eq!(pos, Some(newpos(4, 2, 1)));
+            }
+            wrong => panic!("match failed, got {:?}", wrong),
+        }
+
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert_eq!(1, rec.len());
+        assert_eq!("quux", s(&rec[0]));
+
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
+    }
+
+    #[test]
+    fn read_record_headers() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f");
+        let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(data);
+        let mut rec = StringRecord::new();
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("a", &rec[0]);
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("d", &rec[0]);
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+
+        {
+            let headers = rdr.byte_headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!(b"foo", &headers[0]);
+            assert_eq!(b"bar", &headers[1]);
+            assert_eq!(b"baz", &headers[2]);
+        }
+        {
+            let headers = rdr.headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!("foo", &headers[0]);
+            assert_eq!("bar", &headers[1]);
+            assert_eq!("baz", &headers[2]);
+        }
+    }
+
+    #[test]
+    fn read_record_headers_invalid_utf8() {
+        let data = &b"foo,b\xFFar,baz\na,b,c\nd,e,f"[..];
+        let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(data);
+        let mut rec = StringRecord::new();
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("a", &rec[0]);
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("d", &rec[0]);
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+
+        // Check that we can read the headers as raw bytes, but that
+        // if we read them as strings, we get an appropriate UTF-8 error.
+        {
+            let headers = rdr.byte_headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!(b"foo", &headers[0]);
+            assert_eq!(b"b\xFFar", &headers[1]);
+            assert_eq!(b"baz", &headers[2]);
+        }
+        match rdr.headers().unwrap_err() {
+            Error::Utf8 { pos: Some(pos), err } => {
+                assert_eq!(pos, newpos(0, 1, 0));
+                assert_eq!(err.field(), 1);
+                assert_eq!(err.valid_up_to(), 1);
+            }
+            err => panic!("match failed, got {:?}", err),
+        }
+    }
+
+    #[test]
+    fn read_record_no_headers_before() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f");
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(data);
+        let mut rec = StringRecord::new();
+
+        {
+            let headers = rdr.headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!("foo", &headers[0]);
+            assert_eq!("bar", &headers[1]);
+            assert_eq!("baz", &headers[2]);
+        }
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("foo", &rec[0]);
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("a", &rec[0]);
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("d", &rec[0]);
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+    }
+
+    #[test]
+    fn read_record_no_headers_after() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f");
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(data);
+        let mut rec = StringRecord::new();
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("foo", &rec[0]);
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("a", &rec[0]);
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("d", &rec[0]);
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+
+        let headers = rdr.headers().unwrap();
+        assert_eq!(3, headers.len());
+        assert_eq!("foo", &headers[0]);
+        assert_eq!("bar", &headers[1]);
+        assert_eq!("baz", &headers[2]);
+    }
+
+    #[test]
+    fn seek() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
+        let mut rdr = ReaderBuilder::new()
+            .from_reader(io::Cursor::new(data));
+        rdr.seek(newpos(18, 3, 2)).unwrap();
+
+        let mut rec = StringRecord::new();
+
+        assert_eq!(18, rdr.position().byte());
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("d", &rec[0]);
+
+        assert_eq!(24, rdr.position().byte());
+        assert_eq!(4, rdr.position().line());
+        assert_eq!(3, rdr.position().record());
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("g", &rec[0]);
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+    }
+
+    // Test that we can read headers after seeking even if the headers weren't
+    // explicit read before seeking.
+    #[test]
+    fn seek_headers_after() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
+        let mut rdr = ReaderBuilder::new()
+            .from_reader(io::Cursor::new(data));
+        rdr.seek(newpos(18, 3, 2)).unwrap();
+        assert_eq!(rdr.headers().unwrap(), vec!["foo", "bar", "baz"]);
+    }
+
+    // Test that we can read headers after seeking if the headers were read
+    // before seeking.
+    #[test]
+    fn seek_headers_before_after() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
+        let mut rdr = ReaderBuilder::new()
+            .from_reader(io::Cursor::new(data));
+        let headers = rdr.headers().unwrap().clone();
+        rdr.seek(newpos(18, 3, 2)).unwrap();
+        assert_eq!(&headers, rdr.headers().unwrap());
+    }
+
+    // Test that even if we didn't read headers before seeking, if we seek to
+    // the current byte offset, then no seeking is done and therefore we can
+    // still read headers after seeking.
+    #[test]
+    fn seek_headers_no_actual_seek() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
+        let mut rdr = ReaderBuilder::new()
+            .from_reader(io::Cursor::new(data));
+        rdr.seek(Position::new()).unwrap();
+        assert_eq!("foo", &rdr.headers().unwrap()[0]);
+    }
+
+    // Test that position info is reported correctly in absence of headers.
+    #[test]
+    fn positions_no_headers() {
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader("a,b,c\nx,y,z".as_bytes())
+            .into_records();
+
+        let pos = rdr.next().unwrap().unwrap().position().unwrap().clone();
+        assert_eq!(pos.byte(), 0);
+        assert_eq!(pos.line(), 1);
+        assert_eq!(pos.record(), 0);
+
+        let pos = rdr.next().unwrap().unwrap().position().unwrap().clone();
+        assert_eq!(pos.byte(), 6);
+        assert_eq!(pos.line(), 2);
+        assert_eq!(pos.record(), 1);
+    }
+
+    // Test that position info is reported correctly with headers.
+    #[test]
+    fn positions_headers() {
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(true)
+            .from_reader("a,b,c\nx,y,z".as_bytes())
+            .into_records();
+
+        let pos = rdr.next().unwrap().unwrap().position().unwrap().clone();
+        assert_eq!(pos.byte(), 6);
+        assert_eq!(pos.line(), 2);
+        assert_eq!(pos.record(), 1);
+    }
+
+    // Test that reading headers on empty data yields an empty record.
+    #[test]
+    fn headers_on_empty_data() {
+        let mut rdr = ReaderBuilder::new().from_reader("".as_bytes());
+        let r = rdr.byte_headers().unwrap();
+        assert_eq!(r.len(), 0);
+    }
+
+    // Test that reading the first record on empty data works.
+    #[test]
+    fn no_headers_on_empty_data() {
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader("".as_bytes());
+        assert_eq!(rdr.records().count(), 0);
+    }
+
+    // Test that reading the first record on empty data works, even if
+    // we've tried to read headers before hand.
+    #[test]
+    fn no_headers_on_empty_data_after_headers() {
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader("".as_bytes());
+        assert_eq!(rdr.headers().unwrap().len(), 0);
+        assert_eq!(rdr.records().count(), 0);
+    }
 }

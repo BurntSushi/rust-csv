@@ -1,325 +1,268 @@
-//! This crate provides a streaming CSV (comma separated values) writer and
-//! reader that works with the `serialize` crate to do type based encoding
-//! and decoding. There are two primary goals of this project:
-//!
-//! 1. The default mode of parsing should *just work*. This means the parser
-//!    will bias toward providing *a* parse over a *correct* parse (with
-//!    respect to RFC 4180).
-//! 2. Convenient to use by default, but when performance is needed, the
-//!    API will provide an escape hatch.
-//!
-//! ## Simple example
-//!
-//! This shows how you can decode records into Rust types. This saves a ton
-//! of boiler plate, e.g., converting strings to numeric types.
-//!
-//! ```rust
-//! let data = "
-//! sticker,mortals,7
-//! bribed,personae,7
-//! wobbling,poncing,4
-//! interposed,emmett,9
-//! chocolate,refile,7";
-//!
-//! let mut rdr = csv::Reader::from_string(data).has_headers(false);
-//! for row in rdr.decode() {
-//!     let (n1, n2, dist): (String, String, u32) = row.unwrap();
-//!     println!("{}, {}: {}", n1, n2, dist);
-//! }
-//! ```
-//!
-//! If you just want a `Vec` of all the records, then you can use the
-//! `collect` method defined on iterators:
-//!
-//! ```rust
-//! let data = "
-//! sticker,mortals,7
-//! bribed,personae,7
-//! wobbling,poncing,4
-//! interposed,emmett,9
-//! chocolate,refile,7";
-//!
-//! type Row = (String, String, u32);
-//!
-//! let mut rdr = csv::Reader::from_string(data).has_headers(false);
-//! let rows = rdr.decode().collect::<csv::Result<Vec<Row>>>().unwrap();
-//! assert_eq!(rows.len(), 5);
-//! ```
-//!
-//! Please see the `Reader` type for more documentation and examples.
-//!
-//! ## Iteratoring over records
-//!
-//! This crate exposes **4** distinct ways of iterating over CSV records. In
-//! the majority of use cases, you should use the `decode` method as shown
-//! above because it is the most convenient. But other types of iterators are
-//! exposed for when you need them.
-//!
-//! The iterators listed below are presented in order of performance. The first
-//! (type based decoding) is the slowest and the last (zero allocation) is the
-//! fastest. There is clear evidence of this claim in the benchmarks. (Just
-//! run `cargo bench`.)
-//!
-//! ### Decoded records
-//!
-//! As shown above. This uses type based decoding on each record.
-//!
-//! ### String records
-//!
-//! Yields each record as a `Vec<String>`. Namely, this assumes that all CSV
-//! data is UTF-8 encoded. This is the standard CSV interface that you've
-//! probably come to expect from using other CSV parsers.
-//!
-//! ```rust
-//! let data = "
-//! sticker,mortals,7
-//! bribed,personae,7
-//! wobbling,poncing,4
-//! interposed,emmett,9
-//! chocolate,refile,7";
-//!
-//! let mut rdr = csv::Reader::from_string(data).has_headers(false);
-//! for row in rdr.records().map(|r| r.unwrap()) {
-//!     println!("{:?}", row);
-//! }
-//! ```
-//!
-//! ### Byte string records
-//!
-//! Yields each record as a `Vec<ByteString>`. Namely, this allows reading CSV
-//! data that is not UTF-8 encoded (or improperly encoded!).
-//!
-//! ```rust
-//! let data = b"
-//! sti\xffcker,mortals,7
-//! chocolate,refile,7";
-//!
-//! let mut rdr = csv::Reader::from_bytes(&data[..]).has_headers(false);
-//! for row in rdr.byte_records().map(|r| r.unwrap()) {
-//!     println!("{:?}", row);
-//! }
-//! ```
-//!
-//! ### Byte slice records
-//!
-//! This iterator is defined on the `Reader` type itself and yields *fields*
-//! instead of records (unlike the other iterators). Each field is a `&[u8]`.
-//! No allocation is performed during parsing (unlike the other iterators,
-//! which at least allocate a `Vec<u8>` for each field and a `Vec<_>` for each
-//! record). Since no allocation is performed, this "iterator" doesn't actually
-//! implement the `Iterator` trait (since it cannot be done safely).
-//!
-//! This is the lowest level interface and should only be used when you need
-//! the performance.
-//!
-//! ```rust
-//! let data = "
-//! sticker,mortals,7
-//! bribed,personae,7
-//! wobbling,poncing,4
-//! interposed,emmett,9
-//! chocolate,refile,7";
-//!
-//! let mut rdr = csv::Reader::from_string(data);
-//! while !rdr.done() {
-//!     while let Some(r) = rdr.next_bytes().into_iter_result() {
-//!         print!("{:?} ", r.unwrap());
-//!     }
-//!     println!("");
-//! }
-//! ```
-//!
-//! There is more explanation for how this iterator interface works on the
-//! `Reader` type.
-//!
-//! ## Indexing
-//!
-//! This crate has experimental support for CSV record indexing. It's very
-//! simplistic, but once the index is created, you can seek a `csv::Reader`
-//! to any record instantly. See the
-//! [`csv::index`](/rustdoc/csv/index/index.html)
-//! sub-module for more details and examples.
-//!
-//! ## Compliance with RFC 4180
-//!
-//! [RFC 4180](http://tools.ietf.org/html/rfc4180) seems to the closest thing
-//! to an official specification for CSV. Currently, the parser in this crate
-//! will read a strict superset of RFC 4180 while the writer will always write
-//! CSV data that conforms to RFC 4180 (unless configured to do otherwise).
-//! This approach was taken because CSV data is commonly malformed and there is
-//! nothing worse than trying to read busted CSV data with a library that says
-//! it can't do it.
-//!
-//! With that said, a "strict" mode may be added that will only read CSV data
-//! that conforms to RFC 4180.
-//!
-//! Here are a few notes on compatibility with RFC 4180:
-//!
-//!   * Both CRLF and LF line endings are supported. This is seamless in the
-//!     parser. By default, the encoder uses LF line endings but can be
-//!     instructed to use CRLF with the `crlf` method.
-//!   * The first record is read as a "header" by default, but this can be
-//!     disabled by calling `has_headers(false)` before reading any records.
-//!     (N.B. The encoder has no explicit support for headers. Simply encode a
-//!     vector of strings instead.)
-//!   * By default, the delimiter is a comma, but it can be changed to any
-//!     **ASCII** byte character with the `delimiter` method (for either
-//!     writing or reading).
-//!   * By default, both the writer and reader will enforce the invariant
-//!     that all records are the same length. (This is what RFC 4180 demands.)
-//!     If a record with a different length is found, an error is returned.
-//!     This behavior may be turned off by calling `flexible` with `true`.
-//!   * Empty lines (that do not include other whitespace) are ignored
-//!     by the parser.
-//!   * This crate parses CSV data at the *byte* level, which means all
-//!     delimiter and quote characters must be ASCII. While unfortunate, this
-//!     means that CSV data that is not UTF-8 encoded can be parsed. In
-//!     general, the writer and reader API biases toward using Unicode strings
-//!     while providing an outlet to use byte strings.
+/*!
+The `csv` crate provides a fast and flexible CSV reader and writer, with
+support for Serde.
 
-#![crate_name = "csv"]
-#![doc(html_root_url = "http://burntsushi.net/rustdoc/csv")]
+The [tutorial](tutorial/index.html) is a good place to start if you're new to
+Rust.
+
+The [cookbook](cookbook/index.html) will give you a variety of complete Rust
+programs that do CSV reading and writing.
+
+# Brief overview
+
+**If you're new to Rust**, you might find the
+[tutorial](tutorial/index.html)
+to be a good place to start.
+
+The primary types in this crate are
+[`Reader`](struct.Reader.html)
+and
+[`Writer`](struct.Writer.html),
+for reading and writing CSV data respectively.
+Correspondingly, to support CSV data with custom field or record delimiters
+(among many other things), you should use either a
+[`ReaderBuilder`](struct.ReaderBuilder.html)
+or a
+[`WriterBuilder`](struct.WriterBuilder.html),
+depending on whether you're reading or writing CSV data.
+
+Unless you're using Serde, the standard CSV record types are
+[`StringRecord`](struct.StringRecord.html)
+and
+[`ByteRecord`](struct.ByteRecord.html).
+`StringRecord` should be used when you know your data to be valid UTF-8.
+For data that may be invalid UTF-8, `ByteRecord` is suitable.
+
+Finally, the set of errors is described by the
+[`Error`](enum.Error.html)
+type.
+
+The rest of the types in this crate mostly correspond to more detailed errors,
+position information, configuration knobs or iterator types.
+
+# Setup
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+csv = "1.0.0-beta.1"
+```
+
+and this to your crate root:
+
+```rust
+extern crate csv;
+```
+
+If you want to use Serde's custom derive functionality on your custom structs,
+then add this to your `[dependencies]` section of `Cargo.toml`:
+
+```toml
+[dependencies]
+serde = "1"
+serde_derive = "1"
+```
+
+and this to your crate root:
+
+```ignore
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+```
+
+# Example
+
+This example shows how to read CSV data from stdin and print each record to
+stdout.
+
+There are more examples in the [cookbook](cookbook/index.html).
+
+```no_run
+extern crate csv;
+
+use std::error::Error;
+use std::io;
+use std::process;
+
+fn example() -> Result<(), Box<Error>> {
+    // Build the CSV reader and iterate over each record.
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+    for result in rdr.records() {
+        // The iterator yields Result<StringRecord, Error>, so we check the
+        // error here.
+        let record = result?;
+        println!("{:?}", record);
+    }
+    Ok(())
+}
+
+fn main() {
+    if let Err(err) = example() {
+        println!("error running example: {}", err);
+        process::exit(1);
+    }
+}
+```
+
+The above example can be run like so:
+
+```ignore
+$ git clone git://github.com/BurntSushi/rust-csv
+$ cd rust-csv
+$ cargo run --example cookbook-read-basic < examples/data/smallpop.csv
+```
+
+# Example with Serde
+
+This example shows how to read CSV data from stdin into your own custom struct.
+By default, the member names of the struct are matched with the values in the
+header record of your CSV data.
+
+```no_run
+extern crate csv;
+#[macro_use]
+extern crate serde_derive;
+
+use std::error::Error;
+use std::io;
+use std::process;
+
+#[derive(Debug,Deserialize)]
+struct Record {
+    city: String,
+    region: String,
+    country: String,
+    population: Option<u64>,
+}
+
+fn example() -> Result<(), Box<Error>> {
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+    for result in rdr.deserialize() {
+        // Notice that we need to provide a type hint for automatic
+        // deserialization.
+        let record: Record = result?;
+        println!("{:?}", record);
+    }
+    Ok(())
+}
+
+fn main() {
+    if let Err(err) = example() {
+        println!("error running example: {}", err);
+        process::exit(1);
+    }
+}
+```
+
+The above example can be run like so:
+
+```ignore
+$ git clone git://github.com/BurntSushi/rust-csv
+$ cd rust-csv
+$ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
+```
+
+*/
 
 #![deny(missing_docs)]
 
-extern crate byteorder;
-extern crate memchr;
-extern crate rustc_serialize;
+extern crate csv_core;
+extern crate serde;
+#[cfg(test)]
+extern crate serde_bytes;
+#[cfg(test)]
+#[macro_use]
+extern crate serde_derive;
 
-use std::error::Error as StdError;
-use std::fmt;
-use std::io;
 use std::result;
 
-pub use borrow_bytes::BorrowBytes;
-pub use encoder::Encoded;
-pub use decoder::Decoded;
+pub use csv_core::{QuoteStyle, Terminator};
+use serde::{Deserialize, Deserializer};
+
+pub use byte_record::{ByteRecord, ByteRecordIter, Position};
+pub use deserializer::{DeserializeError, DeserializeErrorKind};
+pub use error::{Error, FromUtf8Error, IntoInnerError, Result, Utf8Error};
 pub use reader::{
-    Reader, DecodedRecords, StringRecords, ByteRecords, NextField,
-    RecordTerminator,
+    Reader, ReaderBuilder,
+    DeserializeRecordsIntoIter, DeserializeRecordsIter,
+    StringRecordsIntoIter, StringRecordsIter,
+    ByteRecordsIntoIter, ByteRecordsIter,
 };
-pub use writer::{Writer, QuoteStyle};
+pub use string_record::{StringRecord, StringRecordIter};
+pub use writer::{Writer, WriterBuilder};
 
-macro_rules! lg {
-    ($($tt:tt)*) => ({
-        use std::io::Write;
-        writeln!(&mut ::std::io::stderr(), $($tt)*).unwrap();
-    });
-}
-
-pub mod index;
-
-mod borrow_bytes;
-mod encoder;
-mod decoder;
+mod byte_record;
+mod deserializer;
+mod error;
+pub mod cookbook;
 mod reader;
+mod serializer;
+mod string_record;
+pub mod tutorial;
 mod writer;
 
-#[cfg(test)]
-mod tests;
-
-/// A convenience type for representing the result of most CSV reader/writer
-/// operations.
-pub type Result<T> = result::Result<T, Error>;
-
-/// A convenience type for referring to a plain byte string.
-pub type ByteString = Vec<u8>;
-
-/// An error produced by an operation on CSV data.
-#[derive(Debug)]
-pub enum Error {
-    /// An error reported by the type-based encoder.
-    Encode(String),
-    /// An error reported by the type-based decoder.
-    Decode(String),
-    /// An error reported by the CSV parser.
-    Parse(LocatableError<ParseError>),
-    /// An error originating from reading or writing to the underlying buffer.
-    Io(io::Error),
-    /// An error originating from using a CSV index.
-    Index(String),
-}
-
-/// An error tagged with a location at which it occurred.
-#[derive(Clone, Copy, Debug)]
-pub struct LocatableError<T> {
-    /// The record number (starting at 1).
-    pub record: u64,
-    /// The field number (starting at 1).
-    pub field: u64,
-    /// The error.
-    pub err: T,
-}
-
-/// A description of a CSV parse error.
-#[derive(Clone, Copy, Debug)]
-pub enum ParseError {
-    /// A record was found that has a different size than other records.
-    ///
-    /// This is only reported when `flexible` is set to `false` on the
-    /// corresponding CSV reader/writer.
-    UnequalLengths {
-        /// Expected a record with this many fields.
-        expected: u64,
-        /// Got a record with this many fields.
-        got: u64,
-    },
-    /// An error occurred when trying to convert a field to a Unicode string.
-    ///
-    /// TODO: Include the real Utf8Error, but it is not stabilized yet.
-    InvalidUtf8,
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Encode(ref msg) => write!(f, "CSV encode error: {}", msg),
-            Error::Decode(ref msg) => write!(f, "CSV decode error: {}", msg),
-            Error::Parse(ref err) => write!(f, "{}", err),
-            Error::Io(ref err) => write!(f, "{}", err),
-            Error::Index(ref msg) => write!(f, "CSV index error: {}", msg),
-        }
-    }
-}
-
-impl<T: fmt::Display> fmt::Display for LocatableError<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CSV error (at record {}, field {}): {}",
-               self.record, self.field, self.err)
-    }
-}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ParseError::UnequalLengths { expected, got } =>
-                write!(f, "First record has length {}, but found record \
-                           with length {}.", expected, got),
-            ParseError::InvalidUtf8 =>
-                write!(f, "Invalid UTF8 encoding."),
-        }
-    }
-}
-
-impl StdError for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::Encode(..) => "CSV encoding error",
-            Error::Decode(..) => "CSV decoding error",
-            Error::Parse(..) => "CSV parse error",
-            Error::Io(..) => "CSV IO error",
-            Error::Index(..) => "CSV indexing error",
-        }
-    }
-
-    fn cause(&self) -> Option<&StdError> {
-        match *self {
-            Error::Io(ref err) => Some(err),
-            _ => None,
-        }
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Error { Error::Io(err) }
+/// A custom Serde deserializer for possibly invalid `Option<T>` fields.
+///
+/// When deserializing CSV data, it is sometimes desirable to simply ignore
+/// fields with invalid data. For example, there might be a field that is
+/// usually a number, but will occasionally contain garbage data that causes
+/// number parsing to fail.
+///
+/// You might be inclined to use, say, `Option<i32>` for fields such at this.
+/// By default, however, `Option<i32>` will either capture *empty* fields with
+/// `None` or valid numeric fields with `Some(the_number)`. If the field is
+/// non-empty and not a valid number, then deserialization will return an error
+/// instead of using `None`.
+///
+/// This function allows you to override this default behavior. Namely, if
+/// `Option<T>` is deserialized with non-empty but invalid data, then the value
+/// will be `None` and the error will be ignored.
+///
+/// # Example
+///
+/// This example shows how to parse CSV records with numerical data, even if
+/// some numerical data is absent or invalid. Without the
+/// `serde(deserialize_with = "...")` annotations, this example would return
+/// an error.
+///
+/// ```
+/// extern crate csv;
+/// #[macro_use]
+/// extern crate serde_derive;
+///
+/// use std::error::Error;
+/// use csv::Reader;
+///
+/// #[derive(Debug, Deserialize, Eq, PartialEq)]
+/// struct Row {
+///     #[serde(deserialize_with = "csv::invalid_option")]
+///     a: Option<i32>,
+///     #[serde(deserialize_with = "csv::invalid_option")]
+///     b: Option<i32>,
+///     #[serde(deserialize_with = "csv::invalid_option")]
+///     c: Option<i32>,
+/// }
+///
+/// # fn main() { example().unwrap(); }
+/// fn example() -> Result<(), Box<Error>> {
+///     let data = "\
+///a,b,c
+///5,\"\",xyz
+///";
+///     let mut rdr = Reader::from_reader(data.as_bytes());
+///     if let Some(result) = rdr.deserialize().next() {
+///         let record: Row = result?;
+///         assert_eq!(record, Row { a: Some(5), b: None, c: None });
+///         Ok(())
+///     } else {
+///         Err(From::from("expected at least one record but got none"))
+///     }
+/// }
+/// ```
+pub fn invalid_option<'de, D, T>(de: D) -> result::Result<Option<T>, D::Error>
+    where D: Deserializer<'de>, Option<T>: Deserialize<'de>
+{
+    Option::<T>::deserialize(de).or_else(|_| Ok(None))
 }

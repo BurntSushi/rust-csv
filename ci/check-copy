@@ -1,0 +1,38 @@
+#!/bin/bash
+
+set -e
+
+D="$(cd "$(dirname "$0")" && pwd -P)"
+REPO="$D/.."
+SCRIPTS="$REPO/scripts"
+TMPDIR="$(mktemp -d)"
+
+if [ $# != 1 ]; then
+  echo "Usage: $(basename $0) (cookbook | tutorial)" >&2
+  exit 1
+fi
+SOURCE="$1"
+
+errored() {
+    rm -rf "$TMPDIR"
+    echo "HINT: please run scripts/copy-examples" >&2
+    exit 1
+}
+
+"$SCRIPTS/copy-examples" \
+  --rust-file "$REPO/src/$SOURCE.rs" \
+  --example-dir "$TMPDIR"
+for new in "$TMPDIR"/*.rs; do
+  name="$(basename "$new")"
+  old="$REPO"/examples/"$name"
+  if ! [ -f "$old" ]; then
+    echo "ERROR: missing examples/$name" >&2
+    errored
+  fi
+  old="$(readlink -e "$REPO"/examples/"$name")"
+  if ! diff "$old" "$new"; then
+    echo "ERROR: examples/$name differs from ${name%%.rs} in src/$SOURCE.rs" >&2
+    errored
+  fi
+done
+rm -rf "$TMPDIR"

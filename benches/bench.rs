@@ -1,15 +1,17 @@
 #![feature(test)]
 
 extern crate csv;
-extern crate rustc_serialize;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate test;
 
 use std::io;
 
-use rustc_serialize::Decodable;
+use serde::de::DeserializeOwned;
 use test::Bencher;
 
-use csv::{Reader};
+use csv::{ByteRecord, Reader, ReaderBuilder, StringRecord};
 
 static NFL: &'static str =
     include_str!("../examples/data/bench/nfl.csv");
@@ -20,7 +22,7 @@ static POP: &'static str =
 static MBTA: &'static str =
     include_str!("../examples/data/bench/gtfs-mbta-stop-times.csv");
 
-#[derive(Debug, RustcDecodable, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq)]
 struct NFLRowOwned {
     gameid: String,
     qtr: i32,
@@ -37,10 +39,31 @@ struct NFLRowOwned {
     season: i32,
 }
 
-#[derive(Debug, RustcDecodable, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq)]
+struct NFLRowBorrowed<'a> {
+    gameid: &'a str,
+    qtr: i32,
+    min: Option<i32>,
+    sec: Option<i32>,
+    off: &'a str,
+    def: &'a str,
+    down: Option<i32>,
+    togo: Option<i32>,
+    ydline: Option<i32>,
+    description: &'a str,
+    offscore: i32,
+    defscore: i32,
+    season: i32,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
 struct GAMERowOwned(String, String, String, String, i32, String);
 
-#[derive(Debug, RustcDecodable, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq)]
+struct GAMERowBorrowed<'a>(&'a str, &'a str, &'a str, &'a str, i32, &'a str);
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
 struct POPRowOwned {
     country: String,
     city: String,
@@ -51,7 +74,19 @@ struct POPRowOwned {
     longitude: f64,
 }
 
-#[derive(Debug, RustcDecodable, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+struct POPRowBorrowed<'a> {
+    country: &'a str,
+    city: &'a str,
+    accent_city: &'a str,
+    region: &'a str,
+    population: Option<i32>,
+    latitude: f64,
+    longitude: f64,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
 struct MBTARowOwned {
     trip_id: String,
     arrival_time: String,
@@ -64,6 +99,19 @@ struct MBTARowOwned {
     timepoint: i32,
 }
 
+#[derive(Debug, Deserialize, PartialEq)]
+struct MBTARowBorrowed<'a> {
+    trip_id: &'a str,
+    arrival_time: &'a str,
+    departure_time: &'a str,
+    stop_id: &'a str,
+    stop_sequence: i32,
+    stop_headsign: &'a str,
+    pickup_type: i32,
+    drop_off_type: i32,
+    timepoint: i32,
+}
+
 macro_rules! bench {
     ($name:ident, $data:ident, $counter:ident, $result:expr) => {
         #[bench]
@@ -71,15 +119,16 @@ macro_rules! bench {
             let data = $data.as_bytes();
             b.bytes = data.len() as u64;
             b.iter(|| {
-                let mut rdr = Reader::from_reader(data)
-                    .has_headers(false);
+                let mut rdr = ReaderBuilder::new()
+                    .has_headers(false)
+                    .from_reader(data);
                 assert_eq!($counter(&mut rdr), $result);
             })
         }
     };
 }
 
-macro_rules! bench_decode {
+macro_rules! bench_serde {
     (no_headers,
      $name:ident, $data:ident, $counter:ident, $type:ty, $result:expr) => {
         #[bench]
@@ -87,8 +136,9 @@ macro_rules! bench_decode {
             let data = $data.as_bytes();
             b.bytes = data.len() as u64;
             b.iter(|| {
-                let mut rdr = Reader::from_reader(data)
-                    .has_headers(false);
+                let mut rdr = ReaderBuilder::new()
+                    .has_headers(false)
+                    .from_reader(data);
                 assert_eq!($counter::<_, $type>(&mut rdr), $result);
             })
         }
@@ -99,63 +149,142 @@ macro_rules! bench_decode {
             let data = $data.as_bytes();
             b.bytes = data.len() as u64;
             b.iter(|| {
-                let mut rdr = Reader::from_reader(data)
-                    .has_headers(true);
+                let mut rdr = ReaderBuilder::new()
+                    .has_headers(true)
+                    .from_reader(data);
                 assert_eq!($counter::<_, $type>(&mut rdr), $result);
             })
         }
     };
 }
 
-bench_decode!(
+macro_rules! bench_serde_borrowed_bytes {
+    ($name:ident, $data:ident, $type:ty, $headers:expr, $result:expr) => {
+        #[bench]
+        fn $name(b: &mut Bencher) {
+            let data = $data.as_bytes();
+            b.bytes = data.len() as u64;
+            b.iter(|| {
+                let mut rdr = ReaderBuilder::new()
+                    .has_headers($headers)
+                    .from_reader(data);
+                let mut count = 0;
+                let mut rec = ByteRecord::new();
+                while rdr.read_byte_record(&mut rec).unwrap() {
+                    let _: $type = rec.deserialize(None).unwrap();
+                    count += 1;
+                }
+                count
+            })
+        }
+    }
+}
+
+macro_rules! bench_serde_borrowed_str {
+    ($name:ident, $data:ident, $type:ty, $headers:expr, $result:expr) => {
+        #[bench]
+        fn $name(b: &mut Bencher) {
+            let data = $data.as_bytes();
+            b.bytes = data.len() as u64;
+            b.iter(|| {
+                let mut rdr = ReaderBuilder::new()
+                    .has_headers($headers)
+                    .from_reader(data);
+                let mut count = 0;
+                let mut rec = StringRecord::new();
+                while rdr.read_record(&mut rec).unwrap() {
+                    let _: $type = rec.deserialize(None).unwrap();
+                    count += 1;
+                }
+                count
+            })
+        }
+    }
+}
+
+bench_serde!(
     count_nfl_deserialize_owned_bytes,
-    NFL, count_deserialize_owned, NFLRowOwned, 9999);
-bench_decode!(
+    NFL, count_deserialize_owned_bytes, NFLRowOwned, 9999);
+bench_serde!(
     count_nfl_deserialize_owned_str,
-    NFL, count_deserialize_owned, NFLRowOwned, 9999);
+    NFL, count_deserialize_owned_str, NFLRowOwned, 9999);
+bench_serde_borrowed_bytes!(
+    count_nfl_deserialize_borrowed_bytes, NFL, NFLRowBorrowed, true, 9999);
+bench_serde_borrowed_str!(
+    count_nfl_deserialize_borrowed_str, NFL, NFLRowBorrowed, true, 9999);
 bench!(count_nfl_iter_bytes, NFL, count_iter_bytes, 130000);
 bench!(count_nfl_iter_str, NFL, count_iter_str, 130000);
 bench!(count_nfl_read_bytes, NFL, count_read_bytes, 130000);
 bench!(count_nfl_read_str, NFL, count_read_str, 130000);
-bench_decode!(
+bench_serde!(
     no_headers,
     count_game_deserialize_owned_bytes,
-    GAME, count_deserialize_owned, GAMERowOwned, 100000);
-bench_decode!(
+    GAME, count_deserialize_owned_bytes, GAMERowOwned, 100000);
+bench_serde!(
     no_headers,
     count_game_deserialize_owned_str,
-    GAME, count_deserialize_owned, GAMERowOwned, 100000);
+    GAME, count_deserialize_owned_str, GAMERowOwned, 100000);
+bench_serde_borrowed_bytes!(
+    count_game_deserialize_borrowed_bytes,
+    GAME, GAMERowBorrowed, true, 100000);
+bench_serde_borrowed_str!(
+    count_game_deserialize_borrowed_str,
+    GAME, GAMERowBorrowed, true, 100000);
 bench!(count_game_iter_bytes, GAME, count_iter_bytes, 600000);
 bench!(count_game_iter_str, GAME, count_iter_str, 600000);
 bench!(count_game_read_bytes, GAME, count_read_bytes, 600000);
 bench!(count_game_read_str, GAME, count_read_str, 600000);
-bench_decode!(
+bench_serde!(
     count_pop_deserialize_owned_bytes,
-    POP, count_deserialize_owned, POPRowOwned, 20000);
-bench_decode!(
+    POP, count_deserialize_owned_bytes, POPRowOwned, 20000);
+bench_serde!(
     count_pop_deserialize_owned_str,
-    POP, count_deserialize_owned, POPRowOwned, 20000);
+    POP, count_deserialize_owned_str, POPRowOwned, 20000);
+bench_serde_borrowed_bytes!(
+    count_pop_deserialize_borrowed_bytes,
+    POP, POPRowBorrowed, true, 20000);
+bench_serde_borrowed_str!(
+    count_pop_deserialize_borrowed_str,
+    POP, POPRowBorrowed, true, 20000);
 bench!(count_pop_iter_bytes, POP, count_iter_bytes, 140007);
 bench!(count_pop_iter_str, POP, count_iter_str, 140007);
 bench!(count_pop_read_bytes, POP, count_read_bytes, 140007);
 bench!(count_pop_read_str, POP, count_read_str, 140007);
-bench_decode!(
+bench_serde!(
     count_mbta_deserialize_owned_bytes,
-    MBTA, count_deserialize_owned, MBTARowOwned, 9999);
-bench_decode!(
+    MBTA, count_deserialize_owned_bytes, MBTARowOwned, 9999);
+bench_serde!(
     count_mbta_deserialize_owned_str,
-    MBTA, count_deserialize_owned, MBTARowOwned, 9999);
+    MBTA, count_deserialize_owned_str, MBTARowOwned, 9999);
+bench_serde_borrowed_bytes!(
+    count_mbta_deserialize_borrowed_bytes,
+    MBTA, MBTARowBorrowed, true, 9999);
+bench_serde_borrowed_str!(
+    count_mbta_deserialize_borrowed_str,
+    MBTA, MBTARowBorrowed, true, 9999);
 bench!(count_mbta_iter_bytes, MBTA, count_iter_bytes, 90000);
 bench!(count_mbta_iter_str, MBTA, count_iter_str, 90000);
 bench!(count_mbta_read_bytes, MBTA, count_read_bytes, 90000);
 bench!(count_mbta_read_str, MBTA, count_read_str, 90000);
 
-fn count_deserialize_owned<R, D>(rdr: &mut Reader<R>) -> u64
-    where R: io::Read, D: Decodable
+fn count_deserialize_owned_bytes<R, D>(rdr: &mut Reader<R>) -> u64
+    where R: io::Read, D: DeserializeOwned
 {
     let mut count = 0;
-    for result in rdr.decode() {
-        let _: D = result.unwrap();
+    let mut rec = ByteRecord::new();
+    while rdr.read_byte_record(&mut rec).unwrap() {
+        let _: D = rec.deserialize(None).unwrap();
+        count += 1;
+    }
+    count
+}
+
+fn count_deserialize_owned_str<R, D>(rdr: &mut Reader<R>) -> u64
+    where R: io::Read, D: DeserializeOwned
+{
+    let mut count = 0;
+    for rec in rdr.deserialize::<D>() {
+        let _ = rec.unwrap();
         count += 1;
     }
     count
@@ -179,22 +308,18 @@ fn count_iter_str<R: io::Read>(rdr: &mut Reader<R>) -> u64 {
 
 fn count_read_bytes<R: io::Read>(rdr: &mut Reader<R>) -> u64 {
     let mut count = 0;
-    while !rdr.done() {
-        while let Some(r) = rdr.next_bytes().into_iter_result() {
-            r.unwrap();
-            count += 1;
-        }
+    let mut rec = ByteRecord::new();
+    while rdr.read_byte_record(&mut rec).unwrap() {
+        count += rec.len() as u64;
     }
     count
 }
 
 fn count_read_str<R: io::Read>(rdr: &mut Reader<R>) -> u64 {
     let mut count = 0;
-    while !rdr.done() {
-        while let Some(r) = rdr.next_str().into_iter_result() {
-            r.unwrap();
-            count += 1;
-        }
+    let mut rec = StringRecord::new();
+    while rdr.read_record(&mut rec).unwrap() {
+        count += rec.len() as u64;
     }
     count
 }
