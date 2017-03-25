@@ -12,6 +12,7 @@ use test::Bencher;
 use csv::Reader;
 
 static CSV_DATA: &'static str = "./examples/data/bench.csv";
+static CSV_DATA_GAME: &'static str = "./examples/data/game.csv";
 
 fn ordie<T, E: Debug+Display>(r: Result<T, E>) -> T {
     r.or_else(|e: E| -> Result<T, E> { panic!(format!("{:?}", e)) }).unwrap()
@@ -31,8 +32,22 @@ fn reader<'a>(rdr: &'a mut io::Cursor<Vec<u8>>)
 }
 
 #[bench]
-fn raw_records(b: &mut Bencher) {
+fn raw_records_nfl(b: &mut Bencher) {
     let mut data = file_to_mem(CSV_DATA);
+    b.bytes = data.get_ref().len() as u64;
+    b.iter(|| {
+        let mut dec = reader(&mut data);
+        while !dec.done() {
+            while let Some(r) = dec.next_bytes().into_iter_result() {
+                r.unwrap();
+            }
+        }
+    })
+}
+
+#[bench]
+fn raw_records_game(b: &mut Bencher) {
+    let mut data = file_to_mem(CSV_DATA_GAME);
     b.bytes = data.get_ref().len() as u64;
     b.iter(|| {
         let mut dec = reader(&mut data);

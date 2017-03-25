@@ -1,0 +1,23 @@
+[package]
+name = "csv-core"
+version = "0.1.0"  #:version
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+description = "Bare bones CSV parsing with no_std support."
+documentation = "https://docs.rs/csv-core"
+homepage = "https://github.com/BurntSushi/rust-csv"
+repository = "https://github.com/BurntSushi/rust-csv"
+readme = "README.md"
+keywords = ["csv", "comma", "parser", "delimited", "no_std"]
+license = "Unlicense/MIT"
+
+[lib]
+bench = false
+
+[dev-dependencies]
+arrayvec = { version = "0.3", default-features = false }
+
+[profile.release]
+debug = true
+
+[profile.bench]
+debug = true
