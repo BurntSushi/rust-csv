@@ -53,10 +53,11 @@ assert_eq!(9, count_fields);
 // #![deny(missing_docs)]
 #![no_std]
 
-#![allow(dead_code, unused_variables, unused_imports)]
+#![allow(dead_code, unused_variables, unused_imports, unused_mut)]
 
 #[cfg(test)]
 extern crate arrayvec;
+extern crate memchr;
 
 pub use reader::{Reader, ReaderBuilder, ReadResult, Terminator};
 

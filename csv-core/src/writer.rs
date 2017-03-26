@@ -1,3 +1,5 @@
+use memchr::memchr;
+
 use Terminator;
 
 /// The quoting style to use when writing CSV data.
@@ -113,7 +115,7 @@ pub enum WriteResult {
 /// the caller to ensure that all records written are of the same length.
 #[derive(Debug)]
 pub struct Writer {
-    first_field_in_record: bool,
+    state: WriterState,
     delimiter: u8,
     term: Terminator,
     style: QuoteStyle,
@@ -122,10 +124,74 @@ pub struct Writer {
     double_quote: bool,
 }
 
+#[derive(Debug)]
+struct WriterState {
+    quoting: bool,
+}
+
+impl Writer {
+    /// Creates a new CSV writer with the default configuration.
+    pub fn new() -> Writer {
+        Writer::default()
+    }
+
+    pub fn field(
+        &mut self,
+        input: &[u8],
+        output: &mut [u8],
+    ) -> (WriteResult, usize, usize) {
+        (WriteResult::InputEmpty, 0, 0)
+    }
+
+    pub fn delimiter(&mut self, output: &mut [u8]) -> (WriteResult, usize) {
+        let (res, nout) = self.write(&[self.delimiter], output);
+        if nout > 0 {
+            self.state.quoting = false;
+        }
+        (res, nout)
+    }
+
+    pub fn terminator(&mut self, output: &mut [u8]) -> (WriteResult, usize) {
+        let (res, nout) = match self.term {
+            Terminator::CRLF => write_pessimistic(&[b'\r', b'\n'], output),
+            Terminator::Any(b) => write_pessimistic(&[b], output),
+        };
+        if nout > 0 {
+            self.state.quoting = false;
+        }
+        (res, nout)
+    }
+
+    /// Returns true if and only if the given input field requires quotes,
+    /// taking into account the current configuration of this writer.
+    pub fn needs_quotes(&self, input: &[u8]) -> bool {
+        input.iter().any(|&b| self.byte_needs_quotes(b))
+    }
+
+    fn byte_needs_quotes(&self, b: u8) -> bool {
+        self.delimiter == b
+        || self.term == b
+        || self.quote == b
+        // This is a bit hokey. By default, the record terminator is
+        // '\n', but we still need to quote '\r' because the reader
+        // interprets '\r' as a record terminator by default.
+        || b == b'\r' || b == b'\n'
+    }
+
+    fn write(&self, data: &[u8], output: &mut [u8]) -> (WriteResult, usize) {
+        if data.len() > output.len() {
+            (WriteResult::OutputFull, 0)
+        } else {
+            output[..data.len()].copy_from_slice(data);
+            (WriteResult::InputEmpty, data.len())
+        }
+    }
+}
+
 impl Default for Writer {
     fn default() -> Writer {
         Writer {
-            first_field_in_record: true,
+            state: WriterState::default(),
             delimiter: b',',
             term: Terminator::Any(b'\n'),
             style: QuoteStyle::default(),
@@ -136,49 +202,57 @@ impl Default for Writer {
     }
 }
 
-impl Writer {
-    /// Creates a new CSV writer with the default configuration.
-    pub fn new() -> Writer {
-        Writer::default()
-    }
-
-    pub fn write_field(
-        &mut self,
-        input: &[u8],
-        output: &mut [u8],
-    ) -> (WriteResult, usize, usize) {
-        let mut nin = 0;
-        let mut nout =
-            if !self.first_field_in_record {
-                0
-            } else {
-                let (res, nout) = self.write(&[self.delimiter], output);
-                if nout == 0 {
-                    return (res, 0, nout);
-                }
-                self.first_field_in_record = false;
-                nout
-            };
-        (WriteResult::InputEmpty, 0, 0)
-    }
-
-    pub fn write_term(&mut self, output: &mut [u8]) -> (WriteResult, usize) {
-        let (res, nout) = match self.term {
-            Terminator::CRLF => self.write(&[b'\r', b'\n'], output),
-            Terminator::Any(b) => self.write(&[b], output),
-        };
-        if nout > 0 {
-            self.first_field_in_record = true;
+impl Default for WriterState {
+    fn default() -> WriterState {
+        WriterState {
+            quoting: false,
         }
-        (res, nout)
     }
+}
 
-    fn write(&self, data: &[u8], output: &mut [u8]) -> (WriteResult, usize) {
-        if data.len() > output.len() {
-            (WriteResult::OutputFull, 0)
-        } else {
-            output[..data.len()].copy_from_slice(data);
-            (WriteResult::InputEmpty, data.len())
+pub fn quote(
+    mut input: &[u8],
+    mut output: &mut [u8],
+    quote: u8,
+    escape: u8,
+    doubled: bool,
+) -> (WriteResult, usize, usize) {
+    let (mut nin, mut nout) = (0, 0);
+    loop {
+        match memchr(quote, input) {
+            None => {
+                let (res, i, o) = write_optimistic(input, output);
+                nin += i;
+                nout += o;
+                return (res, nin, nout);
+            }
+            _ => unimplemented!(),
         }
+    }
+}
+
+fn write_optimistic(
+    input: &[u8],
+    output: &mut [u8],
+) -> (WriteResult, usize, usize) {
+    if input.len() > output.len() {
+        let input = &input[..output.len()];
+        output.copy_from_slice(input);
+        (WriteResult::OutputFull, output.len(), output.len())
+    } else {
+        output[..input.len()].copy_from_slice(input);
+        (WriteResult::InputEmpty, input.len(), input.len())
+    }
+}
+
+fn write_pessimistic(
+    input: &[u8],
+    output: &mut [u8],
+) -> (WriteResult, usize) {
+    if input.len() > output.len() {
+        (WriteResult::OutputFull, 0)
+    } else {
+        output[..input.len()].copy_from_slice(input);
+        (WriteResult::InputEmpty, input.len())
     }
 }
