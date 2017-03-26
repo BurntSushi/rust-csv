@@ -455,8 +455,7 @@ impl Reader {
                     out = out || o;
                 }
                 let from = self.dfa.new_state(state);
-                let mut to = self.dfa.new_state(nextstate);
-                // to.set_output(out);
+                let to = self.dfa.new_state(nextstate);
                 self.dfa.set(from, c, to, out);
             }
         }
