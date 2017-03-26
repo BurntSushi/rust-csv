@@ -65,8 +65,7 @@ fn count_fields(rdr: &mut Reader, mut data: &[u8]) -> u64 {
         match res {
             ReadResult::InputEmpty => {}
             ReadResult::OutputFull => panic!("field too large"),
-            ReadResult::Field => { count += 1; }
-            ReadResult::Record => {}
+            ReadResult::Field{..} => { count += 1; }
             ReadResult::End => break,
         }
     }
