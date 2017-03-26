@@ -113,7 +113,7 @@ pub enum WriteResult {
 /// the caller to ensure that all records written are of the same length.
 #[derive(Debug)]
 pub struct Writer {
-    is_quoting: bool,
+    first_field_in_record: bool,
     delimiter: u8,
     term: Terminator,
     style: QuoteStyle,
@@ -125,7 +125,7 @@ pub struct Writer {
 impl Default for Writer {
     fn default() -> Writer {
         Writer {
-            is_quoting: false,
+            first_field_in_record: true,
             delimiter: b',',
             term: Terminator::Any(b'\n'),
             style: QuoteStyle::default(),
@@ -147,6 +147,38 @@ impl Writer {
         input: &[u8],
         output: &mut [u8],
     ) -> (WriteResult, usize, usize) {
+        let mut nin = 0;
+        let mut nout =
+            if !self.first_field_in_record {
+                0
+            } else {
+                let (res, nout) = self.write(&[self.delimiter], output);
+                if nout == 0 {
+                    return (res, 0, nout);
+                }
+                self.first_field_in_record = false;
+                nout
+            };
         (WriteResult::InputEmpty, 0, 0)
+    }
+
+    pub fn write_term(&mut self, output: &mut [u8]) -> (WriteResult, usize) {
+        let (res, nout) = match self.term {
+            Terminator::CRLF => self.write(&[b'\r', b'\n'], output),
+            Terminator::Any(b) => self.write(&[b], output),
+        };
+        if nout > 0 {
+            self.first_field_in_record = true;
+        }
+        (res, nout)
+    }
+
+    fn write(&self, data: &[u8], output: &mut [u8]) -> (WriteResult, usize) {
+        if data.len() > output.len() {
+            (WriteResult::OutputFull, 0)
+        } else {
+            output[..data.len()].copy_from_slice(data);
+            (WriteResult::InputEmpty, data.len())
+        }
     }
 }
