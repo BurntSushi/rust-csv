@@ -96,7 +96,7 @@ impl Default for Reader {
     fn default() -> Reader {
         Reader {
             dfa: Dfa::new(),
-            dfa_state: DfaState(0),
+            dfa_state: DfaState::start(),
             nfa_state: NfaState::StartRecord,
             copy: true,
             delimiter: b',',
@@ -255,52 +255,37 @@ impl ReadResult {
             }
         }
     }
-
-    fn from_dfa(state: &DfaState, inpdone: bool, outdone: bool) -> ReadResult {
-        if state.is_final_end() {
-            ReadResult::End
-        } else if state.is_final_record() {
-            ReadResult::Field { record_end: true }
-        } else if state.is_final_field() {
-            ReadResult::Field { record_end: false }
-        } else {
-            assert!(!state.is_final());
-            if !inpdone && outdone {
-                ReadResult::OutputFull
-            } else {
-                ReadResult::InputEmpty
-            }
-        }
-    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum NfaState {
     StartRecord = 0,
-    EndRecord = 1,
-    StartField = 2,
-    EndFieldDelim = 3,
-    EndFieldTerm = 200,
-    InField = 4,
-    InQuotedField = 5,
-    InEscapedQuote = 6,
-    InDoubleEscapedQuote = 7,
-    InRecordTerm = 201,
+    StartField = 1,
+    InField = 2,
+    InQuotedField = 3,
+    InEscapedQuote = 4,
+    InDoubleEscapedQuote = 5,
+    EndFieldDelim = 6,
+    EndRecord = 7,
     CRLF = 8,
-    End = 9,
+
+    // These states aren't used in the DFA, so we
+    // assign them meaningless numbers.
+    EndFieldTerm = 200,
+    InRecordTerm = 201,
+    End = 202,
 }
 
 const NFA_STATES: &'static [NfaState] = &[
     NfaState::StartRecord,
-    NfaState::EndRecord,
     NfaState::StartField,
     NfaState::EndFieldDelim,
     NfaState::InField,
     NfaState::InQuotedField,
     NfaState::InEscapedQuote,
     NfaState::InDoubleEscapedQuote,
+    NfaState::EndRecord,
     NfaState::CRLF,
-    NfaState::End,
 ];
 
 impl NfaState {
@@ -378,7 +363,9 @@ impl Reader {
     ) -> (ReadResult, usize, usize) {
         if input.is_empty() {
             self.dfa_state = self.dfa_final_transition(self.dfa_state);
-            (ReadResult::from_dfa(&self.dfa_state, false, false), 0, 0)
+            let res = self.dfa.new_read_result(
+                &self.dfa_state, true, false, false);
+            (res, 0, 0)
         } else {
             let (res, state, nin, nout) =
                 if self.copy {
@@ -400,18 +387,19 @@ impl Reader {
     ) -> (ReadResult, DfaState, usize, usize) {
         let (mut nin, mut nout) = (0, 0);
         while nin < input.len() && nout < output.len() {
-            state = self.dfa.get(state, input[nin]);
-            if state.has_output() {
+            let (s, has_out) = self.dfa.get_output(state, input[nin]);
+            state = s;
+            if has_out {
                 output[nout] = input[nin];
                 nout += 1;
             }
             nin += 1;
-            if state.is_final() {
+            if state >= self.dfa.final_field {
                 break;
             }
         }
-        let res = ReadResult::from_dfa(
-            &state, nin >= input.len(), nout >= output.len());
+        let res = self.dfa.new_read_result(
+            &state, false, nin >= input.len(), nout >= output.len());
         (res, state, nin, nout)
     }
 
@@ -425,20 +413,22 @@ impl Reader {
         while nin < input.len() {
             state = self.dfa.get(state, input[nin]);
             nin += 1;
-            if state.is_final() {
+            if state >= self.dfa.final_field {
                 break;
             }
         }
-        let res = ReadResult::from_dfa(&state, nin >= input.len(), false);
+        let res = self.dfa.new_read_result(
+            &state, false, nin >= input.len(), false);
         (res, state, nin, 0)
     }
 
     #[inline(always)]
     fn dfa_final_transition(&self, state: DfaState) -> DfaState {
-        let nfa_state = self.nfa_final_transition(self.dfa.nfa_state(state));
-        let mut s = self.dfa.new_state(nfa_state);
-        s.set_final_flags(&nfa_state);
-        s
+        if state >= self.dfa.final_record || state.is_start() {
+            self.dfa.new_state_final_end()
+        } else {
+            self.dfa.new_state_final_record()
+        }
     }
 
     fn build_dfa(&mut self) {
@@ -466,11 +456,12 @@ impl Reader {
                 }
                 let from = self.dfa.new_state(state);
                 let mut to = self.dfa.new_state(nextstate);
-                to.set_output(out);
-                self.dfa.set(from, c, to);
+                // to.set_output(out);
+                self.dfa.set(from, c, to, out);
             }
         }
         self.dfa_state = self.dfa.new_state(NfaState::StartRecord);
+        self.dfa.finish();
     }
 
     // The NFA implementation follows. The nfa_final_transition and
@@ -655,7 +646,7 @@ impl Reader {
 ///
 /// This number is computed by multiplying the maximum number of transition
 /// classes (6) by the total number of NFA states that are used in the DFA
-/// (10).
+/// (9).
 ///
 /// The number of transition classes is determined by an equivalence class of
 /// bytes, where every byte in the same equivalence classes is
@@ -669,7 +660,7 @@ impl Reader {
 /// NFA states that are in the DFA. In particular, any NFA state that can only
 /// be reached by epsilon transitions will never have explicit usage in the
 /// DFA.
-const TRANS_SIZE: usize = 60;
+const TRANS_SIZE: usize = 54;
 
 /// The number of possible transition classes. (See the comment on `TRANS_SIZE`
 /// for more details.)
@@ -677,36 +668,81 @@ const CLASS_SIZE: usize = 256;
 
 struct Dfa {
     trans: [DfaState; TRANS_SIZE],
+    has_output: [bool; TRANS_SIZE],
     classes: DfaClasses,
+    final_field: DfaState,
+    final_record: DfaState,
 }
 
 impl Dfa {
     fn new() -> Dfa {
         Dfa {
             trans: [DfaState(0); TRANS_SIZE],
+            has_output: [false; TRANS_SIZE],
             classes: DfaClasses::new(),
+            final_field: DfaState(0),
+            final_record: DfaState(0),
         }
     }
 
     fn new_state(&self, nfa_state: NfaState) -> DfaState {
-        let idx = nfa_state as u16 * self.classes.num_classes() as u16;
-        let mut s = DfaState(idx);
-        s.set_final_flags(&nfa_state);
-        s
+        let nclasses = self.classes.num_classes() as u8;
+        let idx = (nfa_state as u8).checked_mul(nclasses).unwrap();
+        DfaState(idx)
     }
 
-    fn nfa_state(&self, dfa_state: DfaState) -> NfaState {
-        NFA_STATES[dfa_state.index() / self.classes.num_classes()]
+    fn new_state_final_end(&self) -> DfaState {
+        self.new_state(NfaState::StartRecord)
+    }
+
+    fn new_state_final_record(&self) -> DfaState {
+        self.new_state(NfaState::EndRecord)
     }
 
     fn get(&self, state: DfaState, c: u8) -> DfaState {
         let cls = self.classes.classes[c as usize];
-        self.trans[state.index() + cls as usize]
+        let idx = state.0 as usize + cls as usize;
+        self.trans[idx]
     }
 
-    fn set(&mut self, from: DfaState, c: u8, to: DfaState) {
+    fn get_output(&self, state: DfaState, c: u8) -> (DfaState, bool) {
         let cls = self.classes.classes[c as usize];
-        self.trans[from.index() + cls as usize] = to;
+        let idx = state.0 as usize + cls as usize;
+        (self.trans[idx], self.has_output[idx])
+    }
+
+    fn set(&mut self, from: DfaState, c: u8, to: DfaState, output: bool) {
+        let cls = self.classes.classes[c as usize];
+        self.trans[from.0 as usize + cls as usize] = to;
+        self.has_output[from.0 as usize + cls as usize] = output;
+    }
+
+    fn finish(&mut self) {
+        self.final_field = self.new_state(NfaState::EndFieldDelim);
+        self.final_record = self.new_state(NfaState::EndRecord);
+    }
+
+    fn new_read_result(
+        &self,
+        state: &DfaState,
+        is_final_trans: bool,
+        inpdone: bool,
+        outdone: bool,
+    ) -> ReadResult {
+        if state >= &self.final_record {
+            ReadResult::Field { record_end: true }
+        } else if state == &self.final_field {
+            ReadResult::Field { record_end: false }
+        } else if is_final_trans && state.is_start() {
+            ReadResult::End
+        } else {
+            debug_assert!(state < &self.final_field);
+            if !inpdone && outdone {
+                ReadResult::OutputFull
+            } else {
+                ReadResult::InputEmpty
+            }
+        }
     }
 }
 
@@ -733,71 +769,16 @@ impl DfaClasses {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-struct DfaState(u16);
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct DfaState(u8);
 
 impl DfaState {
-    fn index(&self) -> usize {
-        (self.0 & 0b1111_1111) as usize
+    fn start() -> DfaState {
+        DfaState(0)
     }
 
-    fn set_output(&mut self, yes: bool) -> &mut DfaState {
-        if yes {
-            self.0 |= 0b1000_0000_0000_0000;
-        }
-        self
-    }
-
-    fn has_output(&self) -> bool {
-        self.0 & 0b1000_0000_0000_0000 > 0
-    }
-
-    fn set_final_flags(&mut self, state: &NfaState) -> &mut DfaState {
-        match *state {
-            NfaState::End => self.set_final_end(true),
-            NfaState::EndRecord | NfaState::CRLF => {
-                self.set_final_record(true)
-            }
-            NfaState::EndFieldDelim => self.set_final_field(true),
-            _ => self,
-        }
-    }
-
-    fn is_final(&self) -> bool {
-        self.0 & 0b0111_0000_0000_0000 > 0
-    }
-
-    fn set_final_end(&mut self, yes: bool) -> &mut DfaState {
-        if yes {
-            self.0 |= 0b0100_0000_0000_0000;
-        }
-        self
-    }
-
-    fn is_final_end(&self) -> bool {
-        self.0 & 0b0100_0000_0000_0000 > 0
-    }
-
-    fn set_final_record(&mut self, yes: bool) -> &mut DfaState {
-        if yes {
-            self.0 |= 0b0010_0000_0000_0000;
-        }
-        self
-    }
-
-    fn is_final_record(&self) -> bool {
-        self.0 & 0b0010_0000_0000_0000 > 0
-    }
-
-    fn set_final_field(&mut self, yes: bool) -> &mut DfaState {
-        if yes {
-            self.0 |= 0b0001_0000_0000_0000;
-        }
-        self
-    }
-
-    fn is_final_field(&self) -> bool {
-        self.0 & 0b0001_0000_0000_0000 > 0
+    fn is_start(&self) -> bool {
+        self.0 == 0
     }
 }
 

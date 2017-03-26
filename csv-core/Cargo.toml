@@ -13,6 +13,9 @@ license = "Unlicense/MIT"
 [lib]
 bench = false
 
+[dependencies]
+memchr = { version = "1", default-features = false }
+
 [dev-dependencies]
 arrayvec = { version = "0.3", default-features = false }
 
