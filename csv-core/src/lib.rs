@@ -12,7 +12,7 @@ If you're looking for more ergonomic CSV parsing routines, please use the
 This crate has two primary APIs. The `Reader` API provides a CSV parser, and
 the `Writer` API provides a CSV writer.
 
-# Example: counting fields and records
+# Example: reading CSV
 
 This example shows how to count the number of fields and records in CSV data.
 
@@ -48,18 +48,62 @@ loop {
 assert_eq!(3, count_records);
 assert_eq!(9, count_fields);
 ```
+
+# Example: writing CSV
+
+This example shows how to use the `Writer` API to write valid CSV data. Proper
+quoting is handled automatically.
+
+```
+use csv_core::Writer;
+
+// This is where we'll write out CSV data.
+let mut out = &mut [0; 1024];
+// The number of bytes we've written to `out`.
+let mut nout = 0;
+// Create a CSV writer with a default configuration.
+let mut wtr = Writer::new();
+
+// Write a single field. Note that we ignore the `WriteResult` and the number
+// of input bytes consumed since we're doing this by hand.
+let (_, _, n) = wtr.field(&b"foo"[..], &mut out[nout..]);
+nout += n;
+
+// Write a delimiter and then another field that requires quotes.
+let (_, n) = wtr.delimiter(&mut out[nout..]);
+nout += n;
+let (_, _, n) = wtr.field(&b"bar,baz"[..], &mut out[nout..]);
+nout += n;
+
+// Now write another record.
+let (_, n) = wtr.terminator(&mut out[nout..]);
+nout += n;
+let (_, _, n) = wtr.field(&b"a \"b\" c"[..], &mut out[nout..]);
+nout += n;
+let (_, n) = wtr.delimiter(&mut out[nout..]);
+nout += n;
+let (_, _, n) = wtr.field(&b"quux"[..], &mut out[nout..]);
+nout += n;
+
+// We must always call finish once done writing.
+// This ensures that any closing quotes are written.
+let (_, n) = wtr.finish(&mut out[nout..]);
+nout += n;
+
+assert_eq!(&out[..nout], &b"\
+foo,\"bar,baz\"
+\"a \"\"b\"\" c\",quux"[..]);
 */
 
-// #![deny(missing_docs)]
+#![deny(missing_docs)]
 #![no_std]
-
-#![allow(dead_code, unused_variables, unused_imports, unused_mut)]
 
 #[cfg(test)]
 extern crate arrayvec;
 extern crate memchr;
 
 pub use reader::{Reader, ReaderBuilder, ReadResult, Terminator};
+pub use writer::{Writer, WriterBuilder, WriteResult, QuoteStyle};
 
 mod reader;
 mod writer;

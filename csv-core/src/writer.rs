@@ -100,9 +100,21 @@ impl WriterBuilder {
     }
 }
 
+/// The result of writing CSV data.
+///
+/// A value of this type is returned from every interaction with `Writer`. It
+/// informs the caller how to proceed, namely, by indicating whether more
+/// input should be given (`InputEmpty`) or if a bigger output buffer is needed
+/// (`OutputFull`).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WriteResult {
+    /// This result occurs when all of the bytes from the given input have
+    /// been processed.
     InputEmpty,
+    /// This result occurs when the output buffer was too small to process
+    /// all of the input bytes. Generally, this means the caller must call
+    /// the corresponding method again with the rest of the input and more
+    /// room in the output buffer.
     OutputFull,
 }
 
@@ -126,6 +138,7 @@ pub struct Writer {
 
 #[derive(Debug)]
 struct WriterState {
+    in_field: bool,
     quoting: bool,
 }
 
@@ -135,30 +148,137 @@ impl Writer {
         Writer::default()
     }
 
-    pub fn field(
-        &mut self,
-        input: &[u8],
-        output: &mut [u8],
-    ) -> (WriteResult, usize, usize) {
-        (WriteResult::InputEmpty, 0, 0)
-    }
-
-    pub fn delimiter(&mut self, output: &mut [u8]) -> (WriteResult, usize) {
-        let (res, nout) = self.write(&[self.delimiter], output);
-        if nout > 0 {
-            self.state.quoting = false;
+    /// Finish writing CSV data to `output`.
+    ///
+    /// This must be called when one is done writing CSV data to `output`.
+    /// In particular, it will write closing quotes if necessary.
+    pub fn finish(&mut self, output: &mut [u8]) -> (WriteResult, usize) {
+        if !self.state.quoting {
+            return (WriteResult::InputEmpty, 0);
         }
+        let (res, nout) = self.write(&[self.quote], output);
+        if nout == 0 {
+            return (res, nout);
+        }
+        self.state.in_field = false;
+        self.state.quoting = false;
         (res, nout)
     }
 
-    pub fn terminator(&mut self, output: &mut [u8]) -> (WriteResult, usize) {
-        let (res, nout) = match self.term {
+    /// Write a single CSV field from `input` to `output` while employing this
+    /// writer's quoting style.
+    ///
+    /// This returns the result of writing field data, in addition to the
+    /// number of bytes consumed from `input` and the number of bytes
+    /// consumed from `output`.
+    ///
+    /// The result of writing field data is either `WriteResult::InputEmpty`
+    /// or `WriteResult::OutputFull`. The former occurs when all bytes in
+    /// `input` were copied to `output`, while the latter occurs when `output`
+    /// is too small to fit everything from `input`. The maximum number of
+    /// bytes that can be written to `output` is `2 + (2 * input.len())`
+    /// because of quoting. (The worst case is a field consisting entirely
+    /// of quotes.)
+    ///
+    /// Multiple successive calls to `field` will write more data to the same
+    /// field. Subsequent fields can be written by calling either `delimiter`
+    /// or `terminator` first.
+    ///
+    /// If this writer's quoting style is `QuoteStyle::Necessary`, then `input`
+    /// should contain the *entire* field. Otherwise, whether the field needs
+    /// to be quoted or not cannot be determined.
+    pub fn field(
+        &mut self,
+        input: &[u8],
+        mut output: &mut [u8],
+    ) -> (WriteResult, usize, usize) {
+        let (mut nin, mut nout) = (0, 0);
+
+        if !self.state.in_field {
+            self.state.quoting = self.should_quote(input);
+            if self.state.quoting {
+                let (res, o) = self.write(&[self.quote], output);
+                if o == 0 {
+                    return (res, 0, 0);
+                }
+                output = &mut moving(output)[o..];
+                nout += o;
+            }
+            self.state.in_field = true;
+        }
+        let (res, i, o) =
+            if self.state.quoting {
+                quote(
+                    input, output,
+                    self.quote, self.escape, self.double_quote)
+            } else {
+                write_optimistic(input, output)
+            };
+        nin += i;
+        nout += o;
+        (res, nin, nout)
+    }
+
+    /// Write the configured field delimiter to `output`.
+    ///
+    /// If the output buffer does not have enough room to fit
+    /// a field delimiter, then nothing is written to `output`
+    /// and `WriteResult::OutputFull` is returned. Otherwise,
+    /// `WriteResult::InputEmpty` is returned along with the number of bytes
+    /// written to `output` (which is always `1`).
+    pub fn delimiter(
+        &mut self,
+        mut output: &mut [u8],
+    ) -> (WriteResult, usize) {
+        let mut nout = 0;
+        if self.state.quoting {
+            let (res, o) = self.write(&[self.quote], output);
+            if o == 0 {
+                return (res, o);
+            }
+            output = &mut moving(output)[o..];
+            nout += o;
+            self.state.quoting = false;
+        }
+        let (res, o) = self.write(&[self.delimiter], output);
+        if o == 0 {
+            return (res, nout);
+        }
+        nout += o;
+        self.state.in_field = false;
+        (res, nout)
+    }
+
+    /// Write the configured record terminator to `output`.
+    ///
+    /// If the output buffer does not have enough room to fit a record
+    /// terminator, then no part of the terminator is written and
+    /// `WriteResult::OutputFull` is returned. Otherwise,
+    /// `WriteResult::InputEmpty` is returned along with the number of bytes
+    /// written to `output` (which is always `1` or `2`).
+    pub fn terminator(
+        &mut self,
+        mut output: &mut [u8],
+    ) -> (WriteResult, usize) {
+        let mut nout = 0;
+        if self.state.quoting {
+            let (res, o) = self.write(&[self.quote], output);
+            if o == 0 {
+                return (res, o);
+            }
+            output = &mut moving(output)[o..];
+            nout += o;
+            self.state.quoting = false;
+        }
+        let (res, o) = match self.term {
             Terminator::CRLF => write_pessimistic(&[b'\r', b'\n'], output),
             Terminator::Any(b) => write_pessimistic(&[b], output),
         };
-        if nout > 0 {
-            self.state.quoting = false;
+        if o == 0 {
+            return (res, nout);
         }
+        nout += o;
+        self.state.in_field = false;
         (res, nout)
     }
 
@@ -176,6 +296,16 @@ impl Writer {
         // '\n', but we still need to quote '\r' because the reader
         // interprets '\r' as a record terminator by default.
         || b == b'\r' || b == b'\n'
+    }
+
+    /// Returns true if and only if we should put the given field data
+    /// in quotes. This takes the quoting style into account.
+    fn should_quote(&self, input: &[u8]) -> bool {
+        match self.style {
+            QuoteStyle::Always => true,
+            QuoteStyle::Never => false,
+            QuoteStyle::Necessary => self.needs_quotes(input),
+        }
     }
 
     fn write(&self, data: &[u8], output: &mut [u8]) -> (WriteResult, usize) {
@@ -205,17 +335,42 @@ impl Default for Writer {
 impl Default for WriterState {
     fn default() -> WriterState {
         WriterState {
+            in_field: false,
             quoting: false,
         }
     }
 }
 
+/// Escape quotes in `input` and write the result to `output`.
+///
+/// If `input` does not have a `quote`, then the contents of `input` are
+/// copied verbatim to `output`.
+///
+/// If `output` is not big enough to store the fully quoted contents of
+/// `input`, then `WriteResult::OutputFull` is returned. The `output` buffer
+/// will require a maximum of storage of `2 * input.len()` in the worst case
+/// (where every byte is a quote).
+///
+/// In streaming contexts, `quote` should be called in a loop until
+/// `WriteResult::InputEmpty` is returned. It is possible to write an infinite
+/// loop if your output buffer is less than 2 bytes in length (the minimum
+/// storage space required to store an escaped quote).
+///
+/// In addition to the `WriteResult`, the number of consumed bytes from `input`
+/// and `output` are also returned.
+///
+/// `quote` is the quote byte and `escape` is the escape byte. If
+/// `double_quote` is true, then quotes are escaped by doubling them,
+/// otherwise, quotes are escaped with the `escape` byte.
+///
+/// N.B. This function is provided for low level usage. It is called
+/// automatically if you're using a `Writer`.
 pub fn quote(
     mut input: &[u8],
     mut output: &mut [u8],
     quote: u8,
     escape: u8,
-    doubled: bool,
+    double_quote: bool,
 ) -> (WriteResult, usize, usize) {
     let (mut nin, mut nout) = (0, 0);
     loop {
@@ -226,11 +381,49 @@ pub fn quote(
                 nout += o;
                 return (res, nin, nout);
             }
-            _ => unimplemented!(),
+            Some(next_quote) => {
+                let (res, i, o) = write_optimistic(
+                    &input[..next_quote], output);
+                input = &input[i..];
+                output = &mut moving(output)[o..];
+                nin += i;
+                nout += o;
+                if let WriteResult::OutputFull = res {
+                    return (res, nin, nout);
+                }
+                if double_quote {
+                    let (res, o) = write_pessimistic(&[quote, quote], output);
+                    if let WriteResult::OutputFull = res {
+                        return (res, nin, nout);
+                    }
+                    nout += o;
+                    output = &mut moving(output)[o..];
+                } else {
+                    let (res, o) = write_pessimistic(&[escape, quote], output);
+                    if let WriteResult::OutputFull = res {
+                        return (res, nin, nout);
+                    }
+                    nout += o;
+                    output = &mut moving(output)[o..];
+                }
+                nin += 1;
+                input = &input[1..];
+            }
         }
     }
 }
 
+/// Copy the bytes from `input` to `output`. If `output` is too small to fit
+/// everything from `input`, then copy `output.len()` bytes from `input`.
+/// Otherwise, copy everything from `input` into `output`.
+///
+/// In the first case (`output` is too small), `WriteResult::OutputFull` is
+/// returned, in addition to the number of bytes consumed from `input` and
+/// `output`.
+///
+/// In the second case (`input` is no bigger than `output`),
+/// `WriteResult::InputEmpty` is returned, in addition to the number of bytes
+/// consumed from `input` and `output`.
 fn write_optimistic(
     input: &[u8],
     output: &mut [u8],
@@ -245,6 +438,11 @@ fn write_optimistic(
     }
 }
 
+/// Copy the bytes from `input` to `output` only if `input` is no bigger than
+/// `output`. If `input` is bigger than `output`, then return
+/// `WriteResult::OutputFull` and copy nothing into `output`. Otherwise,
+/// return `WriteResult::InputEmpty` and the number of bytes copied into
+/// `output`.
 fn write_pessimistic(
     input: &[u8],
     output: &mut [u8],
@@ -254,5 +452,317 @@ fn write_pessimistic(
     } else {
         output[..input.len()].copy_from_slice(input);
         (WriteResult::InputEmpty, input.len())
+    }
+}
+
+/// This avoids reborrowing.
+/// See: https://bluss.github.io/rust/fun/2015/10/11/stuff-the-identity-function-does/
+fn moving<T>(x: T) -> T { x }
+
+#[cfg(test)]
+mod tests {
+    use writer::{Writer, quote};
+    use writer::WriteResult::*;
+
+    // OMG I HATE BYTE STRING LITERALS SO MUCH.
+    fn b(s: &str) -> &[u8] { s.as_bytes() }
+    fn s(b: &[u8]) -> &str { ::core::str::from_utf8(b).unwrap() }
+
+    macro_rules! assert_field {
+        (
+            $wtr:expr, $inp:expr, $out:expr,
+            $expect_in:expr, $expect_out:expr,
+            $expect_res:expr, $expect_data:expr
+        ) => {{
+            let (res, i, o) = $wtr.field($inp, $out);
+            assert_eq!($expect_res, res, "result");
+            assert_eq!($expect_in, i, "input");
+            assert_eq!($expect_out, o, "output");
+            assert_eq!($expect_data, s(&$out[..o]), "data");
+        }}
+    }
+
+    macro_rules! assert_write {
+        (
+            $wtr:expr, $which:ident, $out:expr,
+            $expect_out:expr, $expect_res:expr, $expect_data:expr
+        ) => {{
+            let (res, o) = $wtr.$which($out);
+            assert_eq!($expect_res, res, "result");
+            assert_eq!($expect_out, o, "output");
+            assert_eq!($expect_data, s(&$out[..o]), "data");
+        }}
+    }
+
+    #[test]
+    fn writer_one_field() {
+        let mut wtr = Writer::new();
+        let mut out = &mut [0; 1024];
+        let mut n = 0;
+
+        assert_field!(wtr, b("abc"), &mut out[n..], 3, 3, InputEmpty, "abc");
+        n += 3;
+
+        assert_write!(wtr, finish, &mut out[n..], 0, InputEmpty, "");
+    }
+
+    #[test]
+    fn writer_one_field_quote() {
+        let mut wtr = Writer::new();
+        let mut out = &mut [0; 1024];
+        let mut n = 0;
+
+        assert_field!(
+            wtr, b("a\"bc"), &mut out[n..], 4, 6, InputEmpty, "\"a\"\"bc");
+        n += 6;
+
+        assert_write!(wtr, finish, &mut out[n..], 1, InputEmpty, "\"");
+    }
+
+    #[test]
+    fn writer_one_field_stream() {
+        let mut wtr = Writer::new();
+        let mut out = &mut [0; 1024];
+        let mut n = 0;
+
+        assert_field!(wtr, b("abc"), &mut out[n..], 3, 3, InputEmpty, "abc");
+        n += 3;
+        assert_field!(wtr, b("x"), &mut out[n..], 1, 1, InputEmpty, "x");
+        n += 1;
+
+        assert_write!(wtr, finish, &mut out[n..], 0, InputEmpty, "");
+    }
+
+    #[test]
+    fn writer_one_field_stream_quote() {
+        let mut wtr = Writer::new();
+        let mut out = &mut [0; 1024];
+        let mut n = 0;
+
+        assert_field!(
+            wtr, b("abc\""), &mut out[n..], 4, 6, InputEmpty, "\"abc\"\"");
+        n += 6;
+        assert_field!(wtr, b("x"), &mut out[n..], 1, 1, InputEmpty, "x");
+        n += 1;
+
+        assert_write!(wtr, finish, &mut out[n..], 1, InputEmpty, "\"");
+    }
+
+    #[test]
+    fn writer_one_field_stream_quote_partial() {
+        let mut wtr = Writer::new();
+        let mut out = &mut [0; 4];
+
+        assert_field!(wtr, b("ab\"xyz"), out, 2, 3, OutputFull, "\"ab");
+        assert_field!(wtr, b("\"xyz"), out, 3, 4, OutputFull, "\"\"xy");
+        assert_field!(wtr, b("z"), out, 1, 1, InputEmpty, "z");
+        assert_write!(wtr, finish, out, 1, InputEmpty, "\"");
+    }
+
+    #[test]
+    fn writer_two_fields() {
+        let mut wtr = Writer::new();
+        let mut out = &mut [0; 1024];
+        let mut n = 0;
+
+        assert_field!(wtr, b("abc"), &mut out[n..], 3, 3, InputEmpty, "abc");
+        n += 3;
+        assert_write!(wtr, delimiter, &mut out[n..], 1, InputEmpty, ",");
+        n += 1;
+        assert_field!(wtr, b("yz"), &mut out[n..], 2, 2, InputEmpty, "yz");
+        n += 2;
+
+        assert_write!(wtr, finish, &mut out[n..], 0, InputEmpty, "");
+
+        assert_eq!("abc,yz", s(&out[..n]));
+    }
+
+    #[test]
+    fn writer_two_fields_quote() {
+        let mut wtr = Writer::new();
+        let mut out = &mut [0; 1024];
+        let mut n = 0;
+
+        assert_field!(
+            wtr, b("a,bc"), &mut out[n..], 4, 5, InputEmpty, "\"a,bc");
+        n += 5;
+        assert_write!(wtr, delimiter, &mut out[n..], 2, InputEmpty, "\",");
+        n += 2;
+        assert_field!(wtr, b("\nz"), &mut out[n..], 2, 3, InputEmpty, "\"\nz");
+        n += 3;
+
+        assert_write!(wtr, finish, &mut out[n..], 1, InputEmpty, "\"");
+        n += 1;
+
+        assert_eq!("\"a,bc\",\"\nz\"", s(&out[..n]));
+    }
+
+    #[test]
+    fn writer_two_fields_two_records() {
+        let mut wtr = Writer::new();
+        let mut out = &mut [0; 1024];
+        let mut n = 0;
+
+        assert_field!(wtr, b("abc"), &mut out[n..], 3, 3, InputEmpty, "abc");
+        n += 3;
+        assert_write!(wtr, delimiter, &mut out[n..], 1, InputEmpty, ",");
+        n += 1;
+        assert_field!(wtr, b("yz"), &mut out[n..], 2, 2, InputEmpty, "yz");
+        n += 2;
+        assert_write!(wtr, terminator, &mut out[n..], 1, InputEmpty, "\n");
+        n += 1;
+        assert_field!(wtr, b("foo"), &mut out[n..], 3, 3, InputEmpty, "foo");
+        n += 3;
+        assert_write!(wtr, delimiter, &mut out[n..], 1, InputEmpty, ",");
+        n += 1;
+        assert_field!(wtr, b("quux"), &mut out[n..], 4, 4, InputEmpty, "quux");
+        n += 4;
+
+        assert_write!(wtr, finish, &mut out[n..], 0, InputEmpty, "");
+
+        assert_eq!("abc,yz\nfoo,quux", s(&out[..n]));
+    }
+
+    #[test]
+    fn writer_two_fields_two_records_quote() {
+        let mut wtr = Writer::new();
+        let mut out = &mut [0; 1024];
+        let mut n = 0;
+
+        assert_field!(
+            wtr, b("a,bc"), &mut out[n..], 4, 5, InputEmpty, "\"a,bc");
+        n += 5;
+        assert_write!(wtr, delimiter, &mut out[n..], 2, InputEmpty, "\",");
+        n += 2;
+        assert_field!(wtr, b("\nz"), &mut out[n..], 2, 3, InputEmpty, "\"\nz");
+        n += 3;
+        assert_write!(wtr, terminator, &mut out[n..], 2, InputEmpty, "\"\n");
+        n += 2;
+        assert_field!(
+            wtr, b("f\"oo"), &mut out[n..], 4, 6, InputEmpty, "\"f\"\"oo");
+        n += 6;
+        assert_write!(wtr, delimiter, &mut out[n..], 2, InputEmpty, "\",");
+        n += 2;
+        assert_field!(
+            wtr, b("quux,"), &mut out[n..], 5, 6, InputEmpty, "\"quux,");
+        n += 6;
+
+        assert_write!(wtr, finish, &mut out[n..], 1, InputEmpty, "\"");
+        n += 1;
+
+        assert_eq!("\"a,bc\",\"\nz\"\n\"f\"\"oo\",\"quux,\"", s(&out[..n]));
+    }
+
+    macro_rules! assert_quote {
+        (
+            $inp:expr, $out:expr,
+            $expect_in:expr, $expect_out:expr,
+            $expect_res:expr, $expect_data:expr
+        ) => {
+            assert_quote!(
+                $inp, $out,
+                $expect_in, $expect_out, $expect_res, $expect_data,
+                true);
+        };
+        (
+            $inp:expr, $out:expr,
+            $expect_in:expr, $expect_out:expr,
+            $expect_res:expr, $expect_data:expr,
+            $double_quote:expr
+        ) => {{
+            let (res, i, o) = quote($inp, $out, b'"', b'\\', $double_quote);
+            assert_eq!($expect_res, res, "result");
+            assert_eq!($expect_in, i, "input");
+            assert_eq!($expect_out, o, "output");
+            assert_eq!(b($expect_data), &$out[..o], "data");
+        }}
+    }
+
+    #[test]
+    fn quote_empty() {
+        let inp = b("");
+        let out = &mut [0; 1024];
+
+        assert_quote!(inp, out, 0, 0, InputEmpty, "");
+    }
+
+    #[test]
+    fn quote_no_quotes() {
+        let inp = b("foobar");
+        let out = &mut [0; 1024];
+
+        assert_quote!(inp, out, 6, 6, InputEmpty, "foobar");
+    }
+
+    #[test]
+    fn quote_one_quote() {
+        let inp = b("\"");
+        let out = &mut [0; 1024];
+
+        assert_quote!(inp, out, 1, 2, InputEmpty, r#""""#);
+    }
+
+    #[test]
+    fn quote_two_quotes() {
+        let inp = b("\"\"");
+        let out = &mut [0; 1024];
+
+        assert_quote!(inp, out, 2, 4, InputEmpty, r#""""""#);
+    }
+
+    #[test]
+    fn quote_escaped_one() {
+        let inp = b("\"");
+        let out = &mut [0; 1024];
+
+        assert_quote!(inp, out, 1, 2, InputEmpty, r#"\""#, false);
+    }
+
+    #[test]
+    fn quote_escaped_two() {
+        let inp = b("\"\"");
+        let out = &mut [0; 1024];
+
+        assert_quote!(inp, out, 2, 4, InputEmpty, r#"\"\""#, false);
+    }
+
+    #[test]
+    fn quote_misc() {
+        let inp = b(r#"foo "bar" baz "quux"?"#);
+        let out = &mut [0; 1024];
+
+        assert_quote!(
+            inp, out, 21, 25, InputEmpty,
+            r#"foo ""bar"" baz ""quux""?"#);
+    }
+
+    #[test]
+    fn quote_stream_no_quotes() {
+        let mut inp = b("fooba");
+        let out = &mut [0; 2];
+
+        assert_quote!(inp, out, 2, 2, OutputFull, "fo");
+        inp = &inp[2..];
+        assert_quote!(inp, out, 2, 2, OutputFull, "ob");
+        inp = &inp[2..];
+        assert_quote!(inp, out, 1, 1, InputEmpty, "a");
+    }
+
+    #[test]
+    fn quote_stream_quotes() {
+        let mut inp = b(r#"a"bc"d""#);
+        let out = &mut [0; 2];
+
+        assert_quote!(inp, out, 1, 1, OutputFull, "a");
+        inp = &inp[1..];
+        assert_quote!(inp, out, 1, 2, OutputFull, r#""""#);
+        inp = &inp[1..];
+        assert_quote!(inp, out, 2, 2, OutputFull, "bc");
+        inp = &inp[2..];
+        assert_quote!(inp, out, 1, 2, OutputFull, r#""""#);
+        inp = &inp[1..];
+        assert_quote!(inp, out, 1, 1, OutputFull, "d");
+        inp = &inp[1..];
+        assert_quote!(inp, out, 1, 2, InputEmpty, r#""""#);
     }
 }
