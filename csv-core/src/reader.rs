@@ -13,7 +13,6 @@ pub enum Terminator {
 }
 
 impl Terminator {
-    #[inline]
     fn is_crlf(&self) -> bool {
         match *self {
             Terminator::CRLF => true,
@@ -38,54 +37,114 @@ impl PartialEq<u8> for Terminator {
     }
 }
 
+/// A pull based CSV reader.
+///
+/// This reader parses CSV data using a finite state machine. Callers can
+/// extract parsed data incrementally using the `read` method.
+///
+/// Note that this CSV reader is somewhat encoding agnostic. The source data
+/// needs to be at least ASCII compatible. There is no support for specifying
+/// the full gamut of Unicode delimiters/terminators/quotes/escapes. Instead,
+/// any byte can be used, although callers probably want to stick to the ASCII
+/// subset (`<= 0x7F`).
+///
+/// # RFC 4180
+///
+/// [RFC 4180](https://tools.ietf.org/html/rfc4180)
+/// is the closest thing to a specification for CSV data. Unfortunately,
+/// CSV data that is seen in the wild can vary significantly. Often times, the
+/// CSV data is outright invalid. Instead of fixing the producers of bad CSV
+/// data, we have seen fit to make consumers much more flexible in what they
+/// accept. This reader continues that tradition, and therefore, isn't
+/// technically compliant with RFC 4180. In particular, this reader will
+/// never return an error and will always find *a* parse.
+///
+/// Here are some detailed differences from RFC 4180:
+///
+/// * CRLF, LF and CR are each treated as a single record terminator by
+///   default.
+/// * Records are permitted to be of varying length.
+/// * Empty lines (that do not include other whitespace) are ignored.
 #[derive(Clone, Debug)]
 pub struct Reader {
+    /// A table-based DFA for parsing CSV.
     dfa: Dfa,
-    state: State,
+    /// The current DFA state, if the DFA is used.
+    dfa_state: DfaState,
+    /// The current NFA state, if the NFA is used.
+    nfa_state: NfaState,
+    /// Whether to copy fields into a caller provided output buffer.
     copy: bool,
+    /// The delimiter that separates fields.
     delimiter: u8,
+    /// The terminator that separates records.
     term: Terminator,
+    /// The quotation byte.
     quote: u8,
+    /// Whether to recognize escaped quotes.
     escape: Option<u8>,
+    /// Whether to recognized doubled quotes.
     double_quote: bool,
+    /// Whether to use the NFA for parsing.
+    ///
+    /// Generally this is for debugging. There's otherwise no good reason
+    /// to avoid the DFA.
+    use_nfa: bool,
 }
 
 impl Default for Reader {
     fn default() -> Reader {
         Reader {
             dfa: Dfa::new(),
-            state: State::StartRecord,
+            dfa_state: DfaState(0),
+            nfa_state: NfaState::StartRecord,
             copy: true,
             delimiter: b',',
             term: Terminator::default(),
             quote: b'"',
             escape: None,
             double_quote: true,
+            use_nfa: false,
         }
     }
 }
 
+/// Builds a CSV reader with various configuration knobs.
+///
+/// This builder can be used to tweak the field delimiter, record terminator
+/// and more for parsing CSV. Once a CSV `Reader` is built, its configuration
+/// cannot be changed.
 #[derive(Debug, Default)]
 pub struct ReaderBuilder {
     rdr: Reader,
 }
 
 impl ReaderBuilder {
+    /// Create a new builder.
     pub fn new() -> ReaderBuilder {
         ReaderBuilder::default()
     }
 
+    /// Build a CSV parser from this configuration.
     pub fn build(&self) -> Reader {
         let mut rdr = self.rdr.clone();
         rdr.build_dfa();
         rdr
     }
 
+    /// The field delimiter to use when parsing CSV.
+    ///
+    /// The default is `b','`.
     pub fn delimiter(&mut self, delimiter: u8) -> &mut ReaderBuilder {
         self.rdr.delimiter = delimiter;
         self
     }
 
+    /// The record terminator to use when parsing CSV.
+    ///
+    /// A record terminator can be any single byte. The default is a special
+    /// value, `Terminator::CRLF`, which treats any occurrence of `\r`, `\n`
+    /// or `\r\n` as a single record terminator.
     pub fn terminator(
         &mut self,
         term: Terminator,
@@ -94,134 +153,358 @@ impl ReaderBuilder {
         self
     }
 
+    /// The quote character to use when parsing CSV.
+    ///
+    /// The default is `b'"'`.
     pub fn quote(&mut self, quote: u8) -> &mut ReaderBuilder {
         self.rdr.quote = quote;
         self
     }
 
+    /// The escape character to use when parsing CSV.
+    ///
+    /// In some variants of CSV, quotes are escaped using a special escape
+    /// character like `\` (instead of escaping quotes by doubling them).
+    ///
+    /// By default, recognizing these idiosyncratic escapes is disabled.
     pub fn escape(&mut self, escape: Option<u8>) -> &mut ReaderBuilder {
         self.rdr.escape = escape;
         self
     }
 
+    /// Enable double quote escapes.
+    ///
+    /// This is enabled by default, but it may be disabled. When disabled,
+    /// doubled quotes are not interpreted as escapes.
     pub fn double_quote(&mut self, yes: bool) -> &mut ReaderBuilder {
         self.rdr.double_quote = yes;
         self
     }
 
+    /// A convenience method for specifying a configuration to read ASCII
+    /// delimited text.
+    ///
+    /// This sets the delimiter and record terminator to the ASCII unit
+    /// separator (`\x1F`) and record separator (`\x1E`), respectively.
+    pub fn ascii(&mut self) -> &mut ReaderBuilder {
+        self.delimiter(b'\x1F').terminator(Terminator::Any(b'\x1E'))
+    }
+
+    /// Enable or disable support for copying field data into a caller
+    /// provided buffer when using `read`.
+    ///
+    /// This is enabled by default. It *may* be useful to disable this if
+    /// all you care about is counting CSV fields or records.
     pub fn copy(&mut self, yes: bool) -> &mut ReaderBuilder {
         self.rdr.copy = yes;
         self
     }
+
+    /// Enable or disable the NFA for parsing CSV.
+    ///
+    /// This is intended to be a debug option useful for debugging. The NFA
+    /// is always slower than the DFA.
+    #[doc(hidden)]
+    pub fn nfa(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.rdr.use_nfa = yes;
+        self
+    }
 }
 
+/// The result of parsing at most one field from CSV data.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReadResult {
+    /// The caller provided input was exhausted before the end of a field or
+    /// record was found.
     InputEmpty,
+    /// The caller provided output buffer was filled before an entire field
+    /// could be written to it.
     OutputFull,
-    Field,
-    Record,
+    /// The end of a field was found.
+    ///
+    /// Note that when `record_end` is true, then the end of this field also
+    /// corresponds to the end of a record.
+    Field {
+        /// Whether this was the last field in a record or not.
+        record_end: bool,
+    },
+    /// All CSV data has been read.
+    ///
+    /// This state can only be returned when an empty input buffer is provided
+    /// by the caller.
     End,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum State {
-    End = 0,
-    StartRecord = 1,
-    EndRecord = 2,
-    StartField = 3,
-    EndFieldDelim = 4,
-    EndFieldTerm = 5,
-    InField = 6,
-    InQuotedField = 7,
-    InEscapedQuote = 8,
-    InDoubleEscapedQuote = 9,
-    InRecordTerm = 10,
-    CRLF = 11,
+impl ReadResult {
+    fn from_nfa(state: &NfaState, inpdone: bool, outdone: bool) -> ReadResult {
+        match *state {
+            NfaState::End => ReadResult::End,
+            NfaState::EndRecord | NfaState::CRLF => {
+                ReadResult::Field { record_end: true }
+            }
+            NfaState::EndFieldDelim => {
+                ReadResult::Field { record_end: false }
+            }
+            _ => {
+                assert!(!state.is_final());
+                if !inpdone && outdone {
+                    ReadResult::OutputFull
+                } else {
+                    ReadResult::InputEmpty
+                }
+            }
+        }
+    }
+
+    fn from_dfa(state: &DfaState, inpdone: bool, outdone: bool) -> ReadResult {
+        if state.is_final_end() {
+            ReadResult::End
+        } else if state.is_final_record() {
+            ReadResult::Field { record_end: true }
+        } else if state.is_final_field() {
+            ReadResult::Field { record_end: false }
+        } else {
+            assert!(!state.is_final());
+            if !inpdone && outdone {
+                ReadResult::OutputFull
+            } else {
+                ReadResult::InputEmpty
+            }
+        }
+    }
 }
 
-const STATES: &'static [State] = &[
-    State::End,
-    State::StartRecord,
-    State::EndRecord,
-    State::StartField,
-    State::EndFieldDelim,
-    State::EndFieldTerm,
-    State::InField,
-    State::InQuotedField,
-    State::InEscapedQuote,
-    State::InDoubleEscapedQuote,
-    State::InRecordTerm,
-    State::CRLF,
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum NfaState {
+    StartRecord = 0,
+    EndRecord = 1,
+    StartField = 2,
+    EndFieldDelim = 3,
+    EndFieldTerm = 200,
+    InField = 4,
+    InQuotedField = 5,
+    InEscapedQuote = 6,
+    InDoubleEscapedQuote = 7,
+    InRecordTerm = 201,
+    CRLF = 8,
+    End = 9,
+}
+
+const NFA_STATES: &'static [NfaState] = &[
+    NfaState::StartRecord,
+    NfaState::EndRecord,
+    NfaState::StartField,
+    NfaState::EndFieldDelim,
+    NfaState::InField,
+    NfaState::InQuotedField,
+    NfaState::InEscapedQuote,
+    NfaState::InDoubleEscapedQuote,
+    NfaState::CRLF,
+    NfaState::End,
 ];
 
-impl State {
+impl NfaState {
     fn is_final(&self) -> bool {
         match *self {
-            State::End
-            | State::EndRecord
-            | State::EndFieldDelim
-            | State::EndFieldTerm => true,
+            NfaState::End
+            | NfaState::EndRecord
+            | NfaState::CRLF
+            | NfaState::EndFieldDelim => true,
             _ => false,
         }
     }
 }
 
 impl Reader {
+    /// Create a new CSV reader with a default parser configuration.
     pub fn new() -> Reader {
         ReaderBuilder::new().build()
     }
 
+    /// Reset the parser such that it behaves as if it had never been used.
+    ///
+    /// This may be useful when reading CSV data in a random access pattern.
     pub fn reset(&mut self) {
-        self.state = State::StartRecord;
+        self.dfa_state = self.dfa.new_state(NfaState::StartRecord);
+        self.nfa_state = NfaState::StartRecord;
     }
 
+    /// Parse CSV data in `input` and copy field data to `output`.
+    ///
+    /// This routine requires a caller provided buffer of CSV data as the
+    /// `input` and a caller provided buffer, `output`, in which to store field
+    /// data extracted from `input`. The field data copied to `output` will
+    /// have its quotes unescaped.
+    ///
+    /// Calling this routine parses at most a single field and returns
+    /// three values indicating the state of the parser. The first value,
+    /// a `ReadResult`, tells the caller what to do next. For example,
+    /// if the entire input was read or if the output buffer was filled
+    /// before a full field had been read, then `ReadResult::InputEmpty` or
+    /// `ReadResult::OutputFull` is returned, respectively. See the
+    /// documentation for `ReadResult` for more details.
+    ///
+    /// The second two values returned correspond to the number of bytes
+    /// read from `input` and `output`, respectively.
+    ///
+    /// # Termination
+    ///
+    /// This reader interprets an empty `input` buffer as an indication that
+    /// there is no CSV data left to read. Namely, when the caller has
+    /// exhausted all CSV data, the caller should continue to call `read` with
+    /// an empty input buffer until `ReadResult::End` is returned.
+    ///
+    /// # Errors
+    ///
+    /// This CSV reader can never return an error. Instead, it prefers *a*
+    /// parse over *no* parse.
     pub fn read(
         &mut self,
         input: &[u8],
         output: &mut [u8],
     ) -> (ReadResult, usize, usize) {
-        let (mut nin, mut nout) = (0, 0);
-        if input.is_empty() {
-            self.state = self.nfa_final_transition(self.state);
+        if self.use_nfa {
+            self.read_nfa(input, output)
         } else {
-            let (state, copy) = (self.state, self.copy);
-            let state = self.state;
-            if self.copy {
-                let (state, i, o) = self.consume_and_copy(
-                    state, input, output);
-                self.state = state;
-                nin = i;
-                nout = o;
-            } else {
-                let (state, i) = self.consume(state, input);
-                self.state = state;
-                nin = i;
+            self.read_dfa(input, output)
+        }
+    }
+
+    #[inline(always)]
+    fn read_dfa(
+        &mut self,
+        input: &[u8],
+        output: &mut [u8],
+    ) -> (ReadResult, usize, usize) {
+        if input.is_empty() {
+            self.dfa_state = self.dfa_final_transition(self.dfa_state);
+            (ReadResult::from_dfa(&self.dfa_state, false, false), 0, 0)
+        } else {
+            let (res, state, nin, nout) =
+                if self.copy {
+                    self.consume_and_copy_dfa(self.dfa_state, input, output)
+                } else {
+                    self.consume_dfa(self.dfa_state, input)
+                };
+            self.dfa_state = state;
+            (res, nin, nout)
+        }
+    }
+
+    #[inline(always)]
+    fn consume_and_copy_dfa(
+        &self,
+        mut state: DfaState,
+        input: &[u8],
+        output: &mut [u8],
+    ) -> (ReadResult, DfaState, usize, usize) {
+        let (mut nin, mut nout) = (0, 0);
+        while nin < input.len() && nout < output.len() {
+            state = self.dfa.get(state, input[nin]);
+            if state.has_output() {
+                output[nout] = input[nin];
+                nout += 1;
+            }
+            nin += 1;
+            if state.is_final() {
+                break;
             }
         }
-        let res = match self.state {
-            State::End => ReadResult::End,
-            State::EndRecord => ReadResult::Record,
-            State::EndFieldDelim | State::EndFieldTerm => ReadResult::Field,
-            _ => {
-                assert!(!self.state.is_final());
-                if nin < input.len() && nout >= output.len() {
-                    ReadResult::OutputFull
-                } else {
-                    ReadResult::InputEmpty
-                }
+        let res = ReadResult::from_dfa(
+            &state, nin >= input.len(), nout >= output.len());
+        (res, state, nin, nout)
+    }
+
+    #[inline(always)]
+    fn consume_dfa(
+        &self,
+        mut state: DfaState,
+        input: &[u8],
+    ) -> (ReadResult, DfaState, usize, usize) {
+        let mut nin = 0;
+        while nin < input.len() {
+            state = self.dfa.get(state, input[nin]);
+            nin += 1;
+            if state.is_final() {
+                break;
             }
-        };
-        (res, nin, nout)
+        }
+        let res = ReadResult::from_dfa(&state, nin >= input.len(), false);
+        (res, state, nin, 0)
+    }
+
+    #[inline(always)]
+    fn dfa_final_transition(&self, state: DfaState) -> DfaState {
+        let nfa_state = self.nfa_final_transition(self.dfa.nfa_state(state));
+        let mut s = self.dfa.new_state(nfa_state);
+        s.set_final_flags(&nfa_state);
+        s
+    }
+
+    fn build_dfa(&mut self) {
+        self.dfa.classes.add(self.delimiter);
+        self.dfa.classes.add(self.quote);
+        if let Some(escape) = self.escape {
+            self.dfa.classes.add(escape);
+        }
+        match self.term {
+            Terminator::Any(b) => self.dfa.classes.add(b),
+            Terminator::CRLF => {
+                self.dfa.classes.add(b'\r');
+                self.dfa.classes.add(b'\n');
+            }
+        }
+        for &state in NFA_STATES {
+            for c in (0..256).map(|c| c as u8) {
+                let (mut nextstate, mut inp, mut out) =
+                    (state, false, false);
+                while !inp && nextstate != NfaState::End {
+                    let (s, i, o) = self.nfa_transition(nextstate, c);
+                    nextstate = s;
+                    inp = i;
+                    out = out || o;
+                }
+                let from = self.dfa.new_state(state);
+                let mut to = self.dfa.new_state(nextstate);
+                to.set_output(out);
+                self.dfa.set(from, c, to);
+            }
+        }
+        self.dfa_state = self.dfa.new_state(NfaState::StartRecord);
+    }
+
+    // The NFA implementation follows. The nfa_final_transition and
+    // nfa_transition methods are required for the DFA to operate. The
+    // rest are included for completeness (and debugging).
+
+    #[inline(always)]
+    fn read_nfa(
+        &mut self,
+        input: &[u8],
+        output: &mut [u8],
+    ) -> (ReadResult, usize, usize) {
+        if input.is_empty() {
+            self.nfa_state = self.nfa_final_transition(self.nfa_state);
+            (ReadResult::from_nfa(&self.nfa_state, false, false), 0, 0)
+        } else {
+            let (res, state, nin, nout) =
+                if self.copy {
+                    self.consume_and_copy(self.nfa_state, input, output)
+                } else {
+                    self.consume(self.nfa_state, input)
+                };
+            self.nfa_state = state;
+            (res, nin, nout)
+        }
     }
 
     #[inline(always)]
     fn consume_and_copy(
-        &mut self,
-        mut state: State,
+        &self,
+        mut state: NfaState,
         input: &[u8],
         output: &mut [u8],
-    ) -> (State, usize, usize) {
+    ) -> (ReadResult, NfaState, usize, usize) {
         let (mut nin, mut nout) = (0, 0);
         while nin < input.len() && nout < output.len() {
             let (s, i, o) = self.nfa_transition(state, input[nin]);
@@ -237,43 +520,17 @@ impl Reader {
                 break;
             }
         }
-        (state, nin, nout)
-    }
-
-    #[inline(always)]
-    fn consume_and_copy_dfa(
-        &mut self,
-        mut state: State,
-        input: &[u8],
-        output: &mut [u8],
-    ) -> (State, usize, usize) {
-        let (mut state, mut nin, mut nout) = (state as u8, 0, 0);
-        while nin < input.len() && nout < output.len() {
-            let (s, o, fin) = self.dfa.get(state, input[nin]);
-            println!("({:?}, {:?}) |--> {:?} (final? {:?})",
-                     STATES[state as usize],
-                     input[nin] as char,
-                     STATES[s as usize],
-                     fin);
-            if o {
-                output[nout] = input[nin];
-                nout += 1;
-            }
-            nin += 1;
-            state = s;
-            if fin {
-                break;
-            }
-        }
-        (STATES[state as usize], nin, nout)
+        let res = ReadResult::from_nfa(
+            &state, nin >= input.len(), nout >= output.len());
+        (res, state, nin, nout)
     }
 
     #[inline(always)]
     fn consume(
-        &mut self,
-        mut state: State,
+        &self,
+        mut state: NfaState,
         input: &[u8],
-    ) -> (State, usize) {
+    ) -> (ReadResult, NfaState, usize, usize) {
         let mut nin = 0;
         while nin < input.len() {
             let (s, i, _) = self.nfa_transition(state, input[nin]);
@@ -285,31 +542,36 @@ impl Reader {
                 break;
             }
         }
-        (state, nin)
+        let res = ReadResult::from_nfa(&state, nin >= input.len(), false);
+        (res, state, nin, 0)
     }
 
     #[inline(always)]
-    fn nfa_final_transition(&self, state: State) -> State {
-        use self::State::*;
+    fn nfa_final_transition(&self, state: NfaState) -> NfaState {
+        use self::NfaState::*;
         match state {
             End
             | StartRecord
-            | EndRecord => End,
-            EndFieldTerm
-            | InRecordTerm
-            | CRLF => EndRecord,
+            | EndRecord
+            | CRLF => End,
             StartField
             | EndFieldDelim
+            | EndFieldTerm
             | InField
             | InQuotedField
             | InEscapedQuote
-            | InDoubleEscapedQuote => EndFieldTerm,
+            | InDoubleEscapedQuote
+            | InRecordTerm => EndRecord,
         }
     }
 
     #[inline(always)]
-    fn nfa_transition(&self, state: State, c: u8) -> (State, bool, bool) {
-        use self::State::*;
+    fn nfa_transition(
+        &self,
+        state: NfaState,
+        c: u8,
+    ) -> (NfaState, bool, bool) {
+        use self::NfaState::*;
         match state {
             End => (End, false, false),
             StartRecord => {
@@ -380,33 +642,164 @@ impl Reader {
             }
             CRLF => {
                 if b'\n' == c {
-                    (EndRecord, true, false)
+                    (StartRecord, true, false)
                 } else {
-                    (EndRecord, false, false)
+                    (StartRecord, false, false)
                 }
-            }
-        }
-    }
-
-    fn build_dfa(&mut self) {
-        for &state in STATES {
-            for c in (0..256).map(|c| c as u8) {
-                let (mut nextstate, mut inp, mut out, mut fin) =
-                    (state, false, false, false);
-                while !inp && nextstate != State::End {
-                    let (s, i, o) = self.nfa_transition(nextstate, c);
-                    nextstate = s;
-                    inp = i;
-                    out = out || o;
-                    fin = fin || nextstate.is_final();
-                }
-                self.dfa.set(state as u8, c, nextstate as u8, out, fin);
             }
         }
     }
 }
 
-struct Dfa([u8; 3072]);
+/// The number of slots in the DFA transition table.
+///
+/// This number is computed by multiplying the maximum number of transition
+/// classes (6) by the total number of NFA states that are used in the DFA
+/// (10).
+///
+/// The number of transition classes is determined by an equivalence class of
+/// bytes, where every byte in the same equivalence classes is
+/// indistinguishable from any other byte with respect to the DFA. For example,
+/// if neither `a` nor `b` are specifed as a delimiter/quote/terminator/escape,
+/// then the DFA will never discriminate between `a` or `b`, so they can
+/// effectively be treated as identical. This reduces storage space
+/// substantially.
+///
+/// The total number of NFA states (12) is greater than the total number of
+/// NFA states that are in the DFA. In particular, any NFA state that can only
+/// be reached by epsilon transitions will never have explicit usage in the
+/// DFA.
+const TRANS_SIZE: usize = 60;
+
+/// The number of possible transition classes. (See the comment on `TRANS_SIZE`
+/// for more details.)
+const CLASS_SIZE: usize = 256;
+
+struct Dfa {
+    trans: [DfaState; TRANS_SIZE],
+    classes: DfaClasses,
+}
+
+impl Dfa {
+    fn new() -> Dfa {
+        Dfa {
+            trans: [DfaState(0); TRANS_SIZE],
+            classes: DfaClasses::new(),
+        }
+    }
+
+    fn new_state(&self, nfa_state: NfaState) -> DfaState {
+        let idx = nfa_state as u16 * self.classes.num_classes() as u16;
+        let mut s = DfaState(idx);
+        s.set_final_flags(&nfa_state);
+        s
+    }
+
+    fn nfa_state(&self, dfa_state: DfaState) -> NfaState {
+        NFA_STATES[dfa_state.index() / self.classes.num_classes()]
+    }
+
+    fn get(&self, state: DfaState, c: u8) -> DfaState {
+        let cls = self.classes.classes[c as usize];
+        self.trans[state.index() + cls as usize]
+    }
+
+    fn set(&mut self, from: DfaState, c: u8, to: DfaState) {
+        let cls = self.classes.classes[c as usize];
+        self.trans[from.index() + cls as usize] = to;
+    }
+}
+
+struct DfaClasses {
+    classes: [u8; CLASS_SIZE],
+    next_class: usize,
+}
+
+impl DfaClasses {
+    fn new() -> DfaClasses {
+        DfaClasses { classes: [0; CLASS_SIZE], next_class: 1 }
+    }
+
+    fn add(&mut self, b: u8) {
+        if self.next_class > CLASS_SIZE {
+            panic!("added too many classes")
+        }
+        self.classes[b as usize] = self.next_class as u8;
+        self.next_class = self.next_class + 1;
+    }
+
+    fn num_classes(&self) -> usize {
+        self.next_class as usize
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DfaState(u16);
+
+impl DfaState {
+    fn index(&self) -> usize {
+        (self.0 & 0b1111_1111) as usize
+    }
+
+    fn set_output(&mut self, yes: bool) -> &mut DfaState {
+        if yes {
+            self.0 |= 0b1000_0000_0000_0000;
+        }
+        self
+    }
+
+    fn has_output(&self) -> bool {
+        self.0 & 0b1000_0000_0000_0000 > 0
+    }
+
+    fn set_final_flags(&mut self, state: &NfaState) -> &mut DfaState {
+        match *state {
+            NfaState::End => self.set_final_end(true),
+            NfaState::EndRecord | NfaState::CRLF => {
+                self.set_final_record(true)
+            }
+            NfaState::EndFieldDelim => self.set_final_field(true),
+            _ => self,
+        }
+    }
+
+    fn is_final(&self) -> bool {
+        self.0 & 0b0111_0000_0000_0000 > 0
+    }
+
+    fn set_final_end(&mut self, yes: bool) -> &mut DfaState {
+        if yes {
+            self.0 |= 0b0100_0000_0000_0000;
+        }
+        self
+    }
+
+    fn is_final_end(&self) -> bool {
+        self.0 & 0b0100_0000_0000_0000 > 0
+    }
+
+    fn set_final_record(&mut self, yes: bool) -> &mut DfaState {
+        if yes {
+            self.0 |= 0b0010_0000_0000_0000;
+        }
+        self
+    }
+
+    fn is_final_record(&self) -> bool {
+        self.0 & 0b0010_0000_0000_0000 > 0
+    }
+
+    fn set_final_field(&mut self, yes: bool) -> &mut DfaState {
+        if yes {
+            self.0 |= 0b0001_0000_0000_0000;
+        }
+        self
+    }
+
+    fn is_final_field(&self) -> bool {
+        self.0 & 0b0001_0000_0000_0000 > 0
+    }
+}
 
 impl fmt::Debug for Dfa {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -414,39 +807,28 @@ impl fmt::Debug for Dfa {
     }
 }
 
+impl fmt::Debug for DfaClasses {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "DfaClasses {{ classes: N/A, next_class: {:?} }}",
+            self.next_class)
+    }
+}
+
 impl Clone for Dfa {
     fn clone(&self) -> Dfa {
         let mut dfa = Dfa::new();
-        dfa.0.copy_from_slice(&self.0);
+        dfa.trans.copy_from_slice(&self.trans);
         dfa
     }
 }
 
-impl Dfa {
-    fn new() -> Dfa {
-        Dfa([0; 3072])
-    }
-
-    fn get(&self, stateidx: u8, c: u8) -> (u8, bool, bool) {
-        let mut idx = self.0[stateidx as usize * 256 + c as usize];
-        (idx & 0b0011_1111, idx & 0b1000_0000 > 0, idx & 0b0100_0000 > 0)
-    }
-
-    fn set(
-        &mut self,
-        fromidx: u8,
-        c: u8,
-        mut toidx: u8,
-        output: bool,
-        fin: bool,
-    ) {
-        if output {
-            toidx |= 0b1000_0000;
-        }
-        if fin {
-            toidx |= 0b0100_0000;
-        }
-        self.0[fromidx as usize * 256 + c as usize] = toidx;
+impl Clone for DfaClasses {
+    fn clone(&self) -> DfaClasses {
+        let mut x = DfaClasses::new();
+        x.classes.copy_from_slice(&self.classes);
+        x
     }
 }
 
@@ -467,15 +849,19 @@ mod tests {
 
     macro_rules! csv {
         ($([$($field:expr),*]),*) => {{
-            let mut csv = Csv::new();
-            $(
-                let mut row = Row::new();
+            #[allow(unused_mut)]
+            fn x() -> Csv {
+                let mut csv = Csv::new();
                 $(
-                    row.push(Field::from($field).unwrap());
+                    let mut row = Row::new();
+                    $(
+                        row.push(Field::from($field).unwrap());
+                    )*
+                    csv.push(row);
                 )*
-                csv.push(row);
-            )*
-            csv
+                csv
+            }
+            x()
         }}
     }
 
@@ -487,6 +873,14 @@ mod tests {
             #[test]
             fn $name() {
                 let mut builder = ReaderBuilder::new();
+                $config(&mut builder);
+                let mut rdr = builder.build();
+                let got = parse(&mut rdr, $data);
+                let expected = $expected;
+                assert_eq!(expected, got);
+
+                let mut builder = ReaderBuilder::new();
+                builder.nfa(true);
                 $config(&mut builder);
                 let mut rdr = builder.build();
                 let got = parse(&mut rdr, $data);
@@ -508,29 +902,22 @@ mod tests {
 
             match res {
                 ReadResult::InputEmpty => {
-                    // println!("InputEmpty");
                     if !data.is_empty() {
                         panic!("missing input data")
                     }
                     fieldpos += nout;
                 }
                 ReadResult::OutputFull => panic!("field too large"),
-                ReadResult::Field => {
-                    // println!("Field");
+                ReadResult::Field { record_end } => {
                     let s = str::from_utf8(&field[..fieldpos + nout]).unwrap();
                     row.push(Field::from(s).unwrap());
                     fieldpos = 0;
-                }
-                ReadResult::Record => {
-                    // println!("Record");
-                    // let s = str::from_utf8(&field[..fieldpos + nout]).unwrap();
-                    // row.push(Field::from(s).unwrap());
-                    // fieldpos = 0;
-                    csv.push(row);
-                    row = Row::new();
+                    if record_end {
+                        csv.push(row);
+                        row = Row::new();
+                    }
                 }
                 ReadResult::End => {
-                    // println!("End");
                     return csv;
                 }
             }
@@ -620,9 +1007,7 @@ mod tests {
     parses_to!(
         ascii_delimited, "a\x1fb\x1ec\x1fd",
         csv![["a", "b"], ["c", "d"]],
-        |b: &mut ReaderBuilder| {
-            b.delimiter(b'\x1f').terminator(Terminator::Any(b'\x1e'));
-        });
+        |b: &mut ReaderBuilder| { b.ascii(); });
 
     parses_to!(quote_empty, "\"\"", csv![[""]]);
     parses_to!(quote_lf, "\"\"\n", csv![[""]]);
@@ -683,8 +1068,18 @@ mod tests {
 
         let mut rdr = Reader::new();
         assert_read!(rdr, b(" "), &mut [0], 1, 1, InputEmpty);
-        assert_read!(rdr, &[], &mut [0], 0, 0, Field);
-        assert_read!(rdr, &[], &mut [0], 0, 0, Record);
+        assert_read!(rdr, &[], &mut [0], 0, 0, Field { record_end: true });
+        assert_read!(rdr, &[], &mut [0], 0, 0, End);
+    }
+
+    // Test that a single comma ...
+    #[test]
+    fn stream_comma() {
+        use ReadResult::*;
+
+        let mut rdr = Reader::new();
+        assert_read!(rdr, b(","), &mut [0], 1, 0, Field { record_end: false });
+        assert_read!(rdr, &[], &mut [0], 0, 0, Field { record_end: true });
         assert_read!(rdr, &[], &mut [0], 0, 0, End);
     }
 
@@ -715,8 +1110,7 @@ mod tests {
         inp = &inp[1..];
         assert!(inp.is_empty());
 
-        assert_read!(rdr, inp, out, 0, 0, Field);
-        assert_read!(rdr, inp, out, 0, 0, Record);
+        assert_read!(rdr, &[], out, 0, 0, Field { record_end: true });
         assert_read!(rdr, inp, out, 0, 0, End);
     }
 
@@ -741,8 +1135,69 @@ mod tests {
         assert_read!(rdr, b("x"), &mut out[6..], 1, 1, InputEmpty);
         assert_eq!(&out[..7], b("fooquux"));
 
-        assert_read!(rdr, &[], out, 0, 0, Field);
-        assert_read!(rdr, &[], out, 0, 0, Record);
+        assert_read!(rdr, &[], out, 0, 0, Field { record_end: true });
         assert_read!(rdr, &[], out, 0, 0, End);
+    }
+
+    // Test we can read doubled quotes correctly in a stream.
+    #[test]
+    fn stream_doubled_quotes() {
+        use ReadResult::*;
+
+        let mut out = &mut [0; 10];
+        let mut rdr = Reader::new();
+
+        assert_read!(rdr, b("\"fo\""), out, 4, 2, InputEmpty);
+        assert_eq!(&out[..2], b("fo"));
+
+        assert_read!(rdr, b("\"o"), &mut out[2..], 2, 2, InputEmpty);
+        assert_eq!(&out[..4], b("fo\"o"));
+
+        assert_read!(rdr, &[], out, 0, 0, Field { record_end: true });
+        assert_read!(rdr, &[], out, 0, 0, End);
+    }
+
+    // Test we can read escaped quotes correctly in a stream.
+    #[test]
+    fn stream_escaped_quotes() {
+        use ReadResult::*;
+
+        let mut out = &mut [0; 10];
+        let mut builder = ReaderBuilder::new();
+        let mut rdr = builder.escape(Some(b'\\')).build();
+
+        assert_read!(rdr, b("\"fo\\"), out, 4, 2, InputEmpty);
+        assert_eq!(&out[..2], b("fo"));
+
+        assert_read!(rdr, b("\"o"), &mut out[2..], 2, 2, InputEmpty);
+        assert_eq!(&out[..4], b("fo\"o"));
+
+        assert_read!(rdr, &[], out, 0, 0, Field { record_end: true });
+        assert_read!(rdr, &[], out, 0, 0, End);
+    }
+
+    // Test that we can reset the parser mid-stream and count on it to do
+    // the right thing.
+    #[test]
+    fn reset_works() {
+        use ReadResult::*;
+
+        let mut out = &mut [0; 10];
+        let mut rdr = Reader::new();
+
+        assert_read!(rdr, b("\"foo"), out, 4, 3, InputEmpty);
+        assert_eq!(&out[..3], b("foo"));
+
+        // Without reseting the parser state, the reader will remember that
+        // we're in a quoted field, and therefore interpret the leading double
+        // quotes below as a single quote and the trailing quote as a matching
+        // terminator. With the reset, however, the parser forgets the quoted
+        // field and treats the leading double quotes as a syntax quirk and
+        // drops them, in addition to hanging on to the trailing unmatched
+        // quote. (Matches Python's behavior.)
+        rdr.reset();
+
+        assert_read!(rdr, b("\"\"bar\""), out, 6, 4, InputEmpty);
+        assert_eq!(&out[..4], b("bar\""));
     }
 }
