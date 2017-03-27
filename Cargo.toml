@@ -15,9 +15,4 @@ name = "csv"
 bench = false
 
 [dependencies]
-byteorder = "1"
-rustc-serialize = "0.3"
-memchr = "1"
-
-[dev-dependencies]
-regex = "0.2"
+csv-core = { path = "csv-core", version = "0.1.0" }
