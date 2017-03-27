@@ -171,7 +171,7 @@
 //!     This behavior may be turned off by calling `flexible` with `true`.
 //!   * Empty lines (that do not include other whitespace) are ignored
 //!     by the parser.
-//!   * This crates parses CSV data at the *byte* level, which means all
+//!   * This crate parses CSV data at the *byte* level, which means all
 //!     delimiter and quote characters must be ASCII. While unfortunate, this
 //!     means that CSV data that is not UTF-8 encoded can be parsed. In
 //!     general, the writer and reader API biases toward using Unicode strings
