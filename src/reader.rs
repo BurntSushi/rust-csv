@@ -1,4 +1,3 @@
-use std::cmp;
 use std::io::{self, BufRead};
 
 use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
@@ -155,21 +154,22 @@ impl<R: io::Read> Reader<R> {
         if self.eof {
             return Ok(ReadField::Done);
         }
+        if field.is_empty() {
+            field.resize(4, 0);
+        }
         let mut outlen = 0;
         loop {
             let (res, nin, nout) = {
                 let input = self.rdr.fill_buf()?;
-                println!("input: {:?}", ::std::str::from_utf8(input));
                 self.core.read(input, &mut field[outlen..])
             };
-            println!("res: {:?}, nin: {:?}, nout: {:?}", res, nin, nout);
             outlen += nout;
             self.rdr.consume(nin);
             match res {
                 InputEmpty => continue,
                 OutputFull => {
                     let new_len = field.len().checked_mul(2).unwrap();
-                    field.resize(cmp::max(4, new_len), 0);
+                    field.resize(new_len, 0);
                     continue;
                 }
                 Field { record_end: false } => {
