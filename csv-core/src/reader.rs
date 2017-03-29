@@ -385,6 +385,12 @@ impl Reader {
         input: &[u8],
         output: &mut [u8],
     ) -> (ReadResult, DfaState, usize, usize) {
+        debug_assert!(!input.is_empty());
+        if output.is_empty() {
+            // If the output buffer is empty, then we can never make progress,
+            // so just quit now.
+            return (ReadResult::OutputFull, state, 0, 0);
+        }
         let (mut nin, mut nout) = (0, 0);
         while nin < input.len() && nout < output.len() {
             let (s, has_out) = self.dfa.get_output(state, input[nin]);
@@ -495,6 +501,12 @@ impl Reader {
         input: &[u8],
         output: &mut [u8],
     ) -> (ReadResult, NfaState, usize, usize) {
+        debug_assert!(!input.is_empty());
+        if output.is_empty() {
+            // If the output buffer is empty, then we can never make progress,
+            // so just quit now.
+            return (ReadResult::OutputFull, state, 0, 0);
+        }
         let (mut nin, mut nout) = (0, 0);
         while nin < input.len() && nout < output.len() {
             let (s, i, o) = self.nfa_transition(state, input[nin]);
