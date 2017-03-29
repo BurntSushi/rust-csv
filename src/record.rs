@@ -17,11 +17,9 @@ impl ByteRecord {
         self.bounds(i).map(|range| &self.fields[range])
     }
 
-    /// Return the field at index `i` as a mutable slice.
-    ///
-    /// If no field at index `i` exists, then this returns `None`.
-    pub fn get_mut(&mut self, i: usize) -> Option<&mut [u8]> {
-        self.bounds(i).map(move |range| &mut self.fields[range])
+    /// Returns the number of fields in this record.
+    pub fn len(&self) -> usize {
+        self.starts.len()
     }
 
     /// Clear this record so that it has zero fields.
@@ -32,11 +30,11 @@ impl ByteRecord {
         self.starts.clear();
     }
 
-    /// Return the underlying storage of fields.
+    /// Return the underlying storage.
     #[doc(hidden)]
-    pub fn as_vec_mut(&mut self) -> &mut Vec<u8> {
+    pub fn as_parts(&mut self) -> (&mut Vec<u8>, &mut Vec<usize>) {
         // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-        &mut self.fields
+        (&mut self.fields, &mut self.starts)
     }
 
     /// Add a new field starting at the end of the internal buffer.
@@ -63,10 +61,6 @@ impl ByteRecord {
 impl ops::Index<usize> for ByteRecord {
     type Output = [u8];
     fn index(&self, i: usize) -> &[u8] { self.get(i).unwrap() }
-}
-
-impl ops::IndexMut<usize> for ByteRecord {
-    fn index_mut(&mut self, i: usize) -> &mut [u8] { self.get_mut(i).unwrap() }
 }
 
 /// An iterator over the fields in a byte record.
