@@ -10,6 +10,16 @@ pub struct ByteRecord {
 }
 
 impl ByteRecord {
+    /// Create a new empty `ByteRecord`.
+    pub fn new() -> ByteRecord {
+        ByteRecord::with_capacity(10)
+    }
+
+    /// Create a new empty `ByteRecord` with the given capacity.
+    pub fn with_capacity(capacity: usize) -> ByteRecord {
+        ByteRecord { fields: vec![0; capacity], starts: vec![] }
+    }
+
     /// Return the field at index `i`.
     ///
     /// If no field at index `i` exists, then this returns `None`.
