@@ -415,6 +415,7 @@ impl Reader {
         mut state: DfaState,
         input: &[u8],
     ) -> (ReadResult, DfaState, usize, usize) {
+        debug_assert!(!input.is_empty());
         let mut nin = 0;
         while nin < input.len() {
             state = self.dfa.get(state, input[nin]);
@@ -1163,6 +1164,27 @@ mod tests {
 
         assert_read!(rdr, b("\"o"), &mut out[2..], 2, 2, InputEmpty);
         assert_eq!(&out[..4], b("fo\"o"));
+
+        assert_read!(rdr, &[], out, 0, 0, Field { record_end: true });
+        assert_read!(rdr, &[], out, 0, 0, End);
+    }
+
+    // Test that empty output buffers don't wreak havoc.
+    #[test]
+    fn stream_empty_output() {
+        use ReadResult::*;
+
+        let mut out = &mut [0; 10];
+        let mut rdr = Reader::new();
+
+        assert_read!(
+            rdr, b("foo,bar"), out, 4, 3, Field { record_end: false });
+        assert_eq!(&out[..3], b("foo"));
+
+        assert_read!(rdr, b("bar"), &mut [], 0, 0, OutputFull);
+
+        assert_read!(rdr, b("bar"), out, 3, 3, InputEmpty);
+        assert_eq!(&out[..3], b("bar"));
 
         assert_read!(rdr, &[], out, 0, 0, Field { record_end: true });
         assert_read!(rdr, &[], out, 0, 0, End);

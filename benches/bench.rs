@@ -1,108 +1,74 @@
 #![feature(test)]
 
 extern crate csv;
-extern crate rustc_serialize;
 extern crate test;
 
-use std::fmt::{Debug, Display};
-use std::fs;
-use std::io::{self, Read, Seek};
+use std::io;
+
 use test::Bencher;
 
-use csv::Reader;
+use csv::{ByteRecord, Reader, ReaderBuilder, ReadField};
 
-static CSV_DATA: &'static str = "./examples/data/bench.csv";
-static CSV_DATA_GAME: &'static str = "./examples/data/game.csv";
+static NFL: &'static str = include_str!("../examples/data/bench.csv");
+static GAME: &'static str = include_str!("../examples/data/game.csv");
 
-fn ordie<T, E: Debug+Display>(r: Result<T, E>) -> T {
-    r.or_else(|e: E| -> Result<T, E> { panic!(format!("{:?}", e)) }).unwrap()
-}
-
-fn file_to_mem(fp: &str) -> io::Cursor<Vec<u8>> {
-    let mut f = ordie(fs::File::open(fp));
-    let mut bs = vec![];
-    ordie(f.read_to_end(&mut bs));
-    io::Cursor::new(bs)
-}
-
-fn reader<'a>(rdr: &'a mut io::Cursor<Vec<u8>>)
-             -> Reader<&'a mut io::Cursor<Vec<u8>>> {
-    let _ = ordie(rdr.seek(io::SeekFrom::Start(0)));
-    Reader::from_reader(rdr.by_ref())
+#[bench]
+fn count_nfl_field_bytes(b: &mut Bencher) {
+    let data = NFL.as_bytes();
+    b.bytes = data.len() as u64;
+    b.iter(|| {
+        let mut rdr = ReaderBuilder::new().from_reader(data);
+        assert_eq!(count_read_field_bytes(&mut rdr), 130000);
+    })
 }
 
 #[bench]
-fn raw_records_nfl(b: &mut Bencher) {
-    let mut data = file_to_mem(CSV_DATA);
-    b.bytes = data.get_ref().len() as u64;
+fn count_game_field_bytes(b: &mut Bencher) {
+    let data = GAME.as_bytes();
+    b.bytes = data.len() as u64;
     b.iter(|| {
-        let mut dec = reader(&mut data);
-        while !dec.done() {
-            while let Some(r) = dec.next_bytes().into_iter_result() {
-                r.unwrap();
-            }
+        let mut rdr = ReaderBuilder::new().from_reader(data);
+        assert_eq!(count_read_field_bytes(&mut rdr), 600000);
+    })
+}
+
+#[bench]
+fn count_nfl_record_bytes(b: &mut Bencher) {
+    let data = NFL.as_bytes();
+    b.bytes = data.len() as u64;
+    b.iter(|| {
+        let mut rdr = ReaderBuilder::new().from_reader(data);
+        assert_eq!(count_read_record_bytes(&mut rdr), 10000);
+    })
+}
+
+#[bench]
+fn count_game_record_bytes(b: &mut Bencher) {
+    let data = GAME.as_bytes();
+    b.bytes = data.len() as u64;
+    b.iter(|| {
+        let mut rdr = ReaderBuilder::new().from_reader(data);
+        assert_eq!(count_read_record_bytes(&mut rdr), 100000);
+    })
+}
+
+fn count_read_field_bytes<R: io::Read>(rdr: &mut Reader<R>) -> u64 {
+    let mut count = 0;
+    let mut field = Vec::with_capacity(1024);
+    loop {
+        match rdr.read_field_bytes(&mut field).unwrap() {
+            ReadField::Field | ReadField::Record => { count += 1 }
+            ReadField::End => break,
         }
-    })
+    }
+    count
 }
 
-#[bench]
-fn raw_records_game(b: &mut Bencher) {
-    let mut data = file_to_mem(CSV_DATA_GAME);
-    b.bytes = data.get_ref().len() as u64;
-    b.iter(|| {
-        let mut dec = reader(&mut data);
-        while !dec.done() {
-            while let Some(r) = dec.next_bytes().into_iter_result() {
-                r.unwrap();
-            }
-        }
-    })
-}
-
-#[bench]
-fn byte_records(b: &mut Bencher) {
-    let mut data = file_to_mem(CSV_DATA);
-    b.bytes = data.get_ref().len() as u64;
-    b.iter(|| {
-        let mut dec = reader(&mut data);
-        for r in dec.byte_records() { let _ = r.unwrap(); }
-    })
-}
-
-#[bench]
-fn string_records(b: &mut Bencher) {
-    let mut data = file_to_mem(CSV_DATA);
-    b.bytes = data.get_ref().len() as u64;
-    b.iter(|| {
-        let mut dec = reader(&mut data);
-        for r in dec.records() { let _ = r.unwrap(); }
-    })
-}
-
-#[allow(dead_code)]
-#[derive(RustcDecodable)]
-struct Play {
-    gameid: String,
-    qtr: i32,
-    min: Option<i32>,
-    sec: Option<i32>,
-    team_off: String,
-    team_def: String,
-    down: Option<i32>,
-    togo: Option<i32>,
-    ydline: Option<i32>,
-    description: String,
-    offscore: i32,
-    defscore: i32,
-    season: i32,
-}
-
-#[bench]
-fn decoded_records(b: &mut Bencher) {
-    let mut data = file_to_mem(CSV_DATA);
-    b.bytes = data.get_ref().len() as u64;
-    b.iter(|| {
-        let mut dec = reader(&mut data);
-        for r in dec.decode::<Play>() { let _ = r.unwrap(); }
-    })
+fn count_read_record_bytes<R: io::Read>(rdr: &mut Reader<R>) -> u64 {
+    let mut count = 0;
+    let mut rec = ByteRecord::new();
+    while rdr.read_record_bytes(&mut rec).unwrap() {
+        count += 1;
+    }
+    count
 }
