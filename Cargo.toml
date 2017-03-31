@@ -15,6 +15,7 @@ name = "csv"
 bench = false
 
 [dependencies]
+bytecount = "0.1"
 csv-core = { path = "csv-core", version = "0.1.0" }
 
 [profile.release]

@@ -5,8 +5,9 @@ use std::ops;
 pub struct ByteRecord {
     /// All fields in this record, stored contiguously.
     fields: Vec<u8>,
-    /// The starting index of each field. The first value is always zero.
-    starts: Vec<usize>,
+    /// The ending index of each field. The last value is always equal to
+    /// the length of `fields`.
+    ends: Vec<usize>,
 }
 
 impl ByteRecord {
@@ -17,7 +18,7 @@ impl ByteRecord {
 
     /// Create a new empty `ByteRecord` with the given capacity.
     pub fn with_capacity(capacity: usize) -> ByteRecord {
-        ByteRecord { fields: vec![0; capacity], starts: vec![] }
+        ByteRecord { fields: vec![0; capacity], ends: vec![] }
     }
 
     /// Return the field at index `i`.
@@ -29,40 +30,34 @@ impl ByteRecord {
 
     /// Returns the number of fields in this record.
     pub fn len(&self) -> usize {
-        self.starts.len()
+        self.ends.len()
     }
 
     /// Clear this record so that it has zero fields.
     ///
-    /// This permits the record to be reused.
+    /// Note that it is not necessary to clear the record to reuse it with
+    /// the CSV reader.
     pub fn clear(&mut self) {
         self.fields.clear();
-        self.starts.clear();
+        self.ends.clear();
     }
 
     /// Return the underlying storage.
     #[doc(hidden)]
     pub fn as_parts(&mut self) -> (&mut Vec<u8>, &mut Vec<usize>) {
         // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-        (&mut self.fields, &mut self.starts)
-    }
-
-    /// Add a new field starting at the end of the internal buffer.
-    #[doc(hidden)]
-    pub fn add_start(&mut self) {
-        // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-        self.starts.push(self.fields.len());
+        (&mut self.fields, &mut self.ends)
     }
 
     /// Returns the bounds of field `i`.
     fn bounds(&self, i: usize) -> Option<ops::Range<usize>> {
-        let start = match self.starts.get(i) {
+        let end = match self.ends.get(i) {
             None => return None,
-            Some(&start) => start,
-        };
-        let end = match i.checked_add(1).and_then(|i| self.starts.get(i)) {
-            None => self.fields.len(),
             Some(&end) => end,
+        };
+        let start = match i.checked_sub(1).and_then(|i| self.ends.get(i)) {
+            None => 0,
+            Some(&start) => start,
         };
         Some(ops::Range { start: start, end: end })
     }
