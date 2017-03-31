@@ -1,10 +1,11 @@
 use std::cmp;
 use std::io::{self, BufRead};
 
+use bytecount;
 use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
 
 use record::ByteRecord;
-use Terminator;
+use {Error, Result, Terminator};
 
 /// Builds a CSV reader with various configuration knobs.
 ///
@@ -15,6 +16,7 @@ use Terminator;
 pub struct ReaderBuilder {
     builder: CoreReaderBuilder,
     capacity: usize,
+    flexible: bool,
 }
 
 impl Default for ReaderBuilder {
@@ -22,6 +24,7 @@ impl Default for ReaderBuilder {
         ReaderBuilder {
             builder: CoreReaderBuilder::default(),
             capacity: 8 * (1<<10),
+            flexible: false,
         }
     }
 }
@@ -48,6 +51,18 @@ impl ReaderBuilder {
     /// The default is `b','`.
     pub fn delimiter(&mut self, delimiter: u8) -> &mut ReaderBuilder {
         self.builder.delimiter(delimiter);
+        self
+    }
+
+    /// Whether the number of fields in records is allowed to change or not.
+    ///
+    /// When disabled (which is the default), parsing CSV data will return an
+    /// error if a record is found with a number of fields different from the
+    /// number of fields in a previous record.
+    ///
+    /// When enabled, this error checking is turned off.
+    pub fn flexible(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.flexible = yes;
         self
     }
 
@@ -126,14 +141,17 @@ impl ReaderBuilder {
 pub struct Reader<R> {
     core: CoreReader,
     rdr: io::BufReader<R>,
-    eof: bool,
+    state: ReaderState,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ReadField {
-    Field,
-    Record,
-    End,
+#[derive(Debug)]
+struct ReaderState {
+    flexible: bool,
+    first_field_count: Option<u64>,
+    prev_pos: Position,
+    cur_pos: Position,
+    cur_field_count: u64,
+    eof: bool,
 }
 
 impl<R: io::Read> Reader<R> {
@@ -143,20 +161,30 @@ impl<R: io::Read> Reader<R> {
         Reader {
             core: builder.builder.build(),
             rdr: io::BufReader::with_capacity(builder.capacity, rdr),
-            eof: false,
+            state: ReaderState {
+                flexible: builder.flexible,
+                first_field_count: None,
+                prev_pos: Position::new(),
+                cur_pos: Position::new(),
+                cur_field_count: 0,
+                eof: false,
+            },
         }
+    }
+
+    pub fn position(&self) -> &Position {
+        &self.state.cur_pos
     }
 
     pub fn read_record_bytes(
         &mut self,
         record: &mut ByteRecord,
-    ) -> io::Result<bool> {
+    ) -> Result<bool> {
         use csv_core::ReadResult::*;
 
         let (mut fields, mut starts) = record.as_parts();
         starts.clear();
-        starts.push(0);
-        if self.eof {
+        if self.state.eof {
             return Ok(false);
         }
         unsafe {
@@ -169,7 +197,7 @@ impl<R: io::Read> Reader<R> {
             //
             // PERFORMANCE: Neglecting this optimization (and using `resize`
             // instead) results in a sizable drop in the `count_*_record_bytes`
-            // benchmarks. Seems like something specialization could fix?
+            // benchmarks.
             let len = fields.capacity();
             fields.set_len(len);
         }
@@ -188,6 +216,7 @@ impl<R: io::Read> Reader<R> {
             loop {
                 let (res, nin, nout) =
                     self.core.read(&input[inlen..], &mut fields[outlen..]);
+                self.state.update_pos(&input[inlen..inlen + nin]);
                 inlen += nin;
                 outlen += nout;
                 match res {
@@ -202,10 +231,13 @@ impl<R: io::Read> Reader<R> {
                     Field { record_end } => {
                         starts.push(outlen);
                         if record_end {
+                            self.state.add_record()?;
                             break 'OUTER;
+                        } else {
+                            self.state.add_field();
                         }
                     }
-                    End => { self.eof = true; break 'OUTER; }
+                    End => { self.state.eof = true; break 'OUTER; }
                 }
                 // If our buffer ran out, break and try to refill it.
                 // (The core reader interprets an emtpy slice as EOF, and we
@@ -217,16 +249,16 @@ impl<R: io::Read> Reader<R> {
         }
         self.rdr.consume(inlen);
         fields.truncate(outlen);
-        Ok(!self.eof)
+        Ok(!self.state.eof)
     }
 
     pub fn read_field_bytes(
         &mut self,
         field: &mut Vec<u8>,
-    ) -> io::Result<ReadField> {
+    ) -> Result<ReadField> {
         use csv_core::ReadResult::*;
 
-        if self.eof {
+        if self.state.eof {
             return Ok(ReadField::End);
         }
         let len = field.capacity();
@@ -240,7 +272,7 @@ impl<R: io::Read> Reader<R> {
             //
             // PERFORMANCE: Neglecting this optimization (and using `resize`
             // instead) results in a 50% drop in the `count_*_field_bytes`
-            // benchmarks. Seems like something specialization could fix?
+            // benchmarks.
             field.set_len(len);
         }
 
@@ -248,7 +280,10 @@ impl<R: io::Read> Reader<R> {
         loop {
             let (res, nin, nout) = {
                 let input = self.rdr.fill_buf()?;
-                self.core.read(input, &mut field[outlen..])
+                let (res, nin, nout) =
+                    self.core.read(input, &mut field[outlen..]);
+                self.state.update_pos(&input[..nin]);
+                (res, nin, nout)
             };
             self.rdr.consume(nin);
             outlen += nout;
@@ -261,9 +296,15 @@ impl<R: io::Read> Reader<R> {
                     field.resize(cmp::max(4, new_len), 0);
                     continue;
                 }
-                Field { record_end: false } => ReadField::Field,
-                Field { record_end: true } => ReadField::Record,
-                End => { self.eof = true; ReadField::End }
+                Field { record_end: false } => {
+                    self.state.add_field();
+                    ReadField::Field
+                }
+                Field { record_end: true } => {
+                    self.state.add_record()?;
+                    ReadField::Record
+                }
+                End => { self.state.eof = true; ReadField::End }
             };
             // This is not only for correctness but for safety as well.
             // Namely, bytes after `outlen` in `field` may be uninitialized.
@@ -273,13 +314,87 @@ impl<R: io::Read> Reader<R> {
     }
 }
 
+impl ReaderState {
+    #[inline(always)]
+    fn add_field(&mut self) {
+        self.cur_field_count = self.cur_field_count.checked_add(1).unwrap();
+    }
+
+    #[inline(always)]
+    fn add_record(&mut self) -> Result<()> {
+        self.cur_pos.record = self.cur_pos.record.checked_add(1).unwrap();
+        if !self.flexible {
+            let got = self.cur_field_count.checked_add(1).unwrap();
+            match self.first_field_count {
+                None => self.first_field_count = Some(got),
+                Some(expected) => {
+                    if got != expected {
+                        return Err(Error::UnequalLengths {
+                            expected_len: expected,
+                            pos: self.prev_pos.clone(),
+                            len: got,
+                        });
+                    }
+                }
+            }
+        }
+        self.prev_pos = self.cur_pos.clone();
+        self.cur_field_count = 0;
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn update_pos(&mut self, input: &[u8]) {
+        self.cur_pos.byte += input.len() as u64;
+        self.cur_pos.line += bytecount::count(input, b'\n') as u64;
+    }
+}
+
+/// A position in CSV data.
+///
+/// A position is used to report errors in CSV data. All positions include the
+/// byte offset, line number and record index at which the error occurred.
+#[derive(Clone, Debug)]
+pub struct Position {
+    byte: u64,
+    line: u64,
+    record: u64,
+}
+
+impl Position {
+    /// Returns a new position initialized to the start value.
+    fn new() -> Position { Position { byte: 0, line: 1, record: 0 } }
+    /// The byte offset, starting at `0`, of this position.
+    pub fn byte(&self) -> u64 { self.byte }
+    /// The line number, starting at `1`, of this position.
+    pub fn line(&self) -> u64 { self.line }
+    /// The record index, starting at `0`, of this position.
+    pub fn record(&self) -> u64 { self.record }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReadField {
+    Field,
+    Record,
+    End,
+}
+
 #[cfg(test)]
 mod tests {
-    use record::ByteRecord;
-    use super::{ReaderBuilder, ReadField};
+    use {ByteRecord, Error, ReaderBuilder, ReadField};
+    use super::Position;
 
     fn b(s: &str) -> &[u8] { s.as_bytes() }
     fn s(b: &[u8]) -> &str { ::std::str::from_utf8(b).unwrap() }
+
+    macro_rules! assert_match {
+        ($e:expr, $p:pat) => {{
+            match $e {
+                $p => {}
+                e => panic!("match failed, got {:?}", e),
+            }
+        }}
+    }
 
     macro_rules! assert_read_field_bytes {
         ($rdr:expr, $buf:expr, $res:expr, $out:expr) => {{
@@ -307,20 +422,88 @@ mod tests {
     }
 
     #[test]
+    fn read_field_unequal_fails() {
+        let data = b("foo,bar\nbaz");
+        let mut rdr = ReaderBuilder::new().from_reader(data);
+        let mut buf = vec![];
+
+        assert_read_field_bytes!(rdr, buf, ReadField::Field, "foo");
+        assert_read_field_bytes!(rdr, buf, ReadField::Record, "bar");
+        assert_match!(
+            rdr.read_field_bytes(&mut buf),
+            Err(Error::UnequalLengths {
+                expected_len: 2,
+                pos: Position { byte: 8, line: 2, record: 1 },
+                len: 1,
+            }));
+    }
+
+    #[test]
+    fn read_field_unequal_ok() {
+        let data = b("foo,bar\nbaz");
+        let mut rdr = ReaderBuilder::new().flexible(true).from_reader(data);
+        let mut buf = vec![];
+
+        assert_read_field_bytes!(rdr, buf, ReadField::Field, "foo");
+        assert_read_field_bytes!(rdr, buf, ReadField::Record, "bar");
+        assert_read_field_bytes!(rdr, buf, ReadField::Record, "baz");
+        assert_read_field_bytes!(rdr, buf, ReadField::End, "");
+    }
+
+    #[test]
     fn read_record_bytes() {
         let data = b("foo,\"b,ar\",baz\nabc,mno,xyz");
         let mut rdr = ReaderBuilder::new().from_reader(data);
         let mut rec = ByteRecord::new();
 
         assert!(rdr.read_record_bytes(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
         assert_eq!("foo", s(&rec[0]));
         assert_eq!("b,ar", s(&rec[1]));
         assert_eq!("baz", s(&rec[2]));
 
         assert!(rdr.read_record_bytes(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
         assert_eq!("abc", s(&rec[0]));
         assert_eq!("mno", s(&rec[1]));
         assert_eq!("xyz", s(&rec[2]));
+
+        assert!(!rdr.read_record_bytes(&mut rec).unwrap());
+    }
+
+    #[test]
+    fn read_record_unequal_fails() {
+        let data = b("foo\nbar,baz");
+        let mut rdr = ReaderBuilder::new().from_reader(data);
+        let mut rec = ByteRecord::new();
+
+        assert!(rdr.read_record_bytes(&mut rec).unwrap());
+        assert_eq!(1, rec.len());
+        assert_eq!("foo", s(&rec[0]));
+
+        assert_match!(
+            rdr.read_record_bytes(&mut rec),
+            Err(Error::UnequalLengths {
+                expected_len: 1,
+                pos: Position { byte: 4, line: 2, record: 1},
+                len: 2,
+            }));
+    }
+
+    #[test]
+    fn read_record_unequal_ok() {
+        let data = b("foo\nbar,baz");
+        let mut rdr = ReaderBuilder::new().flexible(true).from_reader(data);
+        let mut rec = ByteRecord::new();
+
+        assert!(rdr.read_record_bytes(&mut rec).unwrap());
+        assert_eq!(1, rec.len());
+        assert_eq!("foo", s(&rec[0]));
+
+        assert!(rdr.read_record_bytes(&mut rec).unwrap());
+        assert_eq!(2, rec.len());
+        assert_eq!("bar", s(&rec[0]));
+        assert_eq!("baz", s(&rec[1]));
 
         assert!(!rdr.read_record_bytes(&mut rec).unwrap());
     }
