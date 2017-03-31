@@ -252,66 +252,6 @@ impl<R: io::Read> Reader<R> {
         fields.truncate(outlen);
         Ok(!self.state.eof)
     }
-
-    pub fn read_field_bytes(
-        &mut self,
-        field: &mut Vec<u8>,
-    ) -> Result<ReadField> {
-        use csv_core::ReadResult::*;
-
-        if self.state.eof {
-            return Ok(ReadField::End);
-        }
-        let len = field.capacity();
-        unsafe {
-            // SAFETY: Since `field` is a `Vec<u8>`, we don't need to worry
-            // about ownership of elements in the vec. Also, since `len` is
-            // always `capacity`, we know that the `len` is always valid.
-            // However, it's possible that some space will be unitialized.
-            // In the loop below, we never read from `field` and always
-            // truncate the vec to the last location that has been written to.
-            //
-            // PERFORMANCE: Neglecting this optimization (and using `resize`
-            // instead) results in a 50% drop in the `count_*_field_bytes`
-            // benchmarks.
-            field.set_len(len);
-        }
-
-        let mut outlen = 0;
-        loop {
-            let (res, nin, nout) = {
-                let input = self.rdr.fill_buf()?;
-                self.core.read(input, &mut field[outlen..])
-            };
-            self.state.cur_pos.byte += nin as u64;
-            self.state.cur_pos.line = self.core.line();
-            self.rdr.consume(nin);
-            outlen += nout;
-            let state = match res {
-                InputEmpty => continue,
-                OutputFull => {
-                    let new_len = field.len().checked_mul(2).unwrap();
-                    // This is amortized, so we shouldn't need to do anything
-                    // fancy here.
-                    field.resize(cmp::max(4, new_len), 0);
-                    continue;
-                }
-                Field { record_end: false } => {
-                    self.state.add_field();
-                    ReadField::Field
-                }
-                Field { record_end: true } => {
-                    self.state.add_record()?;
-                    ReadField::Record
-                }
-                End => { self.state.eof = true; ReadField::End }
-            };
-            // This is not only for correctness but for safety as well.
-            // Namely, bytes after `outlen` in `field` may be uninitialized.
-            field.truncate(outlen);
-            return Ok(state);
-        }
-    }
 }
 
 impl ReaderState {
@@ -366,16 +306,9 @@ impl Position {
     pub fn record(&self) -> u64 { self.record }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ReadField {
-    Field,
-    Record,
-    End,
-}
-
 #[cfg(test)]
 mod tests {
-    use {ByteRecord, Error, ReaderBuilder, ReadField};
+    use {ByteRecord, Error, ReaderBuilder};
     use super::Position;
 
     fn b(s: &str) -> &[u8] { s.as_bytes() }
@@ -388,60 +321,6 @@ mod tests {
                 e => panic!("match failed, got {:?}", e),
             }
         }}
-    }
-
-    macro_rules! assert_read_field_bytes {
-        ($rdr:expr, $buf:expr, $res:expr, $out:expr) => {{
-            $buf.clear();
-            let res = $rdr.read_field_bytes(&mut $buf).unwrap();
-            assert_eq!(res, $res);
-            assert_eq!($out, s(&$buf));
-        }}
-    }
-
-    #[test]
-    fn read_field_bytes() {
-        let data = b("foo,\"b,ar\",baz\nabc,mno,xyz");
-        let mut rdr = ReaderBuilder::new().from_reader(data);
-
-        let mut buf = vec![];
-
-        assert_read_field_bytes!(rdr, buf, ReadField::Field, "foo");
-        assert_read_field_bytes!(rdr, buf, ReadField::Field, "b,ar");
-        assert_read_field_bytes!(rdr, buf, ReadField::Record, "baz");
-        assert_read_field_bytes!(rdr, buf, ReadField::Field, "abc");
-        assert_read_field_bytes!(rdr, buf, ReadField::Field, "mno");
-        assert_read_field_bytes!(rdr, buf, ReadField::Record, "xyz");
-        assert_read_field_bytes!(rdr, buf, ReadField::End, "");
-    }
-
-    #[test]
-    fn read_field_unequal_fails() {
-        let data = b("foo,bar\nbaz");
-        let mut rdr = ReaderBuilder::new().from_reader(data);
-        let mut buf = vec![];
-
-        assert_read_field_bytes!(rdr, buf, ReadField::Field, "foo");
-        assert_read_field_bytes!(rdr, buf, ReadField::Record, "bar");
-        assert_match!(
-            rdr.read_field_bytes(&mut buf),
-            Err(Error::UnequalLengths {
-                expected_len: 2,
-                pos: Position { byte: 8, line: 2, record: 1 },
-                len: 1,
-            }));
-    }
-
-    #[test]
-    fn read_field_unequal_ok() {
-        let data = b("foo,bar\nbaz");
-        let mut rdr = ReaderBuilder::new().flexible(true).from_reader(data);
-        let mut buf = vec![];
-
-        assert_read_field_bytes!(rdr, buf, ReadField::Field, "foo");
-        assert_read_field_bytes!(rdr, buf, ReadField::Record, "bar");
-        assert_read_field_bytes!(rdr, buf, ReadField::Record, "baz");
-        assert_read_field_bytes!(rdr, buf, ReadField::End, "");
     }
 
     #[test]

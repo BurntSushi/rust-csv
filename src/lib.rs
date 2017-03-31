@@ -6,7 +6,7 @@ extern crate csv_core;
 pub use csv_core::{QuoteStyle, Terminator};
 
 pub use error::{Error, Result};
-pub use reader::{Position, Reader, ReaderBuilder, ReadField};
+pub use reader::{Position, Reader, ReaderBuilder};
 pub use record::ByteRecord;
 
 mod error;

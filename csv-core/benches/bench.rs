@@ -7,8 +7,9 @@ use test::Bencher;
 
 use csv_core::{Reader, ReaderBuilder, ReadResult};
 
-static NFL: &'static str = include_str!("../../examples/data/bench.csv");
+static NFL: &'static str = include_str!("../../examples/data/nfl.csv");
 static GAME: &'static str = include_str!("../../examples/data/game.csv");
+static POP: &'static str = include_str!("../../examples/data/worldcitiespop.csv");
 
 #[bench]
 fn count_nfl_nocopy(b: &mut Bencher) {
@@ -53,6 +54,29 @@ fn count_game_copy(b: &mut Bencher) {
     b.iter(|| {
         rdr.reset();
         assert_eq!(count_fields(&mut rdr, data), 600000);
+    })
+}
+
+#[bench]
+fn count_pop_nocopy(b: &mut Bencher) {
+    let data = POP.as_bytes();
+    b.bytes = data.len() as u64;
+    let mut builder = ReaderBuilder::new();
+    let mut rdr = builder.copy(false).build();
+    b.iter(|| {
+        rdr.reset();
+        assert_eq!(count_fields(&mut rdr, data), 140007);
+    })
+}
+
+#[bench]
+fn count_pop_copy(b: &mut Bencher) {
+    let data = POP.as_bytes();
+    b.bytes = data.len() as u64;
+    let mut rdr = Reader::new();
+    b.iter(|| {
+        rdr.reset();
+        assert_eq!(count_fields(&mut rdr, data), 140007);
     })
 }
 
