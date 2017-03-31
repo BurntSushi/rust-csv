@@ -216,7 +216,8 @@ impl<R: io::Read> Reader<R> {
             loop {
                 let (res, nin, nout) =
                     self.core.read(&input[inlen..], &mut fields[outlen..]);
-                self.state.update_pos(&input[inlen..inlen + nin]);
+                self.state.cur_pos.byte += nin as u64;
+                self.state.cur_pos.line = self.core.line();
                 inlen += nin;
                 outlen += nout;
                 match res {
@@ -280,11 +281,10 @@ impl<R: io::Read> Reader<R> {
         loop {
             let (res, nin, nout) = {
                 let input = self.rdr.fill_buf()?;
-                let (res, nin, nout) =
-                    self.core.read(input, &mut field[outlen..]);
-                self.state.update_pos(&input[..nin]);
-                (res, nin, nout)
+                self.core.read(input, &mut field[outlen..])
             };
+            self.state.cur_pos.byte += nin as u64;
+            self.state.cur_pos.line = self.core.line();
             self.rdr.consume(nin);
             outlen += nout;
             let state = match res {
@@ -341,12 +341,6 @@ impl ReaderState {
         self.prev_pos = self.cur_pos.clone();
         self.cur_field_count = 0;
         Ok(())
-    }
-
-    #[inline(always)]
-    fn update_pos(&mut self, input: &[u8]) {
-        self.cur_pos.byte += input.len() as u64;
-        self.cur_pos.line += bytecount::count(input, b'\n') as u64;
     }
 }
 

@@ -90,6 +90,7 @@ pub struct Reader {
     /// Generally this is for debugging. There's otherwise no good reason
     /// to avoid the DFA.
     use_nfa: bool,
+    line: u64,
 }
 
 impl Default for Reader {
@@ -105,6 +106,7 @@ impl Default for Reader {
             escape: None,
             double_quote: true,
             use_nfa: false,
+            line: 1,
         }
     }
 }
@@ -312,6 +314,7 @@ impl Reader {
     pub fn reset(&mut self) {
         self.dfa_state = self.dfa.new_state(NfaState::StartRecord);
         self.nfa_state = NfaState::StartRecord;
+        self.line = 1;
     }
 
     /// Parse CSV data in `input` and copy field data to `output`.
@@ -355,6 +358,12 @@ impl Reader {
         }
     }
 
+    /// Return the current line number as measured by the number of occurrences
+    /// of `\n`.
+    pub fn line(&self) -> u64 {
+        self.line
+    }
+
     #[inline(always)]
     fn read_dfa(
         &mut self,
@@ -367,11 +376,12 @@ impl Reader {
                 &self.dfa_state, true, false, false);
             (res, 0, 0)
         } else {
+            let s = self.dfa_state;
             let (res, state, nin, nout) =
                 if self.copy {
-                    self.consume_and_copy_dfa(self.dfa_state, input, output)
+                    self.consume_and_copy_dfa(s, input, output)
                 } else {
-                    self.consume_dfa(self.dfa_state, input)
+                    self.consume_dfa(s, input)
                 };
             self.dfa_state = state;
             (res, nin, nout)
@@ -380,7 +390,7 @@ impl Reader {
 
     #[inline(always)]
     fn consume_and_copy_dfa(
-        &self,
+        &mut self,
         mut state: DfaState,
         input: &[u8],
         output: &mut [u8],
@@ -393,10 +403,12 @@ impl Reader {
         }
         let (mut nin, mut nout) = (0, 0);
         while nin < input.len() && nout < output.len() {
-            let (s, has_out) = self.dfa.get_output(state, input[nin]);
+            let b = input[nin];
+            self.line += (b == b'\n') as u64;
+            let (s, has_out) = self.dfa.get_output(state, b);
             state = s;
             if has_out {
-                output[nout] = input[nin];
+                output[nout] = b;
                 nout += 1;
             }
             nin += 1;
@@ -411,14 +423,15 @@ impl Reader {
 
     #[inline(always)]
     fn consume_dfa(
-        &self,
+        &mut self,
         mut state: DfaState,
         input: &[u8],
     ) -> (ReadResult, DfaState, usize, usize) {
         debug_assert!(!input.is_empty());
         let mut nin = 0;
-        while nin < input.len() {
-            state = self.dfa.get(state, input[nin]);
+        for &b in input {
+            self.line += (b == b'\n') as u64;
+            state = self.dfa.get(state, b);
             nin += 1;
             if state >= self.dfa.final_field {
                 break;
@@ -1213,5 +1226,28 @@ mod tests {
 
         assert_read!(rdr, b("\"\"bar\""), out, 6, 4, InputEmpty);
         assert_eq!(&out[..4], b("bar\""));
+    }
+
+    // Test the line number reporting is correct.
+    #[test]
+    fn line_numbers() {
+        use ReadResult::*;
+
+        let mut out = &mut [0; 10];
+        let mut rdr = Reader::new();
+
+        assert_eq!(1, rdr.line());
+
+        assert_read!(rdr, b("\n\n\n\n"), out, 4, 0, InputEmpty);
+        assert_eq!(5, rdr.line());
+
+        assert_read!(rdr, b("foo,"), out, 4, 3, Field { record_end: false });
+        assert_eq!(5, rdr.line());
+
+        assert_read!(rdr, b("bar\n"), out, 4, 3, Field { record_end: true });
+        assert_eq!(6, rdr.line());
+
+        assert_read!(rdr, &[], &mut [0], 0, 0, End);
+        assert_eq!(6, rdr.line());
     }
 }
