@@ -5,10 +5,12 @@ extern crate csv_core;
 
 pub use csv_core::{QuoteStyle, Terminator};
 
-pub use error::{Error, Result};
+pub use byte_record::ByteRecord;
+pub use error::{Error, FromUtf8Error, Result, Utf8Error};
 pub use reader::{Position, Reader, ReaderBuilder};
-pub use record::ByteRecord;
+pub use string_record::StringRecord;
 
+mod byte_record;
 mod error;
 mod reader;
-mod record;
+mod string_record;

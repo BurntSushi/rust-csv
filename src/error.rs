@@ -5,7 +5,7 @@ use std::result;
 use std::str;
 
 use reader::Position;
-use record::ByteRecord;
+use byte_record::ByteRecord;
 
 /// A type alias for `Result<T, csv::Error>`.
 pub type Result<T> = result::Result<T, Error>;
@@ -25,7 +25,7 @@ pub enum Error {
     /// A UTF-8 decoding error that occured while reading CSV data into Rust
     /// `String`s.
     Utf8 {
-        /// The position at which this error occurred.
+        /// The position of the record in which this error occurred.
         pos: Position,
         /// The corresponding UTF-8 error.
         err: Utf8Error,
