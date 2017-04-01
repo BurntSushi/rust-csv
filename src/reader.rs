@@ -1,10 +1,12 @@
 use std::cmp;
 use std::io::{self, BufRead};
+use std::mem;
 
 use bytecount;
 use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
 
-use record::ByteRecord;
+use byte_record::{self, ByteRecord};
+use string_record::{self, StringRecord};
 use {Error, Result, Terminator};
 
 /// Builds a CSV reader with various configuration knobs.
@@ -17,6 +19,7 @@ pub struct ReaderBuilder {
     builder: CoreReaderBuilder,
     capacity: usize,
     flexible: bool,
+    has_headers: bool,
 }
 
 impl Default for ReaderBuilder {
@@ -25,6 +28,7 @@ impl Default for ReaderBuilder {
             builder: CoreReaderBuilder::default(),
             capacity: 8 * (1<<10),
             flexible: false,
+            has_headers: true,
         }
     }
 }
@@ -51,6 +55,20 @@ impl ReaderBuilder {
     /// The default is `b','`.
     pub fn delimiter(&mut self, delimiter: u8) -> &mut ReaderBuilder {
         self.builder.delimiter(delimiter);
+        self
+    }
+
+    /// Whether to treat the first row as a special header row.
+    ///
+    /// By default, the first row is treated as a special header row, which
+    /// means the header is never returned by any of the record reading methods
+    /// or iterators. When this is disabled (`yes` set to `false`), the first
+    /// row is not treated specially.
+    ///
+    /// Note that the `headers` and `byte_headers` methods are unaffected by
+    /// whether this is set. Those methods always return the first record.
+    pub fn has_headers(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.has_headers = yes;
         self
     }
 
@@ -146,11 +164,19 @@ pub struct Reader<R> {
 
 #[derive(Debug)]
 struct ReaderState {
+    headers: Option<Headers>,
+    has_headers: bool,
     flexible: bool,
     first_field_count: Option<u64>,
     prev_pos: Position,
     cur_pos: Position,
     eof: bool,
+}
+
+#[derive(Debug)]
+struct Headers {
+    pos: Position,
+    record: ByteRecord,
 }
 
 impl<R: io::Read> Reader<R> {
@@ -161,6 +187,8 @@ impl<R: io::Read> Reader<R> {
             core: builder.builder.build(),
             rdr: io::BufReader::with_capacity(builder.capacity, rdr),
             state: ReaderState {
+                headers: None,
+                has_headers: builder.has_headers,
                 flexible: builder.flexible,
                 first_field_count: None,
                 prev_pos: Position::new(),
@@ -179,7 +207,49 @@ impl<R: io::Read> Reader<R> {
         &self.state.cur_pos
     }
 
+    // pub fn headers(&mut self) -> Result<&StringRecord> {
+        // let record =
+    // }
+
+    pub fn byte_headers(&mut self) -> Result<&ByteRecord> {
+        if self.state.headers.is_none() {
+            let mut record = ByteRecord::new();
+            let pos = self.position().clone();
+            self.read_record_bytes_impl(&mut record)?;
+            self.state.headers = Some(Headers {
+                pos: pos,
+                record: record,
+            });
+        }
+        Ok(&self.state.headers.as_ref().unwrap().record)
+    }
+
+    pub fn read_record(&mut self, record: &mut StringRecord) -> Result<bool> {
+        string_record::read(self, record)
+    }
+
     pub fn read_record_bytes(
+        &mut self,
+        record: &mut ByteRecord,
+    ) -> Result<bool> {
+        let pos = self.position().clone();
+        let eof = self.read_record_bytes_impl(record)?;
+        if self.state.headers.is_none() {
+            self.state.headers = Some(Headers {
+                pos: pos,
+                record: record.clone(),
+            });
+            // If the end user indicated that we have headers, then we should
+            // never return the first row. Instead, we should attempt to
+            // read and return the next one.
+            if self.state.has_headers {
+                return self.read_record_bytes_impl(record);
+            }
+        }
+        Ok(eof)
+    }
+
+    fn read_record_bytes_impl(
         &mut self,
         record: &mut ByteRecord,
     ) -> Result<bool> {
@@ -193,7 +263,7 @@ impl<R: io::Read> Reader<R> {
         loop {
             let (res, nin, nout, nend) = {
                 let input = self.rdr.fill_buf()?;
-                let (mut fields, mut ends) = record.as_parts();
+                let (mut fields, mut ends) = byte_record::as_parts(record);
                 self.core.read_record(
                     input, &mut fields[outlen..], &mut ends[endlen..])
             };
@@ -205,15 +275,15 @@ impl<R: io::Read> Reader<R> {
             match res {
                 InputEmpty => continue,
                 OutputFull => {
-                    record.expand_fields();
+                    byte_record::expand_fields(record);
                     continue;
                 }
                 OutputEndsFull => {
-                    record.expand_ends();
+                    byte_record::expand_ends(record);
                     continue;
                 }
                 Record => {
-                    record.set_len(endlen);
+                    byte_record::set_len(record, endlen);
                     self.state.add_record(endlen as u64)?;
                     break;
                 }
@@ -274,8 +344,11 @@ impl Position {
 
 #[cfg(test)]
 mod tests {
-    use {ByteRecord, Error, ReaderBuilder};
-    use super::Position;
+    use byte_record::ByteRecord;
+    use error::Error;
+    use string_record::StringRecord;
+
+    use super::{ReaderBuilder, Position};
 
     fn b(s: &str) -> &[u8] { s.as_bytes() }
     fn s(b: &[u8]) -> &str { ::std::str::from_utf8(b).unwrap() }
@@ -292,7 +365,9 @@ mod tests {
     #[test]
     fn read_record_bytes() {
         let data = b("foo,\"b,ar\",baz\nabc,mno,xyz");
-        let mut rdr = ReaderBuilder::new().from_reader(data);
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(data);
         // let mut rec = ByteRecord::new();
         let mut rec = ByteRecord::with_capacity(1);
 
@@ -314,7 +389,9 @@ mod tests {
     #[test]
     fn read_record_unequal_fails() {
         let data = b("foo\nbar,baz");
-        let mut rdr = ReaderBuilder::new().from_reader(data);
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(data);
         let mut rec = ByteRecord::new();
 
         assert!(!rdr.read_record_bytes(&mut rec).unwrap());
@@ -333,7 +410,10 @@ mod tests {
     #[test]
     fn read_record_unequal_ok() {
         let data = b("foo\nbar,baz");
-        let mut rdr = ReaderBuilder::new().flexible(true).from_reader(data);
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_reader(data);
         let mut rec = ByteRecord::new();
 
         assert!(!rdr.read_record_bytes(&mut rec).unwrap());
@@ -353,7 +433,9 @@ mod tests {
     #[test]
     fn read_record_unequal_continue() {
         let data = b("foo\nbar,baz\nquux");
-        let mut rdr = ReaderBuilder::new().from_reader(data);
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(data);
         let mut rec = ByteRecord::new();
 
         assert!(!rdr.read_record_bytes(&mut rec).unwrap());
@@ -373,5 +455,28 @@ mod tests {
         assert_eq!("quux", s(&rec[0]));
 
         assert!(rdr.read_record_bytes(&mut rec).unwrap());
+    }
+
+    #[test]
+    fn read_record_headers() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f");
+        let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(data);
+        let mut rec = StringRecord::new();
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("a", &rec[0]);
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("d", &rec[0]);
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+
+        let headers = rdr.byte_headers().unwrap();
+        assert_eq!(3, headers.len());
+        assert_eq!(b("foo"), &headers[0]);
+        assert_eq!(b("bar"), &headers[1]);
+        assert_eq!(b("baz"), &headers[2]);
     }
 }
