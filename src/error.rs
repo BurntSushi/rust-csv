@@ -5,6 +5,7 @@ use std::result;
 use std::str;
 
 use reader::Position;
+use record::ByteRecord;
 
 /// A type alias for `Result<T, csv::Error>`.
 pub type Result<T> = result::Result<T, Error>;
@@ -26,10 +27,8 @@ pub enum Error {
     Utf8 {
         /// The position at which this error occurred.
         pos: Position,
-        /// The field that has invalid UTF-8 (indexed starting at `0`).
-        field: u64,
         /// The corresponding UTF-8 error.
-        err: str::Utf8Error,
+        err: Utf8Error,
     },
     /// This error occurs when two records with an unequal number of fields
     /// are found. This error only occurs when the `flexible` option in a
@@ -75,10 +74,12 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Error::Io(ref err) => err.fmt(f),
-            Error::Utf8 { ref pos, field, ref err } => {
+            Error::Utf8 { ref pos, ref err } => {
                 write!(
-                    f, "CSV parse error: record {} (byte {}, line {}): {}",
-                    pos.record(), pos.byte(), pos.line(), err)
+                    f,
+                    "CSV parse error: record {} \
+                     (byte {}, line {}, field: {}): {}",
+                    pos.record(), pos.byte(), pos.line(), err.field(), err)
             }
             Error::UnequalLengths { expected_len, ref pos, len } => {
                 write!(
@@ -89,4 +90,79 @@ impl fmt::Display for Error {
             }
         }
     }
+}
+
+/// A UTF-8 validation error that occurs when attempting to convert a
+/// `ByteRecord` into a `StringRecord`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FromUtf8Error {
+    record: ByteRecord,
+    err: Utf8Error,
+}
+
+/// Create a new FromUtf8Error.
+pub fn new_from_utf8_error(rec: ByteRecord, err: Utf8Error) -> FromUtf8Error {
+    FromUtf8Error { record: rec, err: err }
+}
+
+impl FromUtf8Error {
+    /// Access the underlying `ByteRecord` that failed UTF-8 validation.
+    pub fn into_byte_record(self) -> ByteRecord {
+        self.record
+    }
+
+    /// Access the underlying UTF-8 validation error.
+    pub fn utf8_error(&self) -> &Utf8Error {
+        &self.err
+    }
+}
+
+impl fmt::Display for FromUtf8Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.err.fmt(f)
+    }
+}
+
+impl error::Error for FromUtf8Error {
+    fn description(&self) -> &str { self.err.description() }
+    fn cause(&self) -> Option<&error::Error> { Some(&self.err) }
+}
+
+/// A UTF-8 validation error that occurred when attempting to convert a
+/// `ByteRecord` into a `StringRecord`.
+///
+/// The error includes the index of the field that failed validation, and the
+/// last byte at which valid UTF-8 was verified.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Utf8Error {
+    /// The field index of a byte record in which UTF-8 validation failed.
+    field: usize,
+    /// The index into the given field up to which valid UTF-8 was verified.
+    valid_up_to: usize,
+}
+
+/// Create a new UTF-8 error.
+pub fn new_utf8_error(field: usize, valid_up_to: usize) -> Utf8Error {
+    Utf8Error { field: field, valid_up_to: valid_up_to }
+}
+
+impl Utf8Error {
+    /// The field index of a byte record in which UTF-8 validation failed.
+    pub fn field(&self) -> usize { self.field }
+    /// The index into the given field up to which valid UTF-8 was verified.
+    pub fn valid_up_to(&self) -> usize { self.valid_up_to }
+}
+
+impl fmt::Display for Utf8Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "invalid utf-8: invalid UTF-8 in field {} near byte index {}",
+            self.field,
+            self.valid_up_to)
+    }
+}
+
+impl error::Error for Utf8Error {
+    fn description(&self) -> &str { "invalid utf-8 in CSV record" }
 }

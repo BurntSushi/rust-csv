@@ -90,7 +90,10 @@ pub struct Reader {
     /// Generally this is for debugging. There's otherwise no good reason
     /// to avoid the DFA.
     use_nfa: bool,
+    /// The current line number.
     line: u64,
+    /// The current position in the output buffer when reading a record.
+    output_pos: usize,
 }
 
 impl Default for Reader {
@@ -107,6 +110,7 @@ impl Default for Reader {
             double_quote: true,
             use_nfa: false,
             line: 1,
+            output_pos: 0,
         }
     }
 }
@@ -215,7 +219,7 @@ impl ReaderBuilder {
 
 /// The result of parsing at most one field from CSV data.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ReadResult {
+pub enum ReadFieldResult {
     /// The caller provided input was exhausted before the end of a field or
     /// record was found.
     InputEmpty,
@@ -237,26 +241,150 @@ pub enum ReadResult {
     End,
 }
 
-impl ReadResult {
-    fn from_nfa(state: &NfaState, inpdone: bool, outdone: bool) -> ReadResult {
-        match *state {
-            NfaState::End => ReadResult::End,
+impl ReadFieldResult {
+    fn from_nfa(
+        state: NfaState,
+        inpdone: bool,
+        outdone: bool,
+    ) -> ReadFieldResult {
+        match state {
+            NfaState::End => ReadFieldResult::End,
             NfaState::EndRecord | NfaState::CRLF => {
-                ReadResult::Field { record_end: true }
+                ReadFieldResult::Field { record_end: true }
             }
             NfaState::EndFieldDelim => {
-                ReadResult::Field { record_end: false }
+                ReadFieldResult::Field { record_end: false }
             }
             _ => {
-                assert!(!state.is_final());
+                assert!(!state.is_field_final());
                 if !inpdone && outdone {
-                    ReadResult::OutputFull
+                    ReadFieldResult::OutputFull
                 } else {
-                    ReadResult::InputEmpty
+                    ReadFieldResult::InputEmpty
                 }
             }
         }
     }
+
+    /// Convert this to a NoCopy result for use inside the NFA. This panics
+    /// if `self` is `ReadFieldResult::OutputFull`.
+    fn as_read_field_nocopy_result(&self) -> ReadFieldNoCopyResult {
+        match *self {
+            ReadFieldResult::InputEmpty => ReadFieldNoCopyResult::InputEmpty,
+            ReadFieldResult::OutputFull => {
+                panic!("cannot convert OutputFull result into nocopy result");
+            }
+            ReadFieldResult::Field { record_end } => {
+                ReadFieldNoCopyResult::Field { record_end: record_end }
+            }
+            ReadFieldResult::End => ReadFieldNoCopyResult::End,
+        }
+    }
+}
+
+/// The result of parsing at most one field from CSV data while ignoring the
+/// output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ReadFieldNoCopyResult {
+    /// The caller provided input was exhausted before the end of a field or
+    /// record was found.
+    InputEmpty,
+    /// The end of a field was found.
+    ///
+    /// Note that when `record_end` is true, then the end of this field also
+    /// corresponds to the end of a record.
+    Field {
+        /// Whether this was the last field in a record or not.
+        record_end: bool,
+    },
+    /// All CSV data has been read.
+    ///
+    /// This state can only be returned when an empty input buffer is provided
+    /// by the caller.
+    End,
+}
+
+/// The result of parsing at most one record from CSV data.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ReadRecordResult {
+    /// The caller provided input was exhausted before the end of a record was
+    /// found.
+    InputEmpty,
+    /// The caller provided output buffer was filled before an entire field
+    /// could be written to it.
+    OutputFull,
+    /// The caller provided output buffer of field end poisitions was filled
+    /// before the next field could be parsed.
+    OutputEndsFull,
+    /// The end of a record was found.
+    Record,
+    /// All CSV data has been read.
+    ///
+    /// This state can only be returned when an empty input buffer is provided
+    /// by the caller.
+    End,
+}
+
+impl ReadRecordResult {
+    fn is_record(&self) -> bool {
+        *self == ReadRecordResult::Record
+    }
+
+    fn from_nfa(
+        state: NfaState,
+        inpdone: bool,
+        outdone: bool,
+        endsdone: bool,
+    ) -> ReadRecordResult {
+        match state {
+            NfaState::End => ReadRecordResult::End,
+            NfaState::EndRecord | NfaState::CRLF => ReadRecordResult::Record,
+            _ => {
+                assert!(!state.is_record_final());
+                if !inpdone && outdone {
+                    ReadRecordResult::OutputFull
+                } else if !inpdone && endsdone {
+                    ReadRecordResult::OutputEndsFull
+                } else {
+                    ReadRecordResult::InputEmpty
+                }
+            }
+        }
+    }
+
+    /// Convert this to a NoCopy result for use inside the NFA. This panics
+    /// if `self` is `ReadRecordResult::OutputFull` or
+    /// `ReadRecordResult::OutputEndsFull`.
+    fn as_read_record_nocopy_result(&self) -> ReadRecordNoCopyResult {
+        match *self {
+            ReadRecordResult::InputEmpty => ReadRecordNoCopyResult::InputEmpty,
+            ReadRecordResult::OutputFull => {
+                panic!("cannot convert OutputFull result into nocopy result");
+            }
+            ReadRecordResult::OutputEndsFull => {
+                panic!("cannot convert OutputEndsFull result \
+                        into nocopy result");
+            }
+            ReadRecordResult::Record => ReadRecordNoCopyResult::Record,
+            ReadRecordResult::End => ReadRecordNoCopyResult::End,
+        }
+    }
+}
+
+/// The result of parsing at most one record from CSV data while ignoring
+/// output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ReadRecordNoCopyResult {
+    /// The caller provided input was exhausted before the end of a record was
+    /// found.
+    InputEmpty,
+    /// The end of a record was found.
+    Record,
+    /// All CSV data has been read.
+    ///
+    /// This state can only be returned when an empty input buffer is provided
+    /// by the caller.
+    End,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -291,12 +419,21 @@ const NFA_STATES: &'static [NfaState] = &[
 ];
 
 impl NfaState {
-    fn is_final(&self) -> bool {
+    fn is_field_final(&self) -> bool {
         match *self {
             NfaState::End
             | NfaState::EndRecord
             | NfaState::CRLF
             | NfaState::EndFieldDelim => true,
+            _ => false,
+        }
+    }
+
+    fn is_record_final(&self) -> bool {
+        match *self {
+            NfaState::End
+            | NfaState::EndRecord
+            | NfaState::CRLF => true,
             _ => false,
         }
     }
@@ -317,6 +454,14 @@ impl Reader {
         self.line = 1;
     }
 
+    /// Return the current line number as measured by the number of occurrences
+    /// of `\n`.
+    ///
+    /// Line numbers starts at `1` and are reset when `reset` is called.
+    pub fn line(&self) -> u64 {
+        self.line
+    }
+
     /// Parse CSV data in `input` and copy field data to `output`.
     ///
     /// This routine requires a caller provided buffer of CSV data as the
@@ -326,11 +471,11 @@ impl Reader {
     ///
     /// Calling this routine parses at most a single field and returns
     /// three values indicating the state of the parser. The first value,
-    /// a `ReadResult`, tells the caller what to do next. For example,
+    /// a `ReadFieldResult`, tells the caller what to do next. For example,
     /// if the entire input was read or if the output buffer was filled
-    /// before a full field had been read, then `ReadResult::InputEmpty` or
-    /// `ReadResult::OutputFull` is returned, respectively. See the
-    /// documentation for `ReadResult` for more details.
+    /// before a full field had been read, then `ReadFieldResult::InputEmpty` or
+    /// `ReadFieldResult::OutputFull` is returned, respectively. See the
+    /// documentation for `ReadFieldResult` for more details.
     ///
     /// The second two values returned correspond to the number of bytes
     /// read from `input` and `output`, respectively.
@@ -340,68 +485,213 @@ impl Reader {
     /// This reader interprets an empty `input` buffer as an indication that
     /// there is no CSV data left to read. Namely, when the caller has
     /// exhausted all CSV data, the caller should continue to call `read` with
-    /// an empty input buffer until `ReadResult::End` is returned.
+    /// an empty input buffer until `ReadFieldResult::End` is returned.
     ///
     /// # Errors
     ///
     /// This CSV reader can never return an error. Instead, it prefers *a*
     /// parse over *no* parse.
-    pub fn read(
+    pub fn read_field(
         &mut self,
         input: &[u8],
         output: &mut [u8],
-    ) -> (ReadResult, usize, usize) {
+    ) -> (ReadFieldResult, usize, usize) {
         if self.use_nfa {
-            self.read_nfa(input, output)
+            self.read_field_nfa(input, output)
         } else {
-            self.read_dfa(input, output)
+            self.read_field_dfa(input, output)
         }
     }
 
-    /// Return the current line number as measured by the number of occurrences
-    /// of `\n`.
-    pub fn line(&self) -> u64 {
-        self.line
+    /// TODO
+    pub fn read_field_nocopy(
+        &mut self,
+        input: &[u8],
+    ) -> (ReadFieldNoCopyResult, usize) {
+        if self.use_nfa {
+            let (res, nin, _) = self.read_field_nfa(input, &mut []);
+            (res.as_read_field_nocopy_result(), nin)
+        } else {
+            self.read_field_nocopy_dfa(input)
+        }
     }
 
-    #[inline(always)]
-    fn read_dfa(
+    /// TODO
+    pub fn read_record(
         &mut self,
         input: &[u8],
         output: &mut [u8],
-    ) -> (ReadResult, usize, usize) {
+        ends: &mut [usize],
+    ) -> (ReadRecordResult, usize, usize, usize) {
+        if self.use_nfa {
+            self.read_record_nfa(input, output, ends)
+        } else {
+            self.read_record_dfa(input, output, ends)
+        }
+    }
+
+    /// TODO
+    pub fn read_record_nocopy(
+        &mut self,
+        input: &[u8],
+    ) -> (ReadRecordNoCopyResult, usize) {
+        if self.use_nfa {
+            let (res, nin, _, _) = self.read_record_nfa(
+                input, &mut [], &mut []);
+            (res.as_read_record_nocopy_result(), nin)
+        } else {
+            self.read_record_nocopy_dfa(input)
+        }
+    }
+
+    #[inline(always)]
+    fn read_record_dfa(
+        &mut self,
+        input: &[u8],
+        output: &mut [u8],
+        ends: &mut [usize],
+    ) -> (ReadRecordResult, usize, usize, usize) {
         if input.is_empty() {
-            self.dfa_state = self.dfa_final_transition(self.dfa_state);
-            let res = self.dfa.new_read_result(
-                &self.dfa_state, true, false, false);
-            (res, 0, 0)
-        } else {
-            let s = self.dfa_state;
-            let (res, state, nin, nout) =
-                if self.copy {
-                    self.consume_and_copy_dfa(s, input, output)
-                } else {
-                    self.consume_dfa(s, input)
-                };
-            self.dfa_state = state;
-            (res, nin, nout)
+            let s = self.transition_final_dfa(self.dfa_state);
+            let res = self.dfa.new_read_record_result(
+                s, true, false, false, false);
+            // This part is a little tricky. When reading the final record,
+            // the last result the caller will get is an InputEmpty, and while
+            // they'll have everything they need in `output`, they'll be
+            // missing the final end position of the final field in `ends`.
+            // We insert that here, but we must take care to handle the case
+            // where `ends` doesn't have enough space. If it doesn't have
+            // enough space, then we also can't transition to the next state.
+            return match res {
+                ReadRecordResult::Record => {
+                    if ends.is_empty() {
+                        return (ReadRecordResult::OutputEndsFull, 0, 0, 0);
+                    }
+                    self.dfa_state = s;
+                    ends[0] = self.output_pos;
+                    self.output_pos = 0;
+                    (res, 0, 0, 1)
+                }
+                _ => {
+                    self.dfa_state = s;
+                    (res, 0, 0, 0)
+                }
+            };
         }
+        if output.is_empty() {
+            return (ReadRecordResult::OutputFull, 0, 0, 0);
+        }
+        if ends.is_empty() {
+            return (ReadRecordResult::OutputEndsFull, 0, 0, 0);
+        }
+        let (mut nin, mut nout, mut nend) = (0, 0, 0);
+        let mut state = self.dfa_state;
+        while nin < input.len() && nout < output.len() && nend < ends.len() {
+            let (s, has_out) = self.dfa.get_output(state, input[nin]);
+            self.line += (input[nin] == b'\n') as u64;
+            state = s;
+            if has_out {
+                output[nout] = input[nin];
+                nout += 1;
+            }
+            nin += 1;
+            if state >= self.dfa.final_field {
+                ends[nend] = self.output_pos + nout;
+                nend += 1;
+                if state > self.dfa.final_field {
+                    break;
+                }
+            }
+        }
+        let res = self.dfa.new_read_record_result(
+            state, false,
+            nin >= input.len(),
+            nout >= output.len(),
+            nend >= ends.len());
+        self.dfa_state = state;
+        if res.is_record() {
+            self.output_pos = 0;
+        } else {
+            self.output_pos += nout;
+        }
+        (res, nin, nout, nend)
     }
 
     #[inline(always)]
-    fn consume_and_copy_dfa(
+    fn read_record_nocopy_dfa(
         &mut self,
-        mut state: DfaState,
+        input: &[u8],
+    ) -> (ReadRecordNoCopyResult, usize) {
+        if input.is_empty() {
+            self.dfa_state = self.transition_final_dfa(self.dfa_state);
+            let res = self.dfa.new_read_record_nocopy_result(
+                self.dfa_state, true);
+            return (res, 0);
+        }
+        let mut nin = 0;
+        let mut state = self.dfa_state;
+        while nin < input.len() {
+            state = self.dfa.get(state, input[nin]);
+            self.line += (input[nin] == b'\n') as u64;
+            nin += 1;
+            if state >= self.dfa.final_record {
+                break;
+            }
+            if nin + 4 < input.len() {
+                state = self.dfa.get(state, input[nin]);
+                self.line += (input[nin] == b'\n') as u64;
+                nin += 1;
+                if state >= self.dfa.final_record {
+                    break;
+                }
+                state = self.dfa.get(state, input[nin]);
+                self.line += (input[nin] == b'\n') as u64;
+                nin += 1;
+                if state >= self.dfa.final_record {
+                    break;
+                }
+                state = self.dfa.get(state, input[nin]);
+                self.line += (input[nin] == b'\n') as u64;
+                nin += 1;
+                if state >= self.dfa.final_record {
+                    break;
+                }
+                state = self.dfa.get(state, input[nin]);
+                self.line += (input[nin] == b'\n') as u64;
+                nin += 1;
+                if state >= self.dfa.final_record {
+                    break;
+                }
+                state = self.dfa.get(state, input[nin]);
+                self.line += (input[nin] == b'\n') as u64;
+                nin += 1;
+                if state >= self.dfa.final_record {
+                    break;
+                }
+            }
+        }
+        let res = self.dfa.new_read_record_nocopy_result(state, false);
+        self.dfa_state = state;
+        (res, nin)
+    }
+
+    #[inline(always)]
+    fn read_field_dfa(
+        &mut self,
         input: &[u8],
         output: &mut [u8],
-    ) -> (ReadResult, DfaState, usize, usize) {
-        debug_assert!(!input.is_empty());
+    ) -> (ReadFieldResult, usize, usize) {
+        if input.is_empty() {
+            self.dfa_state = self.transition_final_dfa(self.dfa_state);
+            let res = self.dfa.new_read_field_result(
+                self.dfa_state, true, false, false);
+            return (res, 0, 0);
+        }
         if output.is_empty() {
-            // If the output buffer is empty, then we can never make progress,
-            // so just quit now.
-            return (ReadResult::OutputFull, state, 0, 0);
+            return (ReadFieldResult::OutputFull, 0, 0);
         }
         let (mut nin, mut nout) = (0, 0);
+        let mut state = self.dfa_state;
         while nin < input.len() && nout < output.len() {
             let b = input[nin];
             self.line += (b == b'\n') as u64;
@@ -416,34 +706,71 @@ impl Reader {
                 break;
             }
         }
-        let res = self.dfa.new_read_result(
-            &state, false, nin >= input.len(), nout >= output.len());
-        (res, state, nin, nout)
+        let res = self.dfa.new_read_field_result(
+            state, false, nin >= input.len(), nout >= output.len());
+        self.dfa_state = state;
+        (res, nin, nout)
     }
 
     #[inline(always)]
-    fn consume_dfa(
+    fn read_field_nocopy_dfa(
         &mut self,
-        mut state: DfaState,
         input: &[u8],
-    ) -> (ReadResult, DfaState, usize, usize) {
-        debug_assert!(!input.is_empty());
+    ) -> (ReadFieldNoCopyResult, usize) {
+        if input.is_empty() {
+            self.dfa_state = self.transition_final_dfa(self.dfa_state);
+            let res = self.dfa.new_read_field_nocopy_result(
+                self.dfa_state, true);
+            return (res, 0);
+        }
         let mut nin = 0;
-        for &b in input {
-            self.line += (b == b'\n') as u64;
-            state = self.dfa.get(state, b);
+        let mut state = self.dfa_state;
+        while nin < input.len() {
+            state = self.dfa.get(state, input[nin]);
+            self.line += (input[nin] == b'\n') as u64;
             nin += 1;
             if state >= self.dfa.final_field {
                 break;
             }
+            if nin + 4 < input.len() {
+                state = self.dfa.get(state, input[nin]);
+                self.line += (input[nin] == b'\n') as u64;
+                nin += 1;
+                if state >= self.dfa.final_field {
+                    break;
+                }
+                state = self.dfa.get(state, input[nin]);
+                self.line += (input[nin] == b'\n') as u64;
+                nin += 1;
+                if state >= self.dfa.final_field {
+                    break;
+                }
+                state = self.dfa.get(state, input[nin]);
+                self.line += (input[nin] == b'\n') as u64;
+                nin += 1;
+                if state >= self.dfa.final_field {
+                    break;
+                }
+                state = self.dfa.get(state, input[nin]);
+                self.line += (input[nin] == b'\n') as u64;
+                nin += 1;
+                if state >= self.dfa.final_field {
+                    break;
+                }
+                state = self.dfa.get(state, input[nin]);
+                self.line += (input[nin] == b'\n') as u64;
+                nin += 1;
+                if state >= self.dfa.final_field {
+                    break;
+                }
+            }
         }
-        let res = self.dfa.new_read_result(
-            &state, false, nin >= input.len(), false);
-        (res, state, nin, 0)
+        let res = self.dfa.new_read_field_nocopy_result(state, false);
+        self.dfa_state = state;
+        (res, nin)
     }
 
-    #[inline(always)]
-    fn dfa_final_transition(&self, state: DfaState) -> DfaState {
+    fn transition_final_dfa(&self, state: DfaState) -> DfaState {
         if state >= self.dfa.final_record || state.is_start() {
             self.dfa.new_state_final_end()
         } else {
@@ -469,7 +796,7 @@ impl Reader {
                 let (mut nextstate, mut inp, mut out) =
                     (state, false, false);
                 while !inp && nextstate != NfaState::End {
-                    let (s, i, o) = self.nfa_transition(nextstate, c);
+                    let (s, i, o) = self.transition_nfa(nextstate, c);
                     nextstate = s;
                     inp = i;
                     out = out || o;
@@ -483,47 +810,47 @@ impl Reader {
         self.dfa.finish();
     }
 
-    // The NFA implementation follows. The nfa_final_transition and
-    // nfa_transition methods are required for the DFA to operate. The
-    // rest are included for completeness (and debugging).
+    // The NFA implementation follows. The transition_final_nfa and
+    // transition_nfa methods are required for the DFA to operate. The
+    // rest are included for completeness (and debugging). Note that this
+    // NFA implementation is included in most of the CSV parser tests below.
 
     #[inline(always)]
-    fn read_nfa(
+    fn read_record_nfa(
         &mut self,
         input: &[u8],
         output: &mut [u8],
-    ) -> (ReadResult, usize, usize) {
+        ends: &mut [usize],
+    ) -> (ReadRecordResult, usize, usize, usize) {
         if input.is_empty() {
-            self.nfa_state = self.nfa_final_transition(self.nfa_state);
-            (ReadResult::from_nfa(&self.nfa_state, false, false), 0, 0)
-        } else {
-            let (res, state, nin, nout) =
-                if self.copy {
-                    self.consume_and_copy(self.nfa_state, input, output)
-                } else {
-                    self.consume(self.nfa_state, input)
-                };
-            self.nfa_state = state;
-            (res, nin, nout)
+            let s = self.transition_final_nfa(self.nfa_state);
+            let res = ReadRecordResult::from_nfa(s, false, false, false);
+            return match res {
+                ReadRecordResult::Record => {
+                    if ends.is_empty() {
+                        return (ReadRecordResult::OutputEndsFull, 0, 0, 0);
+                    }
+                    self.nfa_state = s;
+                    ends[0] = self.output_pos;
+                    self.output_pos = 0;
+                    (res, 0, 0, 1)
+                }
+                _ => {
+                    self.nfa_state = s;
+                    (res, 0, 0, 0)
+                }
+            };
         }
-    }
-
-    #[inline(always)]
-    fn consume_and_copy(
-        &self,
-        mut state: NfaState,
-        input: &[u8],
-        output: &mut [u8],
-    ) -> (ReadResult, NfaState, usize, usize) {
-        debug_assert!(!input.is_empty());
         if output.is_empty() {
-            // If the output buffer is empty, then we can never make progress,
-            // so just quit now.
-            return (ReadResult::OutputFull, state, 0, 0);
+            return (ReadRecordResult::OutputFull, 0, 0, 0);
         }
-        let (mut nin, mut nout) = (0, 0);
-        while nin < input.len() && nout < output.len() {
-            let (s, i, o) = self.nfa_transition(state, input[nin]);
+        if ends.is_empty() {
+            return (ReadRecordResult::OutputEndsFull, 0, 0, 0);
+        }
+        let (mut nin, mut nout, mut nend) = (0, self.output_pos, 0);
+        let mut state = self.nfa_state;
+        while nin < input.len() && nout < output.len() && nend < ends.len() {
+            let (s, i, o) = self.transition_nfa(state, input[nin]);
             if o {
                 output[nout] = input[nin];
                 nout += 1;
@@ -532,38 +859,64 @@ impl Reader {
                 nin += 1;
             }
             state = s;
-            if state.is_final() {
-                break;
+            if state.is_field_final() {
+                ends[nend] = nout;
+                nend += 1;
+                if state != NfaState::EndFieldDelim {
+                    break;
+                }
             }
         }
-        let res = ReadResult::from_nfa(
-            &state, nin >= input.len(), nout >= output.len());
-        (res, state, nin, nout)
+        let res = ReadRecordResult::from_nfa(
+            state,
+            nin >= input.len(),
+            nout >= output.len(),
+            nend >= ends.len());
+        self.nfa_state = state;
+        self.output_pos = if res.is_record() { 0 } else { nout };
+        (res, nin, nout, nend)
     }
 
     #[inline(always)]
-    fn consume(
-        &self,
-        mut state: NfaState,
+    fn read_field_nfa(
+        &mut self,
         input: &[u8],
-    ) -> (ReadResult, NfaState, usize, usize) {
-        let mut nin = 0;
-        while nin < input.len() {
-            let (s, i, _) = self.nfa_transition(state, input[nin]);
+        output: &mut [u8],
+    ) -> (ReadFieldResult, usize, usize) {
+        if input.is_empty() {
+            self.nfa_state = self.transition_final_nfa(self.nfa_state);
+            let res = ReadFieldResult::from_nfa(self.nfa_state, false, false);
+            return (res, 0, 0);
+        }
+        if output.is_empty() {
+            // If the output buffer is empty, then we can never make progress,
+            // so just quit now.
+            return (ReadFieldResult::OutputFull, 0, 0);
+        }
+        let (mut nin, mut nout) = (0, 0);
+        let mut state = self.nfa_state;
+        while nin < input.len() && nout < output.len() {
+            let (s, i, o) = self.transition_nfa(state, input[nin]);
+            if o {
+                output[nout] = input[nin];
+                nout += 1;
+            }
             if i {
                 nin += 1;
             }
             state = s;
-            if state.is_final() {
+            if state.is_field_final() {
                 break;
             }
         }
-        let res = ReadResult::from_nfa(&state, nin >= input.len(), false);
-        (res, state, nin, 0)
+        let res = ReadFieldResult::from_nfa(
+            state, nin >= input.len(), nout >= output.len());
+        self.nfa_state = state;
+        (res, nin, nout)
     }
 
     #[inline(always)]
-    fn nfa_final_transition(&self, state: NfaState) -> NfaState {
+    fn transition_final_nfa(&self, state: NfaState) -> NfaState {
         use self::NfaState::*;
         match state {
             End
@@ -582,7 +935,7 @@ impl Reader {
     }
 
     #[inline(always)]
-    fn nfa_transition(
+    fn transition_nfa(
         &self,
         state: NfaState,
         c: u8,
@@ -747,26 +1100,82 @@ impl Dfa {
         self.final_record = self.new_state(NfaState::EndRecord);
     }
 
-    fn new_read_result(
+    fn new_read_field_result(
         &self,
-        state: &DfaState,
+        state: DfaState,
         is_final_trans: bool,
         inpdone: bool,
         outdone: bool,
-    ) -> ReadResult {
-        if state >= &self.final_record {
-            ReadResult::Field { record_end: true }
-        } else if state == &self.final_field {
-            ReadResult::Field { record_end: false }
+    ) -> ReadFieldResult {
+        if state >= self.final_record {
+            ReadFieldResult::Field { record_end: true }
+        } else if state == self.final_field {
+            ReadFieldResult::Field { record_end: false }
         } else if is_final_trans && state.is_start() {
-            ReadResult::End
+            ReadFieldResult::End
         } else {
-            debug_assert!(state < &self.final_field);
+            debug_assert!(state < self.final_field);
             if !inpdone && outdone {
-                ReadResult::OutputFull
+                ReadFieldResult::OutputFull
             } else {
-                ReadResult::InputEmpty
+                ReadFieldResult::InputEmpty
             }
+        }
+    }
+
+    fn new_read_field_nocopy_result(
+        &self,
+        state: DfaState,
+        is_final_trans: bool,
+    ) -> ReadFieldNoCopyResult {
+        if state >= self.final_record {
+            ReadFieldNoCopyResult::Field { record_end: true }
+        } else if state == self.final_field {
+            ReadFieldNoCopyResult::Field { record_end: false }
+        } else if is_final_trans && state.is_start() {
+            ReadFieldNoCopyResult::End
+        } else {
+            debug_assert!(state < self.final_field);
+            ReadFieldNoCopyResult::InputEmpty
+        }
+    }
+
+    fn new_read_record_result(
+        &self,
+        state: DfaState,
+        is_final_trans: bool,
+        inpdone: bool,
+        outdone: bool,
+        endsdone: bool,
+    ) -> ReadRecordResult {
+        if state >= self.final_record {
+            ReadRecordResult::Record
+        } else if is_final_trans && state.is_start() {
+            ReadRecordResult::End
+        } else {
+            debug_assert!(state < self.final_record);
+            if !inpdone && outdone {
+                ReadRecordResult::OutputFull
+            } else if !inpdone && endsdone {
+                ReadRecordResult::OutputEndsFull
+            } else {
+                ReadRecordResult::InputEmpty
+            }
+        }
+    }
+
+    fn new_read_record_nocopy_result(
+        &self,
+        state: DfaState,
+        is_final_trans: bool,
+    ) -> ReadRecordNoCopyResult {
+        if state >= self.final_record {
+            ReadRecordNoCopyResult::Record
+        } else if is_final_trans && state.is_start() {
+            ReadRecordNoCopyResult::End
+        } else {
+            debug_assert!(state < self.final_record);
+            ReadRecordNoCopyResult::InputEmpty
         }
     }
 }
@@ -844,7 +1253,9 @@ mod tests {
 
     use arrayvec::{ArrayString, ArrayVec};
 
-    use super::{Reader, ReaderBuilder, ReadResult, Terminator};
+    use super::{
+        Reader, ReaderBuilder, ReadFieldResult, Terminator,
+    };
 
     type Csv = ArrayVec<[Row; 10]>;
     type Row = ArrayVec<[Field; 10]>;
@@ -881,51 +1292,107 @@ mod tests {
                 let mut builder = ReaderBuilder::new();
                 $config(&mut builder);
                 let mut rdr = builder.build();
-                let got = parse(&mut rdr, $data);
+                let got = parse_by_field(&mut rdr, $data);
                 let expected = $expected;
-                assert_eq!(expected, got);
+                assert_eq!(expected, got, "dfa by field");
 
                 let mut builder = ReaderBuilder::new();
                 builder.nfa(true);
                 $config(&mut builder);
                 let mut rdr = builder.build();
-                let got = parse(&mut rdr, $data);
+                let got = parse_by_field(&mut rdr, $data);
                 let expected = $expected;
-                assert_eq!(expected, got);
+                assert_eq!(expected, got, "nfa by field");
+
+                let mut builder = ReaderBuilder::new();
+                $config(&mut builder);
+                let mut rdr = builder.build();
+                let got = parse_by_record(&mut rdr, $data);
+                let expected = $expected;
+                assert_eq!(expected, got, "dfa by record");
+
+                let mut builder = ReaderBuilder::new();
+                builder.nfa(true);
+                $config(&mut builder);
+                let mut rdr = builder.build();
+                let got = parse_by_record(&mut rdr, $data);
+                let expected = $expected;
+                assert_eq!(expected, got, "nfa by record");
             }
         };
     }
 
-    fn parse(rdr: &mut Reader, data: &str) -> Csv {
+    fn parse_by_field(rdr: &mut Reader, data: &str) -> Csv {
         let mut data = data.as_bytes();
         let mut field = [0u8; 10];
         let mut csv = Csv::new();
         let mut row = Row::new();
-        let mut fieldpos = 0;
+        let mut outpos = 0;
         loop {
-            let (res, nin, nout) = rdr.read(data, &mut field[fieldpos..]);
+            let (res, nin, nout) = rdr.read_field(data, &mut field[outpos..]);
             data = &data[nin..];
+            outpos += nout;
 
             match res {
-                ReadResult::InputEmpty => {
+                ReadFieldResult::InputEmpty => {
                     if !data.is_empty() {
                         panic!("missing input data")
                     }
-                    fieldpos += nout;
                 }
-                ReadResult::OutputFull => panic!("field too large"),
-                ReadResult::Field { record_end } => {
-                    let s = str::from_utf8(&field[..fieldpos + nout]).unwrap();
+                ReadFieldResult::OutputFull => panic!("field too large"),
+                ReadFieldResult::Field { record_end } => {
+                    let s = str::from_utf8(&field[..outpos]).unwrap();
                     row.push(Field::from(s).unwrap());
-                    fieldpos = 0;
+                    outpos = 0;
                     if record_end {
                         csv.push(row);
                         row = Row::new();
                     }
                 }
-                ReadResult::End => {
+                ReadFieldResult::End => {
                     return csv;
                 }
+            }
+        }
+    }
+
+    fn parse_by_record(rdr: &mut Reader, data: &str) -> Csv {
+        use ReadRecordResult::*;
+
+        let mut data = data.as_bytes();
+        let mut record = [0; 1024];
+        let mut ends = [0; 10];
+
+        let mut csv = Csv::new();
+        let (mut outpos, mut endpos) = (0, 0);
+        loop {
+            let (res, nin, nout, nend) = rdr.read_record(
+                data, &mut record[outpos..], &mut ends[endpos..]);
+            data = &data[nin..];
+            outpos += nout;
+            endpos += nend;
+
+            match res {
+                InputEmpty => {
+                    if !data.is_empty() {
+                        panic!("missing input data")
+                    }
+                }
+                OutputFull => panic!("record too large (out buffer)"),
+                OutputEndsFull => panic!("record too large (end buffer)"),
+                Record => {
+                    let s = str::from_utf8(&record[..outpos]).unwrap();
+                    let mut start = 0;
+                    let mut row = Row::new();
+                    for &end in &ends[..endpos] {
+                        row.push(Field::from(&s[start..end]).unwrap());
+                        start = end;
+                    }
+                    csv.push(row);
+                    outpos = 0;
+                    endpos = 0;
+                }
+                End => return csv,
             }
         }
     }
@@ -1050,7 +1517,7 @@ mod tests {
             $rdr:expr, $input:expr, $output:expr,
             $expect_in:expr, $expect_out:expr, $expect_res:expr
         ) => {{
-            let (res, nin, nout) = $rdr.read($input, $output);
+            let (res, nin, nout) = $rdr.read_field($input, $output);
             assert_eq!($expect_in, nin);
             assert_eq!($expect_out, nout);
             assert_eq!($expect_res, res);
@@ -1061,7 +1528,7 @@ mod tests {
     // straight to End.
     #[test]
     fn stream_empty() {
-        use ReadResult::*;
+        use ReadFieldResult::*;
 
         let mut rdr = Reader::new();
         assert_read!(rdr, &[], &mut [], 0, 0, End);
@@ -1070,7 +1537,7 @@ mod tests {
     // Test that a single space is treated as a single field.
     #[test]
     fn stream_space() {
-        use ReadResult::*;
+        use ReadFieldResult::*;
 
         let mut rdr = Reader::new();
         assert_read!(rdr, b(" "), &mut [0], 1, 1, InputEmpty);
@@ -1081,7 +1548,7 @@ mod tests {
     // Test that a single comma ...
     #[test]
     fn stream_comma() {
-        use ReadResult::*;
+        use ReadFieldResult::*;
 
         let mut rdr = Reader::new();
         assert_read!(rdr, b(","), &mut [0], 1, 0, Field { record_end: false });
@@ -1093,7 +1560,7 @@ mod tests {
     // buffers.
     #[test]
     fn stream_output_chunks() {
-        use ReadResult::*;
+        use ReadFieldResult::*;
 
         let mut inp = b("fooquux");
         let mut out = &mut [0; 2];
@@ -1124,7 +1591,7 @@ mod tests {
     // buffers.
     #[test]
     fn stream_input_chunks() {
-        use ReadResult::*;
+        use ReadFieldResult::*;
 
         let mut out = &mut [0; 10];
         let mut rdr = Reader::new();
@@ -1148,7 +1615,7 @@ mod tests {
     // Test we can read doubled quotes correctly in a stream.
     #[test]
     fn stream_doubled_quotes() {
-        use ReadResult::*;
+        use ReadFieldResult::*;
 
         let mut out = &mut [0; 10];
         let mut rdr = Reader::new();
@@ -1166,7 +1633,7 @@ mod tests {
     // Test we can read escaped quotes correctly in a stream.
     #[test]
     fn stream_escaped_quotes() {
-        use ReadResult::*;
+        use ReadFieldResult::*;
 
         let mut out = &mut [0; 10];
         let mut builder = ReaderBuilder::new();
@@ -1185,7 +1652,7 @@ mod tests {
     // Test that empty output buffers don't wreak havoc.
     #[test]
     fn stream_empty_output() {
-        use ReadResult::*;
+        use ReadFieldResult::*;
 
         let mut out = &mut [0; 10];
         let mut rdr = Reader::new();
@@ -1207,7 +1674,7 @@ mod tests {
     // the right thing.
     #[test]
     fn reset_works() {
-        use ReadResult::*;
+        use ReadFieldResult::*;
 
         let mut out = &mut [0; 10];
         let mut rdr = Reader::new();
@@ -1231,7 +1698,7 @@ mod tests {
     // Test the line number reporting is correct.
     #[test]
     fn line_numbers() {
-        use ReadResult::*;
+        use ReadFieldResult::*;
 
         let mut out = &mut [0; 10];
         let mut rdr = Reader::new();
@@ -1249,5 +1716,70 @@ mod tests {
 
         assert_read!(rdr, &[], &mut [0], 0, 0, End);
         assert_eq!(6, rdr.line());
+    }
+
+    macro_rules! assert_read_record {
+        (
+            $rdr:expr, $input:expr, $output:expr, $ends:expr,
+            $expect_in:expr, $expect_out:expr,
+            $expect_end:expr, $expect_res:expr
+        ) => {{
+            let (res, nin, nout, nend) =
+                $rdr.read_record($input, $output, $ends);
+            assert_eq!($expect_res, res, "result");
+            assert_eq!($expect_in, nin, "input");
+            assert_eq!($expect_out, nout, "output");
+            assert_eq!($expect_end, nend, "ends");
+        }};
+    }
+
+    // Test that we can incrementally read a record.
+    #[test]
+    fn stream_record() {
+        use ReadRecordResult::*;
+
+        let mut inp = b("foo,bar\nbaz");
+        let mut out = &mut [0; 1024];
+        let mut ends = &mut [0; 10];
+        let mut rdr = Reader::new();
+
+        assert_read_record!(rdr, &inp, out, ends, 8, 6, 2, Record);
+        assert_eq!(ends[0], 3);
+        assert_eq!(ends[1], 6);
+        inp = &inp[8..];
+
+        assert_read_record!(rdr, &inp, out, ends, 3, 3, 0, InputEmpty);
+        inp = &inp[3..];
+
+        assert_read_record!(rdr, &inp, out, ends, 0, 0, 1, Record);
+        assert_eq!(ends[0], 3);
+
+        assert_read_record!(rdr, &inp, out, ends, 0, 0, 0, End);
+    }
+
+    // Test that if our output ends are full during the last read that
+    // we get an appropriate state returned.
+    #[test]
+    fn stream_record_last_end_output_full() {
+        use ReadRecordResult::*;
+
+        let mut inp = b("foo,bar\nbaz");
+        let mut out = &mut [0; 1024];
+        let mut ends = &mut [0; 10];
+        let mut rdr = Reader::new();
+
+        assert_read_record!(rdr, &inp, out, ends, 8, 6, 2, Record);
+        assert_eq!(ends[0], 3);
+        assert_eq!(ends[1], 6);
+        inp = &inp[8..];
+
+        assert_read_record!(rdr, &inp, out, ends, 3, 3, 0, InputEmpty);
+        inp = &inp[3..];
+
+        assert_read_record!(rdr, &inp, out, &mut [], 0, 0, 0, OutputEndsFull);
+        assert_read_record!(rdr, &inp, out, ends, 0, 0, 1, Record);
+        assert_eq!(ends[0], 3);
+
+        assert_read_record!(rdr, &inp, out, ends, 0, 0, 0, End);
     }
 }

@@ -13,40 +13,28 @@ static NFL: &'static str = include_str!("../examples/data/nfl.csv");
 static GAME: &'static str = include_str!("../examples/data/game.csv");
 static POP: &'static str = include_str!("../examples/data/worldcitiespop.csv");
 
-#[bench]
-fn count_nfl_record_bytes(b: &mut Bencher) {
-    let data = NFL.as_bytes();
-    b.bytes = data.len() as u64;
-    b.iter(|| {
-        let mut rdr = ReaderBuilder::new().from_reader(data);
-        assert_eq!(count_read_record_bytes(&mut rdr), 10000);
-    })
+macro_rules! bench {
+    ($name:ident, $data:ident, $counter:ident, $result:expr) => {
+        #[bench]
+        fn $name(b: &mut Bencher) {
+            let data = $data.as_bytes();
+            b.bytes = data.len() as u64;
+            b.iter(|| {
+                let mut rdr = ReaderBuilder::new().from_reader(data);
+                assert_eq!($counter(&mut rdr), $result);
+            })
+        }
+    };
 }
 
-#[bench]
-fn count_game_record_bytes(b: &mut Bencher) {
-    let data = GAME.as_bytes();
-    b.bytes = data.len() as u64;
-    b.iter(|| {
-        let mut rdr = ReaderBuilder::new().from_reader(data);
-        assert_eq!(count_read_record_bytes(&mut rdr), 100000);
-    })
-}
-
-#[bench]
-fn count_pop_record_bytes(b: &mut Bencher) {
-    let data = POP.as_bytes();
-    b.bytes = data.len() as u64;
-    b.iter(|| {
-        let mut rdr = ReaderBuilder::new().from_reader(data);
-        assert_eq!(count_read_record_bytes(&mut rdr), 20001);
-    })
-}
+bench!(count_nfl_record_bytes, NFL, count_read_record_bytes, 10000);
+bench!(count_game_record_bytes, GAME, count_read_record_bytes, 100000);
+bench!(count_pop_record_bytes, POP, count_read_record_bytes, 20001);
 
 fn count_read_record_bytes<R: io::Read>(rdr: &mut Reader<R>) -> u64 {
     let mut count = 0;
     let mut rec = ByteRecord::new();
-    while rdr.read_record_bytes(&mut rec).unwrap() {
+    while !rdr.read_record_bytes(&mut rec).unwrap() {
         count += 1;
     }
     count

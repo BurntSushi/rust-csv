@@ -17,7 +17,7 @@ the `Writer` API provides a CSV writer.
 This example shows how to count the number of fields and records in CSV data.
 
 ```
-use csv_core::{Reader, ReadResult};
+use csv_core::{Reader, ReadFieldResult};
 
 let data = "
 foo,bar,baz
@@ -31,18 +31,18 @@ let mut count_fields = 0;
 let mut count_records = 0;
 loop {
     // We skip handling the output since we don't need it for counting.
-    let (result, nin, _) = rdr.read(bytes, &mut [0; 1024]);
+    let (result, nin, _) = rdr.read_field(bytes, &mut [0; 1024]);
     bytes = &bytes[nin..];
     match result {
-        ReadResult::InputEmpty => {},
-        ReadResult::OutputFull => panic!("field too large"),
-        ReadResult::Field { record_end } => {
+        ReadFieldResult::InputEmpty => {},
+        ReadFieldResult::OutputFull => panic!("field too large"),
+        ReadFieldResult::Field { record_end } => {
             count_fields += 1;
             if record_end {
                 count_records += 1;
             }
         }
-        ReadResult::End => break,
+        ReadFieldResult::End => break,
     }
 }
 assert_eq!(3, count_records);
@@ -102,7 +102,11 @@ foo,\"bar,baz\"
 extern crate arrayvec;
 extern crate memchr;
 
-pub use reader::{Reader, ReaderBuilder, ReadResult, Terminator};
+pub use reader::{
+    Reader, ReaderBuilder, Terminator,
+    ReadFieldResult, ReadFieldNoCopyResult,
+    ReadRecordResult, ReadRecordNoCopyResult,
+};
 pub use writer::{Writer, WriterBuilder, WriteResult, QuoteStyle};
 
 mod reader;
