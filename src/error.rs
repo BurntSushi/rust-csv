@@ -45,6 +45,10 @@ pub enum Error {
         /// The number of fields in the bad record.
         len: u64,
     },
+    /// This error occurs when either the `byte_headers` or `headers` methods
+    /// are called on a CSV reader that was asked to `seek` before it parsed
+    /// the first record.
+    Seek,
 }
 
 impl From<io::Error> for Error {
@@ -59,6 +63,7 @@ impl error::Error for Error {
             Error::Io(ref err) => err.description(),
             Error::Utf8 { ref err, .. } => err.description(),
             Error::UnequalLengths{..} => "record of different length found",
+            Error::Seek => "headers unavailable on seeked CSV reader",
         }
     }
 
@@ -67,6 +72,7 @@ impl error::Error for Error {
             Error::Io(ref err) => Some(err),
             Error::Utf8 { ref err, .. } => Some(err),
             Error::UnequalLengths{..} => None,
+            Error::Seek => None,
         }
     }
 }
@@ -91,6 +97,11 @@ impl fmt::Display for Error {
                         found record with {} fields, but the previous record \
                         has {} fields",
                     pos.record(), pos.byte(), pos.line(), len, expected_len)
+            }
+            Error::Seek => {
+                write!(f, "CSV error: cannot access headers of CSV data \
+                           when the parser was seeked before the first record \
+                           could be read")
             }
         }
     }

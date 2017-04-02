@@ -1,6 +1,8 @@
 use std::cmp;
-use std::io::{self, BufRead};
+use std::fs::File;
+use std::io::{self, BufRead, Seek};
 use std::mem;
+use std::path::Path;
 use std::result;
 
 use bytecount;
@@ -41,6 +43,15 @@ impl ReaderBuilder {
     /// with `from_`.
     pub fn new() -> ReaderBuilder {
         ReaderBuilder::default()
+    }
+
+    /// Build a CSV parser from this configuration that reads data from the
+    /// given file path.
+    ///
+    /// If there was a problem open the file at the given path, then this
+    /// returns the corresponding error.
+    pub fn from_path<P: AsRef<Path>>(&self, path: P) -> Result<Reader<File>> {
+        Ok(Reader::new(self, File::open(path)?))
     }
 
     /// Build a CSV parser from this configuration that reads data from `rdr.
@@ -165,19 +176,46 @@ pub struct Reader<R> {
 
 #[derive(Debug)]
 struct ReaderState {
+    /// When set, this contains the first row of any parsed CSV data.
+    ///
+    /// This is always populated, regardless of whether `has_headers` is set.
     headers: Option<Headers>,
+    /// When set, the first row of parsed CSV data is excluded from things
+    /// that read records, like iterators and `read_record`.
     has_headers: bool,
+    /// When set, there is no restriction on the length of records. When not
+    /// set, every record must have the same number of fields, or else an error
+    /// is reported.
     flexible: bool,
+    /// The number of fields in the first record parsed.
     first_field_count: Option<u64>,
+    /// The position of the parser just before the previous record was parsed.
     prev_pos: Position,
+    /// The current position of the parser.
+    ///
+    /// Note that this position is only observable by callers at the start
+    /// of a record. More granular positions are not supported.
     cur_pos: Position,
+    /// Whether this reader has been seeked or not.
+    seeked: bool,
+    /// Whether the first record has been read or not.
+    first: bool,
+    /// Whether EOF of the underlying reader has been reached or not.
     eof: bool,
 }
 
+/// Headers encapsulates any data associated with the headers of CSV data.
+///
+/// The headers always correspond to the first row.
 #[derive(Debug)]
 struct Headers {
+    /// The position just of the parser just before the headers were parsed,
+    /// if available. This is unavailable when the caller sets the headers
+    /// explicitly.
     pos: Option<Position>,
+    /// The header, as raw bytes.
     byte_record: ByteRecord,
+    /// The header, as valid UTF-8 (or a UTF-8 error).
     string_record: result::Result<StringRecord, Utf8Error>,
 }
 
@@ -195,22 +233,44 @@ impl<R: io::Read> Reader<R> {
                 first_field_count: None,
                 prev_pos: Position::new(),
                 cur_pos: Position::new(),
+                seeked: false,
+                first: false,
                 eof: false,
             },
         }
     }
 
-    /// Return the current position of this CSV reader.
+    /// Create a new CSV parser with a default configuration for the given
+    /// file path.
     ///
-    /// The byte offset in the position returned can be used to `seek` this
-    /// reader. In particular, seeking to a position returned here on the same
-    /// data will result in parsing the same subsequent record.
-    pub fn position(&self) -> &Position {
-        &self.state.cur_pos
+    /// To customize CSV parsing, use a `ReaderBuilder`.
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Reader<File>> {
+        ReaderBuilder::new().from_path(path)
     }
 
+    /// Create a new CSV parser with a default configuration for the given
+    /// reader.
+    ///
+    /// To customize CSV parsing, use a `ReaderBuilder`.
+    pub fn from_reader(rdr: R) -> Reader<R> {
+        ReaderBuilder::new().from_reader(rdr)
+    }
+
+    /// Returns a reference to the first row read by this parser.
+    ///
+    /// If no row has been read yet, then this will force parsing of the first
+    /// row.
+    ///
+    /// If there was a problem parsing the row or if it wasn't valid UTF-8,
+    /// then this returns an error.
+    ///
+    /// Note that this method may be used regardless of whether `has_headers`
+    /// is enabled.
     pub fn headers(&mut self) -> Result<&StringRecord> {
         if self.state.headers.is_none() {
+            if self.state.seeked {
+                return Err(Error::Seek);
+            }
             let mut record = ByteRecord::new();
             let pos = self.position().clone();
             self.read_record_bytes_impl(&mut record)?;
@@ -226,8 +286,28 @@ impl<R: io::Read> Reader<R> {
         }
     }
 
+    /// Set the headers of this CSV parser manually.
+    ///
+    /// This overrides any other setting. Any automatic detection of headers
+    /// is disabled.
+    pub fn set_headers(&mut self, headers: StringRecord) {
+        self.set_headers_pos(Ok(headers), None);
+    }
+
+    /// Returns a reference to the first row read by this parser as raw bytes.
+    ///
+    /// If no row has been read yet, then this will force parsing of the first
+    /// row.
+    ///
+    /// If there was a problem parsing the row then this returns an error.
+    ///
+    /// Note that this method may be used regardless of whether `has_headers`
+    /// is enabled.
     pub fn byte_headers(&mut self) -> Result<&ByteRecord> {
         if self.state.headers.is_none() {
+            if self.state.seeked {
+                return Err(Error::Seek);
+            }
             let mut record = ByteRecord::new();
             let pos = self.position().clone();
             self.read_record_bytes_impl(&mut record)?;
@@ -236,10 +316,10 @@ impl<R: io::Read> Reader<R> {
         Ok(&self.state.headers.as_ref().unwrap().byte_record)
     }
 
-    pub fn set_headers(&mut self, headers: StringRecord) {
-        self.set_headers_pos(Ok(headers), None);
-    }
-
+    /// Set the headers of this CSV parser manually as raw bytes.
+    ///
+    /// This overrides any other setting. Any automatic detection of headers
+    /// is disabled.
     pub fn set_byte_headers(&mut self, headers: ByteRecord) {
         self.set_headers_pos(Err(headers), None);
     }
@@ -249,6 +329,8 @@ impl<R: io::Read> Reader<R> {
         headers: result::Result<StringRecord, ByteRecord>,
         pos: Option<Position>,
     ) {
+        // If we have string headers, then get byte headers. But if we have
+        // byte headers, then get the string headers (or a UTF-8 error).
         let (str_headers, byte_headers) = match headers {
             Ok(string) => {
                 let bytes = string.clone().into_byte_record();
@@ -268,6 +350,15 @@ impl<R: io::Read> Reader<R> {
         });
     }
 
+    /// Return the current position of this CSV reader.
+    ///
+    /// The byte offset in the position returned can be used to `seek` this
+    /// reader. In particular, seeking to a position returned here on the same
+    /// data will result in parsing the same subsequent record.
+    pub fn position(&self) -> &Position {
+        &self.state.cur_pos
+    }
+
     pub fn read_record(&mut self, record: &mut StringRecord) -> Result<bool> {
         string_record::read(self, record)
     }
@@ -276,9 +367,17 @@ impl<R: io::Read> Reader<R> {
         &mut self,
         record: &mut ByteRecord,
     ) -> Result<bool> {
+        if !self.state.has_headers && !self.state.first {
+            if let Some(ref headers) = self.state.headers {
+                self.state.first = true;
+                record.clone_from(&headers.byte_record);
+                return Ok(self.state.eof);
+            }
+        }
         let pos = self.position().clone();
         let eof = self.read_record_bytes_impl(record)?;
-        if self.state.headers.is_none() {
+        self.state.first = true;
+        if !self.state.seeked && self.state.headers.is_none() {
             self.set_headers_pos(Err(record.clone()), Some(pos));
             // If the end user indicated that we have headers, then we should
             // never return the first row. Instead, we should attempt to
@@ -339,6 +438,53 @@ impl<R: io::Read> Reader<R> {
     }
 }
 
+impl<R: io::Read + io::Seek> Reader<R> {
+    /// Seeks the underlying reader to the position given.
+    ///
+    /// This comes with a few caveats:
+    ///
+    /// * If the headers of this data have not already been read, then
+    ///   `byte_headers` and `headers` will always return an error after a
+    ///   call to `seek`.
+    /// * Any internal buffer associated with this reader is cleared.
+    /// * If the given position does not correspond to a position immediately
+    ///   before the start of a record, then the behavior of this reader is
+    ///   unspecified.
+    ///
+    /// If the given position has a byte offset equivalent to the current
+    /// position, then no seeking is performed.
+    pub fn seek(&mut self, pos: &Position) -> Result<()> {
+        if pos.byte() == self.state.cur_pos.byte() {
+            return Ok(());
+        }
+        self.seek_raw(io::SeekFrom::Start(pos.byte()), pos)
+    }
+
+    /// This is like `seek`, but provides direct control over how the seeking
+    /// operation is performed via `io::SeekFrom`.
+    ///
+    /// The `pos` position given *should* correspond the position indicated
+    /// by `seek_from`, but there is no requirement. If the `pos` position
+    /// given is incorrect, then the position information returned by this
+    /// reader will be similarly incorrect.
+    ///
+    /// Unlike `seek`, this will always cause an actual seek to be performed.
+    pub fn seek_raw(
+        &mut self,
+        seek_from: io::SeekFrom,
+        pos: &Position,
+    ) -> Result<()> {
+        self.rdr.seek(seek_from)?;
+        self.core.reset();
+        self.core.set_line(pos.line());
+        self.state.seeked = true;
+        self.state.prev_pos = pos.clone();
+        self.state.cur_pos = pos.clone();
+        self.state.eof = false;
+        Ok(())
+    }
+}
+
 impl ReaderState {
     #[inline(always)]
     fn add_record(&mut self, num_fields: u64) -> Result<()> {
@@ -366,7 +512,7 @@ impl ReaderState {
 ///
 /// A position is used to report errors in CSV data. All positions include the
 /// byte offset, line number and record index at which the error occurred.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Position {
     byte: u64,
     line: u64,
@@ -386,8 +532,10 @@ impl Position {
 
 #[cfg(test)]
 mod tests {
+    use std::io;
+
     use byte_record::ByteRecord;
-    use error::Error;
+    use error::{Error, new_utf8_error};
     use string_record::StringRecord;
 
     use super::{ReaderBuilder, Position};
@@ -410,8 +558,7 @@ mod tests {
         let mut rdr = ReaderBuilder::new()
             .has_headers(false)
             .from_reader(data);
-        // let mut rec = ByteRecord::new();
-        let mut rec = ByteRecord::with_capacity(1);
+        let mut rec = ByteRecord::new();
 
         assert!(!rdr.read_record_bytes(&mut rec).unwrap());
         assert_eq!(3, rec.len());
@@ -515,10 +662,176 @@ mod tests {
 
         assert!(rdr.read_record(&mut rec).unwrap());
 
-        let headers = rdr.byte_headers().unwrap();
+        {
+            let headers = rdr.byte_headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!(b"foo", &headers[0]);
+            assert_eq!(b"bar", &headers[1]);
+            assert_eq!(b"baz", &headers[2]);
+        }
+        {
+            let headers = rdr.headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!("foo", &headers[0]);
+            assert_eq!("bar", &headers[1]);
+            assert_eq!("baz", &headers[2]);
+        }
+    }
+
+    #[test]
+    fn read_record_headers_invalid_utf8() {
+        let data = &b"foo,b\xFFar,baz\na,b,c\nd,e,f"[..];
+        let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(data);
+        let mut rec = StringRecord::new();
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("a", &rec[0]);
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("d", &rec[0]);
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+
+        // Check that we can read the headers as raw bytes, but that
+        // if we read them as strings, we get an appropriate UTF-8 error.
+        {
+            let headers = rdr.byte_headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!(b"foo", &headers[0]);
+            assert_eq!(b"b\xFFar", &headers[1]);
+            assert_eq!(b"baz", &headers[2]);
+        }
+        match rdr.headers().unwrap_err() {
+            Error::Utf8 { pos: Some(pos), err } => {
+                assert_eq!(pos, Position { byte: 0, line: 1, record: 0 });
+                assert_eq!(err.field(), 1);
+                assert_eq!(err.valid_up_to(), 1);
+            }
+            err => panic!("match failed, got {:?}", err),
+        }
+    }
+
+    #[test]
+    fn read_record_no_headers_before() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f");
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(data);
+        let mut rec = StringRecord::new();
+
+        {
+            let headers = rdr.headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!("foo", &headers[0]);
+            assert_eq!("bar", &headers[1]);
+            assert_eq!("baz", &headers[2]);
+        }
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("foo", &rec[0]);
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("a", &rec[0]);
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("d", &rec[0]);
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+    }
+
+    #[test]
+    fn read_record_no_headers_after() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f");
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(data);
+        let mut rec = StringRecord::new();
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("foo", &rec[0]);
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("a", &rec[0]);
+
+        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("d", &rec[0]);
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+
+        let headers = rdr.headers().unwrap();
         assert_eq!(3, headers.len());
-        assert_eq!(b("foo"), &headers[0]);
-        assert_eq!(b("bar"), &headers[1]);
-        assert_eq!(b("baz"), &headers[2]);
+        assert_eq!("foo", &headers[0]);
+        assert_eq!("bar", &headers[1]);
+        assert_eq!("baz", &headers[2]);
+    }
+
+    #[test]
+    fn seek() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
+        let mut rdr = ReaderBuilder::new()
+            .from_reader(io::Cursor::new(data));
+        let pos = Position { byte: 18, line: 3, record: 2 };
+        rdr.seek(&pos).unwrap();
+
+        let mut rec = StringRecord::new();
+
+        assert_eq!(18, rdr.position().byte());
+        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("d", &rec[0]);
+
+        assert_eq!(24, rdr.position().byte());
+        assert_eq!(4, rdr.position().line());
+        assert_eq!(3, rdr.position().record());
+        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("g", &rec[0]);
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+    }
+
+    // Test that asking for headers after a seek returns an error if the
+    // headers weren't read before seeking.
+    #[test]
+    fn seek_headers_error() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
+        let mut rdr = ReaderBuilder::new()
+            .from_reader(io::Cursor::new(data));
+        let pos = Position { byte: 18, line: 3, record: 2 };
+        rdr.seek(&pos).unwrap();
+        assert_match!(rdr.headers(), Err(Error::Seek));
+    }
+
+    // Test that we can read headers after seeking if the headers were read
+    // before seeking.
+    #[test]
+    fn seek_headers() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
+        let mut rdr = ReaderBuilder::new()
+            .from_reader(io::Cursor::new(data));
+        let headers = rdr.headers().unwrap().clone();
+        let pos = Position { byte: 18, line: 3, record: 2 };
+        rdr.seek(&pos).unwrap();
+        assert_eq!(&headers, rdr.headers().unwrap());
+    }
+
+    // Test that even if we didn't read headers before seeking, if we seek to
+    // the current byte offset, then no seeking is done and therefore we can
+    // still read headers after seeking.
+    #[test]
+    fn seek_headers_no_actual_seek() {
+        let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
+        let mut rdr = ReaderBuilder::new()
+            .from_reader(io::Cursor::new(data));
+        rdr.seek(&Position::new()).unwrap();
+        assert_eq!("foo", &rdr.headers().unwrap()[0]);
     }
 }
