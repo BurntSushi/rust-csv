@@ -462,6 +462,14 @@ impl Reader {
         self.line
     }
 
+    /// Set the line number.
+    ///
+    /// This is useful after a call to `reset` where the caller knows the
+    /// line number from some additional context.
+    pub fn set_line(&mut self, line: u64) {
+        self.line = line;
+    }
+
     /// Parse CSV data in `input` and copy field data to `output`.
     ///
     /// This routine requires a caller provided buffer of CSV data as the

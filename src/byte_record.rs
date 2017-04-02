@@ -1,7 +1,8 @@
 use std::cmp;
 use std::io;
+use std::iter::FromIterator;
 use std::mem;
-use std::ops;
+use std::ops::{self, Range};
 use std::result;
 use std::ptr;
 use std::str;
@@ -11,6 +12,7 @@ use error::{
     new_from_utf8_error, new_utf8_error,
 };
 use reader::Reader;
+use string_record::StringRecord;
 
 /// Retrieve the underlying parts of a byte record.
 pub fn as_parts(
@@ -79,12 +81,24 @@ impl Default for ByteRecord {
 impl ByteRecord {
     /// Create a new empty `ByteRecord`.
     pub fn new() -> ByteRecord {
-        ByteRecord::with_capacity(0)
+        ByteRecord::with_capacity(0, 0)
     }
 
-    /// Create a new empty `ByteRecord` with the given capacity.
-    pub fn with_capacity(capacity: usize) -> ByteRecord {
-        ByteRecord { fields: vec![0; capacity], bounds: Bounds::default() }
+    /// Create a new empty `ByteRecord` with the given capacity settings.
+    ///
+    /// `buffer` refers to the capacity of the buffer used to store the
+    /// actual row contents. `fields` refers to the number of fields one
+    /// might expect to store.
+    pub fn with_capacity(buffer: usize, fields: usize) -> ByteRecord {
+        ByteRecord {
+            fields: vec![0; buffer],
+            bounds: Bounds::with_capacity(fields),
+        }
+    }
+
+    /// Returns an iterator over all fields in this record.
+    pub fn iter(&self) -> ByteRecordIter {
+        self.into_iter()
     }
 
     /// Return the field at index `i`.
@@ -112,50 +126,59 @@ impl ByteRecord {
         self.bounds.len = 0;
     }
 
-    /// Returns an iterator over all fields in this record.
-    pub fn iter(&self) -> ByteRecordIter {
-        ByteRecordIter { r: self, start: 0, i: 0 }
-    }
-
-    /// Add a new field.
-    fn add(&mut self, field: &[u8]) {
+    /// Add a new field to this record.
+    pub fn push_field(&mut self, field: &[u8]) {
         let (s, e) = (self.bounds.end(), self.bounds.end() + field.len());
-        while s + e > self.fields.len() {
+        while e > self.fields.len() {
             expand_fields(self);
         }
         self.fields[s..e].copy_from_slice(field);
-        self.add_end(e);
+        self.bounds.add(e);
     }
 
-    /// Add a new end.
-    fn add_end(&mut self, pos: usize) {
-        assert!(pos <= self.fields.len());
-        self.bounds.add(pos);
+    /// Return the start and end position of a field in this record.
+    ///
+    /// If no such field exists at the given index, then return `None`.
+    ///
+    /// The range returned can be used with the slice returned by `as_slice`.
+    pub fn range(&self, i: usize) -> Option<Range<usize>> {
+        self.bounds.get(i)
+    }
+
+    /// Return the entire row as a single byte slice.
+    pub fn as_slice(&self) -> &[u8] {
+        &self.fields[..self.bounds.end()]
     }
 }
 
 /// The bounds of fields in a single record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Bounds {
-    /// The ending index of each field. Guaranteed to fall on UTF-8 boundaries.
+    /// The ending index of each field.
     ends: Vec<usize>,
     /// The number of fields in this record.
     ///
     /// Technically, we could drop this field and maintain an invariant that
     /// `ends.len()` is always the number of fields, but doing that efficiently
-    /// requires unsafe. We play it safe at almost no cost.
+    /// requires attention to safety. We play it safe at essentially no cost.
     len: usize,
 }
 
 impl Default for Bounds {
     fn default() -> Bounds {
-        Bounds { ends: vec![], len: 0 }
+        Bounds::with_capacity(0)
     }
 }
 
 impl Bounds {
+    /// Create a new set of bounds with the given capacity for storing the
+    /// ends of fields.
+    fn with_capacity(capacity: usize) -> Bounds {
+        Bounds { ends: vec![0; capacity], len: 0 }
+    }
+
     /// Returns the bounds of field `i`.
-    fn get(&self, i: usize) -> Option<ops::Range<usize>> {
+    fn get(&self, i: usize) -> Option<Range<usize>> {
         if i >= self.len {
             return None;
         }
@@ -178,7 +201,6 @@ impl Bounds {
     /// Return the last position of the last field.
     ///
     /// If there are no fields, this returns `0`.
-    #[inline(always)]
     fn end(&self) -> usize {
         self.ends().last().map(|&i| i).unwrap_or(0)
     }
@@ -226,33 +248,106 @@ impl ops::Index<usize> for ByteRecord {
     fn index(&self, i: usize) -> &[u8] { self.get(i).unwrap() }
 }
 
-impl<'a> IntoIterator for &'a ByteRecord {
-    type IntoIter = ByteRecordIter<'a>;
-    type Item = &'a [u8];
-    fn into_iter(self) -> ByteRecordIter<'a> {
-        self.iter()
+impl From<StringRecord> for ByteRecord {
+    fn from(record: StringRecord) -> ByteRecord { record.into_byte_record() }
+}
+
+impl<T: AsRef<[u8]>> From<Vec<T>> for ByteRecord {
+    fn from(xs: Vec<T>) -> ByteRecord {
+        ByteRecord::from_iter(&xs)
+    }
+}
+
+impl<'a, T: AsRef<[u8]>> From<&'a [T]> for ByteRecord {
+    fn from(xs: &'a [T]) -> ByteRecord {
+        ByteRecord::from_iter(xs)
+    }
+}
+
+impl<T: AsRef<[u8]>> FromIterator<T> for ByteRecord {
+    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> ByteRecord {
+        let mut record = ByteRecord::new();
+        record.extend(iter);
+        record
+    }
+}
+
+impl<T: AsRef<[u8]>> Extend<T> for ByteRecord {
+    fn extend<I: IntoIterator<Item=T>>(&mut self, iter: I) {
+        for x in iter {
+            self.push_field(x.as_ref());
+        }
     }
 }
 
 /// An iterator over the fields in a byte record.
 pub struct ByteRecordIter<'a> {
+    /// The record we are iterating over.
     r: &'a ByteRecord,
-    start: usize,
-    i: usize,
+    /// The starting index of the previous field. (For reverse iteration.)
+    last_start: usize,
+    /// The ending index of the previous field. (For forward iteration.)
+    last_end: usize,
+    /// The index of forward iteration.
+    i_forward: usize,
+    /// The index of reverse iteration.
+    i_reverse: usize,
 }
+
+impl<'a> IntoIterator for &'a ByteRecord {
+    type IntoIter = ByteRecordIter<'a>;
+    type Item = &'a [u8];
+    fn into_iter(self) -> ByteRecordIter<'a> {
+        ByteRecordIter {
+            r: self,
+            last_start: self.as_slice().len(),
+            last_end: 0,
+            i_forward: 0,
+            i_reverse: self.len(),
+        }
+    }
+}
+
+impl<'a> ExactSizeIterator for ByteRecordIter<'a> {}
 
 impl<'a> Iterator for ByteRecordIter<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<&'a [u8]> {
-        match self.r.bounds.ends().get(self.i) {
-            None => None,
-            Some(&end) => {
-                let field = &self.r.fields[self.start..end];
-                self.start = end;
-                self.i += 1;
-                Some(field)
-            }
+        if self.i_forward == self.i_reverse {
+            None
+        } else {
+            let start = self.last_end;
+            let end = self.r.bounds.ends()[self.i_forward];
+            self.i_forward += 1;
+            self.last_end = end;
+            Some(&self.r.fields[start..end])
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let x = self.i_reverse - self.i_forward;
+        (x, Some(x))
+    }
+
+    fn count(self) -> usize {
+        self.len()
+    }
+}
+
+impl<'a> DoubleEndedIterator for ByteRecordIter<'a> {
+    fn next_back(&mut self) -> Option<&'a [u8]> {
+        if self.i_forward == self.i_reverse {
+            None
+        } else {
+            self.i_reverse -= 1;
+            let start = self.i_reverse
+                .checked_sub(1)
+                .map(|i| self.r.bounds.ends()[i])
+                .unwrap_or(0);
+            let end = self.last_start;
+            self.last_start = start;
+            Some(&self.r.fields[start..end])
         }
     }
 }
@@ -268,7 +363,7 @@ mod tests {
     #[test]
     fn record_1() {
         let mut rec = ByteRecord::new();
-        rec.add(b"foo");
+        rec.push_field(b"foo");
 
         assert_eq!(rec.len(), 1);
         assert_eq!(rec.get(0), Some(b("foo")));
@@ -279,8 +374,8 @@ mod tests {
     #[test]
     fn record_2() {
         let mut rec = ByteRecord::new();
-        rec.add(b"foo");
-        rec.add(b"quux");
+        rec.push_field(b"foo");
+        rec.push_field(b"quux");
 
         assert_eq!(rec.len(), 2);
         assert_eq!(rec.get(0), Some(b("foo")));
@@ -301,7 +396,7 @@ mod tests {
     #[test]
     fn empty_field_1() {
         let mut rec = ByteRecord::new();
-        rec.add(b"");
+        rec.push_field(b"");
 
         assert_eq!(rec.len(), 1);
         assert_eq!(rec.get(0), Some(b("")));
@@ -312,8 +407,8 @@ mod tests {
     #[test]
     fn empty_field_2() {
         let mut rec = ByteRecord::new();
-        rec.add(b"");
-        rec.add(b"");
+        rec.push_field(b"");
+        rec.push_field(b"");
 
         assert_eq!(rec.len(), 2);
         assert_eq!(rec.get(0), Some(b("")));
@@ -325,9 +420,9 @@ mod tests {
     #[test]
     fn empty_surround_1() {
         let mut rec = ByteRecord::new();
-        rec.add(b"foo");
-        rec.add(b"");
-        rec.add(b"quux");
+        rec.push_field(b"foo");
+        rec.push_field(b"");
+        rec.push_field(b"quux");
 
         assert_eq!(rec.len(), 3);
         assert_eq!(rec.get(0), Some(b("foo")));
@@ -340,10 +435,10 @@ mod tests {
     #[test]
     fn empty_surround_2() {
         let mut rec = ByteRecord::new();
-        rec.add(b"foo");
-        rec.add(b"");
-        rec.add(b"quux");
-        rec.add(b"");
+        rec.push_field(b"foo");
+        rec.push_field(b"");
+        rec.push_field(b"quux");
+        rec.push_field(b"");
 
         assert_eq!(rec.len(), 4);
         assert_eq!(rec.get(0), Some(b("foo")));
@@ -357,8 +452,8 @@ mod tests {
     #[test]
     fn utf8_error_1() {
         let mut rec = ByteRecord::new();
-        rec.add(b"foo");
-        rec.add(b"b\xFFar");
+        rec.push_field(b"foo");
+        rec.push_field(b"b\xFFar");
 
         let err = StringRecord::from_byte_record(rec).unwrap_err();
         assert_eq!(err.utf8_error().field(), 1);
@@ -368,7 +463,7 @@ mod tests {
     #[test]
     fn utf8_error_2() {
         let mut rec = ByteRecord::new();
-        rec.add(b"\xFF");
+        rec.push_field(b"\xFF");
 
         let err = StringRecord::from_byte_record(rec).unwrap_err();
         assert_eq!(err.utf8_error().field(), 0);
@@ -378,7 +473,7 @@ mod tests {
     #[test]
     fn utf8_error_3() {
         let mut rec = ByteRecord::new();
-        rec.add(b"a\xFF");
+        rec.push_field(b"a\xFF");
 
         let err = StringRecord::from_byte_record(rec).unwrap_err();
         assert_eq!(err.utf8_error().field(), 0);
@@ -388,11 +483,11 @@ mod tests {
     #[test]
     fn utf8_error_4() {
         let mut rec = ByteRecord::new();
-        rec.add(b"a");
-        rec.add(b"b");
-        rec.add(b"c");
-        rec.add(b"d");
-        rec.add(b"xyz\xFF");
+        rec.push_field(b"a");
+        rec.push_field(b"b");
+        rec.push_field(b"c");
+        rec.push_field(b"d");
+        rec.push_field(b"xyz\xFF");
 
         let err = StringRecord::from_byte_record(rec).unwrap_err();
         assert_eq!(err.utf8_error().field(), 4);
@@ -402,11 +497,11 @@ mod tests {
     #[test]
     fn utf8_error_5() {
         let mut rec = ByteRecord::new();
-        rec.add(b"a");
-        rec.add(b"b");
-        rec.add(b"c");
-        rec.add(b"d");
-        rec.add(b"\xFFxyz");
+        rec.push_field(b"a");
+        rec.push_field(b"b");
+        rec.push_field(b"c");
+        rec.push_field(b"d");
+        rec.push_field(b"\xFFxyz");
 
         let err = StringRecord::from_byte_record(rec).unwrap_err();
         assert_eq!(err.utf8_error().field(), 4);
@@ -418,8 +513,8 @@ mod tests {
     #[test]
     fn utf8_error_6() {
         let mut rec = ByteRecord::new();
-        rec.add(b"a\xc9");
-        rec.add(b"\x91b");
+        rec.push_field(b"a\xc9");
+        rec.push_field(b"\x91b");
 
         let err = StringRecord::from_byte_record(rec).unwrap_err();
         assert_eq!(err.utf8_error().field(), 0);
@@ -431,12 +526,49 @@ mod tests {
     #[test]
     fn utf8_clear_ok() {
         let mut rec = ByteRecord::new();
-        rec.add(b"\xFF");
+        rec.push_field(b"\xFF");
         assert!(StringRecord::from_byte_record(rec).is_err());
 
         let mut rec = ByteRecord::new();
-        rec.add(b"\xFF");
+        rec.push_field(b"\xFF");
         rec.clear();
         assert!(StringRecord::from_byte_record(rec).is_ok());
+    }
+
+    #[test]
+    fn iter() {
+        let data = vec!["foo", "bar", "baz", "quux", "wat"];
+        let rec = ByteRecord::from(&*data);
+        let got: Vec<&str> = rec.iter()
+            .map(|x| ::std::str::from_utf8(x).unwrap())
+            .collect();
+        assert_eq!(data, got);
+    }
+
+    #[test]
+    fn iter_reverse() {
+        let mut data = vec!["foo", "bar", "baz", "quux", "wat"];
+        let rec = ByteRecord::from(&*data);
+        let got: Vec<&str> = rec.iter()
+            .rev()
+            .map(|x| ::std::str::from_utf8(x).unwrap())
+            .collect();
+        data.reverse();
+        assert_eq!(data, got);
+    }
+
+    #[test]
+    fn iter_forward_and_reverse() {
+        let data = vec!["foo", "bar", "baz", "quux", "wat"];
+        let rec = ByteRecord::from(data);
+        let mut it = rec.iter();
+
+        assert_eq!(it.next_back(), Some(b("wat")));
+        assert_eq!(it.next(), Some(b("foo")));
+        assert_eq!(it.next(), Some(b("bar")));
+        assert_eq!(it.next_back(), Some(b("quux")));
+        assert_eq!(it.next(), Some(b("baz")));
+        assert_eq!(it.next_back(), None);
+        assert_eq!(it.next(), None);
     }
 }
