@@ -20,7 +20,9 @@ macro_rules! bench {
             let data = $data.as_bytes();
             b.bytes = data.len() as u64;
             b.iter(|| {
-                let mut rdr = ReaderBuilder::new().from_reader(data);
+                let mut rdr = ReaderBuilder::new()
+                    .has_headers(false)
+                    .from_reader(data);
                 assert_eq!($counter(&mut rdr), $result);
             })
         }

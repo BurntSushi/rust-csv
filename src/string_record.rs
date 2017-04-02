@@ -36,7 +36,7 @@ pub fn read<R: io::Read>(
     };
     match (read_res, utf8_res) {
         (Err(err), _) => Err(err),
-        (Ok(_), Err(err)) => Err(Error::Utf8 { pos: pos, err: err }),
+        (Ok(_), Err(err)) => Err(Error::Utf8 { pos: Some(pos), err: err }),
         (Ok(eof), Ok(())) => Ok(eof),
     }
 }

@@ -25,8 +25,9 @@ pub enum Error {
     /// A UTF-8 decoding error that occured while reading CSV data into Rust
     /// `String`s.
     Utf8 {
-        /// The position of the record in which this error occurred.
-        pos: Position,
+        /// The position of the record in which this error occurred, if
+        /// available.
+        pos: Option<Position>,
         /// The corresponding UTF-8 error.
         err: Utf8Error,
     },
@@ -74,7 +75,10 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Error::Io(ref err) => err.fmt(f),
-            Error::Utf8 { ref pos, ref err } => {
+            Error::Utf8 { pos: None, ref err } => {
+                write!(f, "CSV parse error: field {}: {}", err.field(), err)
+            }
+            Error::Utf8 { pos: Some(ref pos), ref err } => {
                 write!(
                     f,
                     "CSV parse error: record {} \
