@@ -1,13 +1,14 @@
 use std::cmp;
 use std::io::{self, BufRead};
 use std::mem;
+use std::result;
 
 use bytecount;
 use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
 
 use byte_record::{self, ByteRecord};
 use string_record::{self, StringRecord};
-use {Error, Result, Terminator};
+use {Error, Result, Terminator, Utf8Error};
 
 /// Builds a CSV reader with various configuration knobs.
 ///
@@ -175,8 +176,9 @@ struct ReaderState {
 
 #[derive(Debug)]
 struct Headers {
-    pos: Position,
-    record: ByteRecord,
+    pos: Option<Position>,
+    byte_record: ByteRecord,
+    string_record: result::Result<StringRecord, Utf8Error>,
 }
 
 impl<R: io::Read> Reader<R> {
@@ -207,21 +209,63 @@ impl<R: io::Read> Reader<R> {
         &self.state.cur_pos
     }
 
-    // pub fn headers(&mut self) -> Result<&StringRecord> {
-        // let record =
-    // }
+    pub fn headers(&mut self) -> Result<&StringRecord> {
+        if self.state.headers.is_none() {
+            let mut record = ByteRecord::new();
+            let pos = self.position().clone();
+            self.read_record_bytes_impl(&mut record)?;
+            self.set_headers_pos(Err(record), Some(pos));
+        }
+        let headers = self.state.headers.as_ref().unwrap();
+        match headers.string_record {
+            Ok(ref record) => Ok(record),
+            Err(ref err) => Err(Error::Utf8 {
+                pos: headers.pos.clone(),
+                err: err.clone(),
+            }),
+        }
+    }
 
     pub fn byte_headers(&mut self) -> Result<&ByteRecord> {
         if self.state.headers.is_none() {
             let mut record = ByteRecord::new();
             let pos = self.position().clone();
             self.read_record_bytes_impl(&mut record)?;
-            self.state.headers = Some(Headers {
-                pos: pos,
-                record: record,
-            });
+            self.set_headers_pos(Err(record), Some(pos));
         }
-        Ok(&self.state.headers.as_ref().unwrap().record)
+        Ok(&self.state.headers.as_ref().unwrap().byte_record)
+    }
+
+    pub fn set_headers(&mut self, headers: StringRecord) {
+        self.set_headers_pos(Ok(headers), None);
+    }
+
+    pub fn set_byte_headers(&mut self, headers: ByteRecord) {
+        self.set_headers_pos(Err(headers), None);
+    }
+
+    fn set_headers_pos(
+        &mut self,
+        headers: result::Result<StringRecord, ByteRecord>,
+        pos: Option<Position>,
+    ) {
+        let (str_headers, byte_headers) = match headers {
+            Ok(string) => {
+                let bytes = string.clone().into_byte_record();
+                (Ok(string), bytes)
+            }
+            Err(bytes) => {
+                match StringRecord::from_byte_record(bytes.clone()) {
+                    Ok(str_headers) => (Ok(str_headers), bytes),
+                    Err(err) => (Err(err.utf8_error().clone()), bytes),
+                }
+            }
+        };
+        self.state.headers = Some(Headers {
+            pos: pos,
+            byte_record: byte_headers,
+            string_record: str_headers,
+        });
     }
 
     pub fn read_record(&mut self, record: &mut StringRecord) -> Result<bool> {
@@ -235,10 +279,7 @@ impl<R: io::Read> Reader<R> {
         let pos = self.position().clone();
         let eof = self.read_record_bytes_impl(record)?;
         if self.state.headers.is_none() {
-            self.state.headers = Some(Headers {
-                pos: pos,
-                record: record.clone(),
-            });
+            self.set_headers_pos(Err(record.clone()), Some(pos));
             // If the end user indicated that we have headers, then we should
             // never return the first row. Instead, we should attempt to
             // read and return the next one.
@@ -249,6 +290,7 @@ impl<R: io::Read> Reader<R> {
         Ok(eof)
     }
 
+    #[inline(always)]
     fn read_record_bytes_impl(
         &mut self,
         record: &mut ByteRecord,
