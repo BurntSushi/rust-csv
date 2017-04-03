@@ -609,7 +609,7 @@ impl<'r, R: io::Read> Iterator for ByteRecordsIter<'r, R> {
             return None;
         }
         let fields = self.rdr.state.first_field_count.unwrap_or(4);
-        let mut rec = ByteRecord::with_capacity(25, fields as usize);
+        let mut rec = ByteRecord::with_capacity(64, fields as usize);
         match self.rdr.read_record_bytes(&mut rec) {
             Err(err) => Some(Err(err)),
             Ok(eof) if eof && rec.is_empty() => None,
