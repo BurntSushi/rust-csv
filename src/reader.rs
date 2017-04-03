@@ -1,11 +1,8 @@
-use std::cmp;
 use std::fs::File;
 use std::io::{self, BufRead, Seek};
-use std::mem;
 use std::path::Path;
 use std::result;
 
-use bytecount;
 use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
 
 use byte_record::{self, ByteRecord};
@@ -256,6 +253,22 @@ impl<R: io::Read> Reader<R> {
         ReaderBuilder::new().from_reader(rdr)
     }
 
+    /// Returns a borrowed iterator over all records as raw bytes.
+    ///
+    /// If `has_headers` is enabled, then this does not include the first
+    /// record.
+    pub fn byte_records(&mut self) -> ByteRecordsIter<R> {
+        ByteRecordsIter { rdr: self }
+    }
+
+    /// Returns an owned iterator over all records as raw bytes.
+    ///
+    /// If `has_headers` is enabled, then this does not include the first
+    /// record.
+    pub fn into_byte_records(self) -> ByteRecordsIntoIter<R> {
+        ByteRecordsIntoIter { rdr: self }
+    }
+
     /// Returns a reference to the first row read by this parser.
     ///
     /// If no row has been read yet, then this will force parsing of the first
@@ -357,6 +370,14 @@ impl<R: io::Read> Reader<R> {
     /// data will result in parsing the same subsequent record.
     pub fn position(&self) -> &Position {
         &self.state.cur_pos
+    }
+
+    /// Returns true if and only if this reader has been exhausted.
+    ///
+    /// When this returns true, no more records can be read from this reader
+    /// (unless it has been seeked to another position).
+    pub fn is_done(&self) -> bool {
+        self.state.eof
     }
 
     pub fn read_record(&mut self, record: &mut StringRecord) -> Result<bool> {
@@ -528,6 +549,73 @@ impl Position {
     pub fn line(&self) -> u64 { self.line }
     /// The record index, starting at `0`, of this position.
     pub fn record(&self) -> u64 { self.record }
+
+    /// Set the byte offset of this position.
+    pub fn set_byte(&mut self, byte: u64) -> &mut Position {
+        self.byte = byte;
+        self
+    }
+
+    /// Set the line number of this position.
+    ///
+    /// If the line number is less than `1`, then this method panics.
+    pub fn set_line(&mut self, line: u64) -> &mut Position {
+        assert!(line > 0);
+        self.line = line;
+        self
+    }
+
+    /// Set the record index of this position.
+    pub fn set_record(&mut self, record: u64) -> &mut Position {
+        self.record = record;
+        self
+    }
+}
+
+/// An owned iterator over records as raw bytes.
+pub struct ByteRecordsIntoIter<R> {
+    rdr: Reader<R>,
+}
+
+impl<R: io::Read> Iterator for ByteRecordsIntoIter<R> {
+    type Item = Result<ByteRecord>;
+
+    fn next(&mut self) -> Option<Result<ByteRecord>> {
+        if self.rdr.is_done() {
+            return None;
+        }
+        let mut rec = ByteRecord::new();
+        match self.rdr.read_record_bytes(&mut rec) {
+            Err(err) => Some(Err(err)),
+            Ok(eof) if eof && rec.is_empty() => None,
+            Ok(_) => Some(Ok(rec)),
+        }
+    }
+}
+
+/// A borrowed iterator over records as raw bytes.
+///
+/// The lifetime parameter `'r` refers to the lifetime of the underlying
+/// CSV `Reader`.
+pub struct ByteRecordsIter<'r, R: 'r> {
+    rdr: &'r mut Reader<R>,
+}
+
+impl<'r, R: io::Read> Iterator for ByteRecordsIter<'r, R> {
+    type Item = Result<ByteRecord>;
+
+    fn next(&mut self) -> Option<Result<ByteRecord>> {
+        if self.rdr.is_done() {
+            return None;
+        }
+        let fields = self.rdr.state.first_field_count.unwrap_or(4);
+        let mut rec = ByteRecord::with_capacity(25, fields as usize);
+        match self.rdr.read_record_bytes(&mut rec) {
+            Err(err) => Some(Err(err)),
+            Ok(eof) if eof && rec.is_empty() => None,
+            Ok(_) => Some(Ok(rec)),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -535,7 +623,7 @@ mod tests {
     use std::io;
 
     use byte_record::ByteRecord;
-    use error::{Error, new_utf8_error};
+    use error::Error;
     use string_record::StringRecord;
 
     use super::{ReaderBuilder, Position};
