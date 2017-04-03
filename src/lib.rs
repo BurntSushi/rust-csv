@@ -1,6 +1,5 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+// #![allow(dead_code, unused_imports, unused_variables)]
 
-extern crate bytecount;
 extern crate csv_core;
 
 pub use csv_core::{QuoteStyle, Terminator};

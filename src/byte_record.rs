@@ -1,17 +1,10 @@
 use std::cmp;
-use std::io;
 use std::iter::FromIterator;
-use std::mem;
 use std::ops::{self, Range};
 use std::result;
-use std::ptr;
 use std::str;
 
-use error::{
-    Result, Error, FromUtf8Error, Utf8Error,
-    new_from_utf8_error, new_utf8_error,
-};
-use reader::Reader;
+use error::{Utf8Error, new_utf8_error};
 use string_record::StringRecord;
 
 /// Retrieve the underlying parts of a byte record.
@@ -115,7 +108,7 @@ impl ByteRecord {
 
     /// Returns the number of fields in this record.
     pub fn len(&self) -> usize {
-        self.bounds.len
+        self.bounds.len()
     }
 
     /// Clear this record so that it has zero fields.
@@ -203,23 +196,6 @@ impl Bounds {
     /// If there are no fields, this returns `0`.
     fn end(&self) -> usize {
         self.ends().last().map(|&i| i).unwrap_or(0)
-    }
-
-    /// Convert an absolute position into the record to a field index and a
-    /// position within that field.
-    ///
-    /// If the given position is past the end of the last field, then `None`
-    /// is returned.
-    fn absolute_to_field(&self, i: usize) -> Option<(usize, usize)> {
-        if i >= self.end() {
-            return None;
-        }
-        let field = match self.ends().binary_search(&i) {
-            Err(i) => i,
-            // If we land on an end, then it's the start of the next field.
-            Ok(i) => i.checked_add(1).unwrap(),
-        };
-        Some((field, i - self.get(field).unwrap().start))
     }
 
     /// Returns the number of fields in these bounds.
