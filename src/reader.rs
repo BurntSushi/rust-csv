@@ -253,6 +253,22 @@ impl<R: io::Read> Reader<R> {
         ReaderBuilder::new().from_reader(rdr)
     }
 
+    /// Returns a borrowed iterator over all records as strings.
+    ///
+    /// If `has_headers` is enabled, then this does not include the first
+    /// record.
+    pub fn records(&mut self) -> StringRecordsIter<R> {
+        StringRecordsIter { rdr: self }
+    }
+
+    /// Returns an owned iterator over all records as strings.
+    ///
+    /// If `has_headers` is enabled, then this does not include the first
+    /// record.
+    pub fn into_records(self) -> StringRecordsIntoIter<R> {
+        StringRecordsIntoIter { rdr: self }
+    }
+
     /// Returns a borrowed iterator over all records as raw bytes.
     ///
     /// If `has_headers` is enabled, then this does not include the first
@@ -286,7 +302,7 @@ impl<R: io::Read> Reader<R> {
             }
             let mut record = ByteRecord::new();
             let pos = self.position().clone();
-            self.read_record_bytes_impl(&mut record)?;
+            self.read_byte_record_impl(&mut record)?;
             self.set_headers_pos(Err(record), Some(pos));
         }
         let headers = self.state.headers.as_ref().unwrap();
@@ -323,7 +339,7 @@ impl<R: io::Read> Reader<R> {
             }
             let mut record = ByteRecord::new();
             let pos = self.position().clone();
-            self.read_record_bytes_impl(&mut record)?;
+            self.read_byte_record_impl(&mut record)?;
             self.set_headers_pos(Err(record), Some(pos));
         }
         Ok(&self.state.headers.as_ref().unwrap().byte_record)
@@ -384,7 +400,7 @@ impl<R: io::Read> Reader<R> {
         string_record::read(self, record)
     }
 
-    pub fn read_record_bytes(
+    pub fn read_byte_record(
         &mut self,
         record: &mut ByteRecord,
     ) -> Result<bool> {
@@ -396,7 +412,7 @@ impl<R: io::Read> Reader<R> {
             }
         }
         let pos = self.position().clone();
-        let eof = self.read_record_bytes_impl(record)?;
+        let eof = self.read_byte_record_impl(record)?;
         self.state.first = true;
         if !self.state.seeked && self.state.headers.is_none() {
             self.set_headers_pos(Err(record.clone()), Some(pos));
@@ -404,14 +420,16 @@ impl<R: io::Read> Reader<R> {
             // never return the first row. Instead, we should attempt to
             // read and return the next one.
             if self.state.has_headers {
-                return self.read_record_bytes_impl(record);
+                return self.read_byte_record_impl(record);
             }
         }
         Ok(eof)
     }
 
+    /// Read a byte record from the underlying CSV reader, without accounting
+    /// for headers.
     #[inline(always)]
-    fn read_record_bytes_impl(
+    fn read_byte_record_impl(
         &mut self,
         record: &mut ByteRecord,
     ) -> Result<bool> {
@@ -572,6 +590,44 @@ impl Position {
     }
 }
 
+/// An owned iterator over records as strings.
+pub struct StringRecordsIntoIter<R> {
+    rdr: Reader<R>,
+}
+
+impl<R: io::Read> Iterator for StringRecordsIntoIter<R> {
+    type Item = Result<StringRecord>;
+
+    fn next(&mut self) -> Option<Result<StringRecord>> {
+        StringRecordsIter { rdr: &mut self.rdr }.next()
+    }
+}
+
+/// A borrowed iterator over records as strings.
+///
+/// The lifetime parameter `'r` refers to the lifetime of the underlying
+/// CSV `Reader`.
+pub struct StringRecordsIter<'r, R: 'r> {
+    rdr: &'r mut Reader<R>,
+}
+
+impl<'r, R: io::Read> Iterator for StringRecordsIter<'r, R> {
+    type Item = Result<StringRecord>;
+
+    fn next(&mut self) -> Option<Result<StringRecord>> {
+        if self.rdr.is_done() {
+            return None;
+        }
+        let fields = self.rdr.state.first_field_count.unwrap_or(4);
+        let mut rec = StringRecord::with_capacity(64, fields as usize);
+        match self.rdr.read_record(&mut rec) {
+            Err(err) => Some(Err(err)),
+            Ok(eof) if eof && rec.is_empty() => None,
+            Ok(_) => Some(Ok(rec)),
+        }
+    }
+}
+
 /// An owned iterator over records as raw bytes.
 pub struct ByteRecordsIntoIter<R> {
     rdr: Reader<R>,
@@ -581,15 +637,7 @@ impl<R: io::Read> Iterator for ByteRecordsIntoIter<R> {
     type Item = Result<ByteRecord>;
 
     fn next(&mut self) -> Option<Result<ByteRecord>> {
-        if self.rdr.is_done() {
-            return None;
-        }
-        let mut rec = ByteRecord::new();
-        match self.rdr.read_record_bytes(&mut rec) {
-            Err(err) => Some(Err(err)),
-            Ok(eof) if eof && rec.is_empty() => None,
-            Ok(_) => Some(Ok(rec)),
-        }
+        ByteRecordsIter { rdr: &mut self.rdr }.next()
     }
 }
 
@@ -610,7 +658,7 @@ impl<'r, R: io::Read> Iterator for ByteRecordsIter<'r, R> {
         }
         let fields = self.rdr.state.first_field_count.unwrap_or(4);
         let mut rec = ByteRecord::with_capacity(64, fields as usize);
-        match self.rdr.read_record_bytes(&mut rec) {
+        match self.rdr.read_byte_record(&mut rec) {
             Err(err) => Some(Err(err)),
             Ok(eof) if eof && rec.is_empty() => None,
             Ok(_) => Some(Ok(rec)),
@@ -641,26 +689,26 @@ mod tests {
     }
 
     #[test]
-    fn read_record_bytes() {
+    fn read_byte_record() {
         let data = b("foo,\"b,ar\",baz\nabc,mno,xyz");
         let mut rdr = ReaderBuilder::new()
             .has_headers(false)
             .from_reader(data);
         let mut rec = ByteRecord::new();
 
-        assert!(!rdr.read_record_bytes(&mut rec).unwrap());
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("foo", s(&rec[0]));
         assert_eq!("b,ar", s(&rec[1]));
         assert_eq!("baz", s(&rec[2]));
 
-        assert!(!rdr.read_record_bytes(&mut rec).unwrap());
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("abc", s(&rec[0]));
         assert_eq!("mno", s(&rec[1]));
         assert_eq!("xyz", s(&rec[2]));
 
-        assert!(rdr.read_record_bytes(&mut rec).unwrap());
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
     }
 
     #[test]
@@ -671,12 +719,12 @@ mod tests {
             .from_reader(data);
         let mut rec = ByteRecord::new();
 
-        assert!(!rdr.read_record_bytes(&mut rec).unwrap());
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(1, rec.len());
         assert_eq!("foo", s(&rec[0]));
 
         assert_match!(
-            rdr.read_record_bytes(&mut rec),
+            rdr.read_byte_record(&mut rec),
             Err(Error::UnequalLengths {
                 expected_len: 1,
                 pos: Position { byte: 4, line: 2, record: 1},
@@ -693,16 +741,16 @@ mod tests {
             .from_reader(data);
         let mut rec = ByteRecord::new();
 
-        assert!(!rdr.read_record_bytes(&mut rec).unwrap());
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(1, rec.len());
         assert_eq!("foo", s(&rec[0]));
 
-        assert!(!rdr.read_record_bytes(&mut rec).unwrap());
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(2, rec.len());
         assert_eq!("bar", s(&rec[0]));
         assert_eq!("baz", s(&rec[1]));
 
-        assert!(rdr.read_record_bytes(&mut rec).unwrap());
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
     }
 
     // This tests that even if we get a CSV error, we can continue reading
@@ -715,23 +763,23 @@ mod tests {
             .from_reader(data);
         let mut rec = ByteRecord::new();
 
-        assert!(!rdr.read_record_bytes(&mut rec).unwrap());
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(1, rec.len());
         assert_eq!("foo", s(&rec[0]));
 
         assert_match!(
-            rdr.read_record_bytes(&mut rec),
+            rdr.read_byte_record(&mut rec),
             Err(Error::UnequalLengths {
                 expected_len: 1,
                 pos: Position { byte: 4, line: 2, record: 1},
                 len: 2,
             }));
 
-        assert!(!rdr.read_record_bytes(&mut rec).unwrap());
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(1, rec.len());
         assert_eq!("quux", s(&rec[0]));
 
-        assert!(rdr.read_record_bytes(&mut rec).unwrap());
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
     }
 
     #[test]

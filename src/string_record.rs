@@ -21,13 +21,13 @@ pub fn read<R: io::Read>(
 
     // SAFETY: Note that despite the absence of `unsafe` in this function, this
     // code is critical to upholding the safety of other `unsafe` blocks in
-    // this module. Namely, after calling `read_record_bytes`, it is possible
+    // this module. Namely, after calling `read_byte_record`, it is possible
     // for `record` to contain invalid UTF-8. We check for this in the
     // `validate` method, and if it does have invalid UTF-8, we clear the
     // record. (It is bad for `record` to contain invalid UTF-8 because other
     // accessor methods, like `get`, assume that every field is valid UTF-8.)
     let pos = rdr.position().clone();
-    let read_res = rdr.read_record_bytes(&mut record.0);
+    let read_res = rdr.read_byte_record(&mut record.0);
     let utf8_res = match byte_record::validate(&mut record.0) {
         Ok(()) => Ok(()),
         Err(err) => {
