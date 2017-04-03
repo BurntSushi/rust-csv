@@ -8,6 +8,7 @@ use error::{Utf8Error, new_utf8_error};
 use string_record::StringRecord;
 
 /// Retrieve the underlying parts of a byte record.
+#[inline]
 pub fn as_parts(
     record: &mut ByteRecord,
 ) -> (&mut Vec<u8>, &mut Vec<usize>) {
@@ -16,12 +17,14 @@ pub fn as_parts(
 }
 
 /// Set the number of fields in the given record record.
+#[inline]
 pub fn set_len(record: &mut ByteRecord, len: usize) {
     // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
     record.bounds.len = len;
 }
 
 /// Expand the capacity for storing fields.
+#[inline]
 pub fn expand_fields(record: &mut ByteRecord) {
     // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
     let new_len = record.fields.len().checked_mul(2).unwrap();
@@ -29,6 +32,7 @@ pub fn expand_fields(record: &mut ByteRecord) {
 }
 
 /// Expand the capacity for storing field ending positions.
+#[inline]
 pub fn expand_ends(record: &mut ByteRecord) {
     // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
     record.bounds.expand();
@@ -39,6 +43,7 @@ pub fn expand_ends(record: &mut ByteRecord) {
 /// If it's not UTF-8, return an error.
 ///
 /// This never modifies the contents of this record.
+#[inline]
 pub fn validate(record: &ByteRecord) -> result::Result<(), Utf8Error> {
     // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
 
@@ -66,6 +71,7 @@ pub struct ByteRecord {
 }
 
 impl Default for ByteRecord {
+    #[inline]
     fn default() -> ByteRecord {
         ByteRecord::new()
     }
@@ -73,6 +79,7 @@ impl Default for ByteRecord {
 
 impl ByteRecord {
     /// Create a new empty `ByteRecord`.
+    #[inline]
     pub fn new() -> ByteRecord {
         ByteRecord::with_capacity(0, 0)
     }
@@ -82,6 +89,7 @@ impl ByteRecord {
     /// `buffer` refers to the capacity of the buffer used to store the
     /// actual row contents. `fields` refers to the number of fields one
     /// might expect to store.
+    #[inline]
     pub fn with_capacity(buffer: usize, fields: usize) -> ByteRecord {
         ByteRecord {
             fields: vec![0; buffer],
@@ -90,6 +98,7 @@ impl ByteRecord {
     }
 
     /// Returns an iterator over all fields in this record.
+    #[inline]
     pub fn iter(&self) -> ByteRecordIter {
         self.into_iter()
     }
@@ -97,16 +106,19 @@ impl ByteRecord {
     /// Return the field at index `i`.
     ///
     /// If no field at index `i` exists, then this returns `None`.
+    #[inline]
     pub fn get(&self, i: usize) -> Option<&[u8]> {
         self.bounds.get(i).map(|range| &self.fields[range])
     }
 
     /// Returns true if and only if this record is empty.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     /// Returns the number of fields in this record.
+    #[inline]
     pub fn len(&self) -> usize {
         self.bounds.len()
     }
@@ -115,11 +127,13 @@ impl ByteRecord {
     ///
     /// Note that it is not necessary to clear the record to reuse it with
     /// the CSV reader.
+    #[inline]
     pub fn clear(&mut self) {
         self.bounds.len = 0;
     }
 
     /// Add a new field to this record.
+    #[inline]
     pub fn push_field(&mut self, field: &[u8]) {
         let (s, e) = (self.bounds.end(), self.bounds.end() + field.len());
         while e > self.fields.len() {
@@ -134,11 +148,13 @@ impl ByteRecord {
     /// If no such field exists at the given index, then return `None`.
     ///
     /// The range returned can be used with the slice returned by `as_slice`.
+    #[inline]
     pub fn range(&self, i: usize) -> Option<Range<usize>> {
         self.bounds.get(i)
     }
 
     /// Return the entire row as a single byte slice.
+    #[inline]
     pub fn as_slice(&self) -> &[u8] {
         &self.fields[..self.bounds.end()]
     }
@@ -158,6 +174,7 @@ struct Bounds {
 }
 
 impl Default for Bounds {
+    #[inline]
     fn default() -> Bounds {
         Bounds::with_capacity(0)
     }
@@ -166,11 +183,13 @@ impl Default for Bounds {
 impl Bounds {
     /// Create a new set of bounds with the given capacity for storing the
     /// ends of fields.
+    #[inline]
     fn with_capacity(capacity: usize) -> Bounds {
         Bounds { ends: vec![0; capacity], len: 0 }
     }
 
     /// Returns the bounds of field `i`.
+    #[inline]
     fn get(&self, i: usize) -> Option<Range<usize>> {
         if i >= self.len {
             return None;
@@ -187,6 +206,7 @@ impl Bounds {
     }
 
     /// Returns a slice of ending positions of all fields.
+    #[inline]
     fn ends(&self) -> &[usize] {
         &self.ends[..self.len]
     }
@@ -194,22 +214,26 @@ impl Bounds {
     /// Return the last position of the last field.
     ///
     /// If there are no fields, this returns `0`.
+    #[inline]
     fn end(&self) -> usize {
         self.ends().last().map(|&i| i).unwrap_or(0)
     }
 
     /// Returns the number of fields in these bounds.
+    #[inline]
     fn len(&self) -> usize {
         self.len
     }
 
     /// Expand the capacity for storing field ending positions.
+    #[inline]
     fn expand(&mut self) {
         let new_len = self.ends.len().checked_mul(2).unwrap();
         self.ends.resize(cmp::max(4, new_len), 0);
     }
 
     /// Add a new field with the given ending position.
+    #[inline]
     fn add(&mut self, pos: usize) {
         if self.len >= self.ends.len() {
             self.expand();
@@ -221,26 +245,31 @@ impl Bounds {
 
 impl ops::Index<usize> for ByteRecord {
     type Output = [u8];
+    #[inline]
     fn index(&self, i: usize) -> &[u8] { self.get(i).unwrap() }
 }
 
 impl From<StringRecord> for ByteRecord {
+    #[inline]
     fn from(record: StringRecord) -> ByteRecord { record.into_byte_record() }
 }
 
 impl<T: AsRef<[u8]>> From<Vec<T>> for ByteRecord {
+    #[inline]
     fn from(xs: Vec<T>) -> ByteRecord {
         ByteRecord::from_iter(&xs)
     }
 }
 
 impl<'a, T: AsRef<[u8]>> From<&'a [T]> for ByteRecord {
+    #[inline]
     fn from(xs: &'a [T]) -> ByteRecord {
         ByteRecord::from_iter(xs)
     }
 }
 
 impl<T: AsRef<[u8]>> FromIterator<T> for ByteRecord {
+    #[inline]
     fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> ByteRecord {
         let mut record = ByteRecord::new();
         record.extend(iter);
@@ -249,6 +278,7 @@ impl<T: AsRef<[u8]>> FromIterator<T> for ByteRecord {
 }
 
 impl<T: AsRef<[u8]>> Extend<T> for ByteRecord {
+    #[inline]
     fn extend<I: IntoIterator<Item=T>>(&mut self, iter: I) {
         for x in iter {
             self.push_field(x.as_ref());
@@ -273,6 +303,8 @@ pub struct ByteRecordIter<'a> {
 impl<'a> IntoIterator for &'a ByteRecord {
     type IntoIter = ByteRecordIter<'a>;
     type Item = &'a [u8];
+
+    #[inline]
     fn into_iter(self) -> ByteRecordIter<'a> {
         ByteRecordIter {
             r: self,
@@ -289,6 +321,7 @@ impl<'a> ExactSizeIterator for ByteRecordIter<'a> {}
 impl<'a> Iterator for ByteRecordIter<'a> {
     type Item = &'a [u8];
 
+    #[inline]
     fn next(&mut self) -> Option<&'a [u8]> {
         if self.i_forward == self.i_reverse {
             None
@@ -301,17 +334,20 @@ impl<'a> Iterator for ByteRecordIter<'a> {
         }
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         let x = self.i_reverse - self.i_forward;
         (x, Some(x))
     }
 
+    #[inline]
     fn count(self) -> usize {
         self.len()
     }
 }
 
 impl<'a> DoubleEndedIterator for ByteRecordIter<'a> {
+    #[inline]
     fn next_back(&mut self) -> Option<&'a [u8]> {
         if self.i_forward == self.i_reverse {
             None

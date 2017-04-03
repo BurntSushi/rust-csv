@@ -48,6 +48,7 @@ pub fn read<R: io::Read>(
 pub struct StringRecord(ByteRecord);
 
 impl Default for StringRecord {
+    #[inline]
     fn default() -> StringRecord {
         StringRecord::new()
     }
@@ -55,6 +56,7 @@ impl Default for StringRecord {
 
 impl StringRecord {
     /// Create a new empty `StringRecord`.
+    #[inline]
     pub fn new() -> StringRecord {
         StringRecord(ByteRecord::new())
     }
@@ -64,6 +66,7 @@ impl StringRecord {
     /// `buffer` refers to the capacity of the buffer used to store the
     /// actual row contents. `fields` refers to the number of fields one
     /// might expect to store.
+    #[inline]
     pub fn with_capacity(buffer: usize, fields: usize) -> StringRecord {
         StringRecord(ByteRecord::with_capacity(buffer, fields))
     }
@@ -73,6 +76,7 @@ impl StringRecord {
     /// Note that this does UTF-8 validation. If the given `ByteRecord` does
     /// not contain valid UTF-8, then this returns an error. The error includes
     /// the UTF-8 error and the original `ByteRecord`.
+    #[inline]
     pub fn from_byte_record(
         mut record: ByteRecord,
     ) -> result::Result<StringRecord, FromUtf8Error> {
@@ -83,6 +87,7 @@ impl StringRecord {
     }
 
     /// Returns an iterator over all fields in this record.
+    #[inline]
     pub fn iter(&self) -> StringRecordIter {
         self.into_iter()
     }
@@ -90,6 +95,7 @@ impl StringRecord {
     /// Return the field at index `i`.
     ///
     /// If no field at index `i` exists, then this returns `None`.
+    #[inline]
     pub fn get(&self, i: usize) -> Option<&str> {
         self.0.get(i).map(|bytes| {
             // This is safe because we guarantee that all string records
@@ -100,11 +106,13 @@ impl StringRecord {
     }
 
     /// Returns true if and only if this record is empty.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     /// Returns the number of fields in this record.
+    #[inline]
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -113,6 +121,7 @@ impl StringRecord {
     ///
     /// Note that it is not necessary to clear the record to reuse it with
     /// the CSV reader.
+    #[inline]
     pub fn clear(&mut self) {
         self.0.clear();
     }
@@ -122,11 +131,13 @@ impl StringRecord {
     /// If no such field exists at the given index, then return `None`.
     ///
     /// The range returned can be used with the slice returned by `as_slice`.
+    #[inline]
     pub fn range(&self, i: usize) -> Option<Range<usize>> {
         self.0.range(i)
     }
 
     /// Return the entire row as a single string slice.
+    #[inline]
     pub fn as_slice(&self) -> &str {
         // This is safe because we guarantee that each field is valid UTF-8.
         // If each field is valid UTF-8, then the entire buffer (up to the end
@@ -135,11 +146,13 @@ impl StringRecord {
     }
 
     /// Convert this `StringRecord` into `ByteRecord`.
+    #[inline]
     pub fn into_byte_record(self) -> ByteRecord {
         self.0
     }
 
     /// Add a new field to this record.
+    #[inline]
     pub fn push_field(&mut self, field: &str) {
         self.0.push_field(field.as_bytes());
     }
@@ -147,22 +160,26 @@ impl StringRecord {
 
 impl ops::Index<usize> for StringRecord {
     type Output = str;
+    #[inline]
     fn index(&self, i: usize) -> &str { self.get(i).unwrap() }
 }
 
 impl<T: AsRef<str>> From<Vec<T>> for StringRecord {
+    #[inline]
     fn from(xs: Vec<T>) -> StringRecord {
         StringRecord::from_iter(xs.into_iter())
     }
 }
 
 impl<'a, T: AsRef<str>> From<&'a [T]> for StringRecord {
+    #[inline]
     fn from(xs: &'a [T]) -> StringRecord {
         StringRecord::from_iter(xs)
     }
 }
 
 impl<T: AsRef<str>> FromIterator<T> for StringRecord {
+    #[inline]
     fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> StringRecord {
         let mut record = StringRecord::new();
         record.extend(iter);
@@ -171,6 +188,7 @@ impl<T: AsRef<str>> FromIterator<T> for StringRecord {
 }
 
 impl<T: AsRef<str>> Extend<T> for StringRecord {
+    #[inline]
     fn extend<I: IntoIterator<Item=T>>(&mut self, iter: I) {
         for x in iter {
             self.push_field(x.as_ref());
@@ -181,6 +199,8 @@ impl<T: AsRef<str>> Extend<T> for StringRecord {
 impl<'a> IntoIterator for &'a StringRecord {
     type IntoIter = StringRecordIter<'a>;
     type Item = &'a str;
+
+    #[inline]
     fn into_iter(self) -> StringRecordIter<'a> {
         StringRecordIter(self.0.iter())
     }
@@ -192,6 +212,7 @@ pub struct StringRecordIter<'a>(ByteRecordIter<'a>);
 impl<'a> Iterator for StringRecordIter<'a> {
     type Item = &'a str;
 
+    #[inline]
     fn next(&mut self) -> Option<&'a str> {
         self.0.next().map(|bytes| {
             // See StringRecord::get for safety argument.
@@ -199,16 +220,19 @@ impl<'a> Iterator for StringRecordIter<'a> {
         })
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.0.size_hint()
     }
 
+    #[inline]
     fn count(self) -> usize {
         self.0.len()
     }
 }
 
 impl<'a> DoubleEndedIterator for StringRecordIter<'a> {
+    #[inline]
     fn next_back(&mut self) -> Option<&'a str> {
         self.0.next_back().map(|bytes| {
             // See StringRecord::get for safety argument.
