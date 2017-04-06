@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::cmp;
 use std::fs::File;
 use std::io::{self, BufRead, Seek};
 use std::path::Path;
@@ -190,11 +189,6 @@ struct ReaderState {
     first_field_count: Option<u64>,
     /// The position of the parser just before the previous record was parsed.
     prev_pos: Position,
-    /// The number of bytes in the previous record.
-    ///
-    /// This is used to hint the size of the next allocation in the record
-    /// iterators.
-    prev_len: usize,
     /// The current position of the parser.
     ///
     /// Note that this position is only observable by callers at the start
@@ -220,7 +214,6 @@ impl<R: io::Read> Reader<R> {
                 has_headers: builder.has_headers,
                 flexible: builder.flexible,
                 first_field_count: None,
-                prev_len: 0,
                 prev_pos: Position::new(),
                 cur_pos: Position::new(),
                 seeked: false,
@@ -251,7 +244,7 @@ impl<R: io::Read> Reader<R> {
     /// If `has_headers` is enabled, then this does not include the first
     /// record.
     pub fn records(&mut self) -> StringRecordsIter<R> {
-        StringRecordsIter { rdr: self }
+        StringRecordsIter { rdr: self, rec: StringRecord::new() }
     }
 
     /// Returns an owned iterator over all records as strings.
@@ -259,7 +252,7 @@ impl<R: io::Read> Reader<R> {
     /// If `has_headers` is enabled, then this does not include the first
     /// record.
     pub fn into_records(self) -> StringRecordsIntoIter<R> {
-        StringRecordsIntoIter { rdr: self }
+        StringRecordsIntoIter { rdr: self, rec: StringRecord::new() }
     }
 
     /// Returns a borrowed iterator over all records as raw bytes.
@@ -267,7 +260,7 @@ impl<R: io::Read> Reader<R> {
     /// If `has_headers` is enabled, then this does not include the first
     /// record.
     pub fn byte_records(&mut self) -> ByteRecordsIter<R> {
-        ByteRecordsIter { rdr: self }
+        ByteRecordsIter { rdr: self, rec: ByteRecord::new() }
     }
 
     /// Returns an owned iterator over all records as raw bytes.
@@ -275,7 +268,7 @@ impl<R: io::Read> Reader<R> {
     /// If `has_headers` is enabled, then this does not include the first
     /// record.
     pub fn into_byte_records(self) -> ByteRecordsIntoIter<R> {
-        ByteRecordsIntoIter { rdr: self }
+        ByteRecordsIntoIter { rdr: self, rec: ByteRecord::new() }
     }
 
     /// Returns a reference to the first row read by this parser.
@@ -420,8 +413,6 @@ impl<R: io::Read> Reader<R> {
                 }
             }
         }
-        self.state.prev_len = cmp::max(
-            self.state.prev_len, record.as_slice().len());
         Ok(self.state.eof)
     }
 }
@@ -584,6 +575,7 @@ impl Headers {
 /// An owned iterator over records as strings.
 pub struct StringRecordsIntoIter<R> {
     rdr: Reader<R>,
+    rec: StringRecord,
 }
 
 impl<R: io::Read> StringRecordsIntoIter<R> {
@@ -597,7 +589,11 @@ impl<R: io::Read> Iterator for StringRecordsIntoIter<R> {
     type Item = Result<StringRecord>;
 
     fn next(&mut self) -> Option<Result<StringRecord>> {
-        StringRecordsIter { rdr: &mut self.rdr }.next()
+        match self.rdr.read_record(&mut self.rec) {
+            Err(err) => Some(Err(err)),
+            Ok(false) => Some(Ok(self.rec.clone())),
+            Ok(true) => None,
+        }
     }
 }
 
@@ -607,6 +603,7 @@ impl<R: io::Read> Iterator for StringRecordsIntoIter<R> {
 /// CSV `Reader`.
 pub struct StringRecordsIter<'r, R: 'r> {
     rdr: &'r mut Reader<R>,
+    rec: StringRecord,
 }
 
 impl<'r, R: io::Read> StringRecordsIter<'r, R> {
@@ -620,15 +617,9 @@ impl<'r, R: io::Read> Iterator for StringRecordsIter<'r, R> {
     type Item = Result<StringRecord>;
 
     fn next(&mut self) -> Option<Result<StringRecord>> {
-        if self.rdr.is_done() {
-            return None;
-        }
-        let buffer = self.rdr.state.prev_len;
-        let fields = self.rdr.state.first_field_count.unwrap_or(4);
-        let mut rec = StringRecord::with_capacity(buffer, fields as usize);
-        match self.rdr.read_record(&mut rec) {
+        match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
-            Ok(false) => Some(Ok(rec)),
+            Ok(false) => Some(Ok(self.rec.clone())),
             Ok(true) => None,
         }
     }
@@ -637,6 +628,7 @@ impl<'r, R: io::Read> Iterator for StringRecordsIter<'r, R> {
 /// An owned iterator over records as raw bytes.
 pub struct ByteRecordsIntoIter<R> {
     rdr: Reader<R>,
+    rec: ByteRecord,
 }
 
 impl<R: io::Read> ByteRecordsIntoIter<R> {
@@ -650,7 +642,11 @@ impl<R: io::Read> Iterator for ByteRecordsIntoIter<R> {
     type Item = Result<ByteRecord>;
 
     fn next(&mut self) -> Option<Result<ByteRecord>> {
-        ByteRecordsIter { rdr: &mut self.rdr }.next()
+        match self.rdr.read_byte_record(&mut self.rec) {
+            Err(err) => Some(Err(err)),
+            Ok(false) => Some(Ok(self.rec.clone())),
+            Ok(true) => None,
+        }
     }
 }
 
@@ -660,6 +656,7 @@ impl<R: io::Read> Iterator for ByteRecordsIntoIter<R> {
 /// CSV `Reader`.
 pub struct ByteRecordsIter<'r, R: 'r> {
     rdr: &'r mut Reader<R>,
+    rec: ByteRecord,
 }
 
 impl<'r, R: io::Read> ByteRecordsIter<'r, R> {
@@ -673,15 +670,9 @@ impl<'r, R: io::Read> Iterator for ByteRecordsIter<'r, R> {
     type Item = Result<ByteRecord>;
 
     fn next(&mut self) -> Option<Result<ByteRecord>> {
-        if self.rdr.is_done() {
-            return None;
-        }
-        let buffer = self.rdr.state.prev_len;
-        let fields = self.rdr.state.first_field_count.unwrap_or(4);
-        let mut rec = ByteRecord::with_capacity(buffer, fields as usize);
-        match self.rdr.read_byte_record(&mut rec) {
+        match self.rdr.read_byte_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
-            Ok(false) => Some(Ok(rec)),
+            Ok(false) => Some(Ok(self.rec.clone())),
             Ok(true) => None,
         }
     }
