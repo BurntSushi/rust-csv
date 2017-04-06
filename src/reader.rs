@@ -258,7 +258,7 @@ impl<R: io::Read> Reader<R> {
     /// If `has_headers` is enabled, then this does not include the first
     /// record.
     pub fn records(&mut self) -> StringRecordsIter<R> {
-        StringRecordsIter { rdr: self, rec: StringRecord::new() }
+        StringRecordsIter::new(self)
     }
 
     /// Returns an owned iterator over all records as strings.
@@ -266,7 +266,7 @@ impl<R: io::Read> Reader<R> {
     /// If `has_headers` is enabled, then this does not include the first
     /// record.
     pub fn into_records(self) -> StringRecordsIntoIter<R> {
-        StringRecordsIntoIter { rdr: self, rec: StringRecord::new() }
+        StringRecordsIntoIter::new(self)
     }
 
     /// Returns a borrowed iterator over all records as raw bytes.
@@ -274,7 +274,7 @@ impl<R: io::Read> Reader<R> {
     /// If `has_headers` is enabled, then this does not include the first
     /// record.
     pub fn byte_records(&mut self) -> ByteRecordsIter<R> {
-        ByteRecordsIter { rdr: self, rec: ByteRecord::new() }
+        ByteRecordsIter::new(self)
     }
 
     /// Returns an owned iterator over all records as raw bytes.
@@ -282,7 +282,7 @@ impl<R: io::Read> Reader<R> {
     /// If `has_headers` is enabled, then this does not include the first
     /// record.
     pub fn into_byte_records(self) -> ByteRecordsIntoIter<R> {
-        ByteRecordsIntoIter { rdr: self, rec: ByteRecord::new() }
+        ByteRecordsIntoIter::new(self)
     }
 
     /// Returns a reference to the first row read by this parser.
@@ -596,6 +596,17 @@ pub struct StringRecordsIntoIter<R> {
     rec: StringRecord,
 }
 
+impl<R: io::Read> StringRecordsIntoIter<R> {
+    fn new(rdr: Reader<R>) -> StringRecordsIntoIter<R> {
+        StringRecordsIntoIter { rdr: rdr, rec: StringRecord::new() }
+    }
+
+    /// Return a mutable reference to the underlying CSV reader.
+    pub fn reader(&mut self) -> &mut Reader<R> {
+        &mut self.rdr
+    }
+}
+
 impl<R: io::Read> Iterator for StringRecordsIntoIter<R> {
     type Item = Result<StringRecord>;
 
@@ -617,6 +628,17 @@ pub struct StringRecordsIter<'r, R: 'r> {
     rec: StringRecord,
 }
 
+impl<'r, R: io::Read> StringRecordsIter<'r, R> {
+    fn new(rdr: &'r mut Reader<R>) -> StringRecordsIter<'r, R> {
+        StringRecordsIter { rdr: rdr, rec: StringRecord::new() }
+    }
+
+    /// Return a mutable reference to the underlying CSV reader.
+    pub fn reader(&mut self) -> &mut Reader<R> {
+        self.rdr
+    }
+}
+
 impl<'r, R: io::Read> Iterator for StringRecordsIter<'r, R> {
     type Item = Result<StringRecord>;
 
@@ -633,6 +655,17 @@ impl<'r, R: io::Read> Iterator for StringRecordsIter<'r, R> {
 pub struct ByteRecordsIntoIter<R> {
     rdr: Reader<R>,
     rec: ByteRecord,
+}
+
+impl<R: io::Read> ByteRecordsIntoIter<R> {
+    fn new(rdr: Reader<R>) -> ByteRecordsIntoIter<R> {
+        ByteRecordsIntoIter { rdr: rdr, rec: ByteRecord::new() }
+    }
+
+    /// Return a mutable reference to the underlying CSV reader.
+    pub fn reader(&mut self) -> &mut Reader<R> {
+        &mut self.rdr
+    }
 }
 
 impl<R: io::Read> Iterator for ByteRecordsIntoIter<R> {
@@ -654,6 +687,17 @@ impl<R: io::Read> Iterator for ByteRecordsIntoIter<R> {
 pub struct ByteRecordsIter<'r, R: 'r> {
     rdr: &'r mut Reader<R>,
     rec: ByteRecord,
+}
+
+impl<'r, R: io::Read> ByteRecordsIter<'r, R> {
+    fn new(rdr: &'r mut Reader<R>) -> ByteRecordsIter<'r, R> {
+        ByteRecordsIter { rdr: rdr, rec: ByteRecord::new() }
+    }
+
+    /// Return a mutable reference to the underlying CSV reader.
+    pub fn reader(&mut self) -> &mut Reader<R> {
+        self.rdr
+    }
 }
 
 impl<'r, R: io::Read> Iterator for ByteRecordsIter<'r, R> {
