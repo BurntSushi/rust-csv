@@ -13,29 +13,31 @@ pub fn as_parts(
     record: &mut ByteRecord,
 ) -> (&mut Vec<u8>, &mut Vec<usize>) {
     // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-    (&mut record.fields, &mut record.bounds.ends)
+    // (&mut record.fields, &mut record.bounds.ends)
+    let mut inner = &mut *record.0;
+    (&mut inner.fields, &mut inner.bounds.ends)
 }
 
 /// Set the number of fields in the given record record.
 #[inline]
 pub fn set_len(record: &mut ByteRecord, len: usize) {
     // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-    record.bounds.len = len;
+    record.0.bounds.len = len;
 }
 
 /// Expand the capacity for storing fields.
 #[inline]
 pub fn expand_fields(record: &mut ByteRecord) {
     // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-    let new_len = record.fields.len().checked_mul(2).unwrap();
-    record.fields.resize(cmp::max(4, new_len), 0);
+    let new_len = record.0.fields.len().checked_mul(2).unwrap();
+    record.0.fields.resize(cmp::max(4, new_len), 0);
 }
 
 /// Expand the capacity for storing field ending positions.
 #[inline]
 pub fn expand_ends(record: &mut ByteRecord) {
     // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-    record.bounds.expand();
+    record.0.bounds.expand();
 }
 
 /// Validate the given record as UTF-8.
@@ -48,7 +50,7 @@ pub fn validate(record: &ByteRecord) -> result::Result<(), Utf8Error> {
     // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
 
     // If the entire buffer is ASCII, then we have nothing to fear.
-    if record.fields[..record.bounds.end()].iter().all(|&b| b <= 0x7F) {
+    if record.0.fields[..record.0.bounds.end()].iter().all(|&b| b <= 0x7F) {
         return Ok(());
     }
     // Otherwise, we must check each field individually to ensure that
@@ -63,7 +65,16 @@ pub fn validate(record: &ByteRecord) -> result::Result<(), Utf8Error> {
 
 /// A single CSV record stored as raw bytes.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ByteRecord {
+pub struct ByteRecord(Box<ByteRecordInner>);
+
+/// The inner portion of a byte record.
+///
+/// We use this memory layout so that moving a `ByteRecord` only requires
+/// moving a single pointer. The optimization is dubious at best, but does
+/// seem to result in slightly better numbers in microbenchmarks. Methinks this
+/// may heavily depend on the underlying allocator.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ByteRecordInner {
     /// All fields in this record, stored contiguously.
     fields: Vec<u8>,
     /// The number of and location of each field in this record.
@@ -91,10 +102,10 @@ impl ByteRecord {
     /// might expect to store.
     #[inline]
     pub fn with_capacity(buffer: usize, fields: usize) -> ByteRecord {
-        ByteRecord {
+        ByteRecord(Box::new(ByteRecordInner {
             fields: vec![0; buffer],
             bounds: Bounds::with_capacity(fields),
-        }
+        }))
     }
 
     /// Returns an iterator over all fields in this record.
@@ -108,7 +119,7 @@ impl ByteRecord {
     /// If no field at index `i` exists, then this returns `None`.
     #[inline]
     pub fn get(&self, i: usize) -> Option<&[u8]> {
-        self.bounds.get(i).map(|range| &self.fields[range])
+        self.0.bounds.get(i).map(|range| &self.0.fields[range])
     }
 
     /// Returns true if and only if this record is empty.
@@ -120,7 +131,7 @@ impl ByteRecord {
     /// Returns the number of fields in this record.
     #[inline]
     pub fn len(&self) -> usize {
-        self.bounds.len()
+        self.0.bounds.len()
     }
 
     /// Clear this record so that it has zero fields.
@@ -129,18 +140,18 @@ impl ByteRecord {
     /// the CSV reader.
     #[inline]
     pub fn clear(&mut self) {
-        self.bounds.len = 0;
+        self.0.bounds.len = 0;
     }
 
     /// Add a new field to this record.
     #[inline]
     pub fn push_field(&mut self, field: &[u8]) {
-        let (s, e) = (self.bounds.end(), self.bounds.end() + field.len());
-        while e > self.fields.len() {
+        let (s, e) = (self.0.bounds.end(), self.0.bounds.end() + field.len());
+        while e > self.0.fields.len() {
             expand_fields(self);
         }
-        self.fields[s..e].copy_from_slice(field);
-        self.bounds.add(e);
+        self.0.fields[s..e].copy_from_slice(field);
+        self.0.bounds.add(e);
     }
 
     /// Return the start and end position of a field in this record.
@@ -150,13 +161,13 @@ impl ByteRecord {
     /// The range returned can be used with the slice returned by `as_slice`.
     #[inline]
     pub fn range(&self, i: usize) -> Option<Range<usize>> {
-        self.bounds.get(i)
+        self.0.bounds.get(i)
     }
 
     /// Return the entire row as a single byte slice.
     #[inline]
     pub fn as_slice(&self) -> &[u8] {
-        &self.fields[..self.bounds.end()]
+        &self.0.fields[..self.0.bounds.end()]
     }
 }
 
@@ -327,10 +338,10 @@ impl<'a> Iterator for ByteRecordIter<'a> {
             None
         } else {
             let start = self.last_end;
-            let end = self.r.bounds.ends()[self.i_forward];
+            let end = self.r.0.bounds.ends()[self.i_forward];
             self.i_forward += 1;
             self.last_end = end;
-            Some(&self.r.fields[start..end])
+            Some(&self.r.0.fields[start..end])
         }
     }
 
@@ -355,11 +366,11 @@ impl<'a> DoubleEndedIterator for ByteRecordIter<'a> {
             self.i_reverse -= 1;
             let start = self.i_reverse
                 .checked_sub(1)
-                .map(|i| self.r.bounds.ends()[i])
+                .map(|i| self.r.0.bounds.ends()[i])
                 .unwrap_or(0);
             let end = self.last_start;
             self.last_start = start;
-            Some(&self.r.fields[start..end])
+            Some(&self.r.0.fields[start..end])
         }
     }
 }
