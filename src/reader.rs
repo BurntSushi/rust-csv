@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, Seek};
 use std::path::Path;
@@ -202,6 +201,21 @@ struct ReaderState {
     eof: bool,
 }
 
+/// Headers encapsulates any data associated with the headers of CSV data.
+///
+/// The headers always correspond to the first row.
+#[derive(Debug)]
+struct Headers {
+    /// The position just of the parser just before the headers were parsed,
+    /// if available. This is unavailable when the caller sets the headers
+    /// explicitly.
+    pos: Option<Position>,
+    /// The header, as raw bytes.
+    byte_record: ByteRecord,
+    /// The header, as valid UTF-8 (or a UTF-8 error).
+    string_record: result::Result<StringRecord, Utf8Error>,
+}
+
 impl<R: io::Read> Reader<R> {
     /// Create a new CSV reader given a builder and a source of underlying
     /// bytes.
@@ -276,12 +290,12 @@ impl<R: io::Read> Reader<R> {
     /// If no row has been read yet, then this will force parsing of the first
     /// row.
     ///
-    /// If there was a problem parsing the row or if this parser was seeked
-    /// before reading the first row, then this returns an error.
+    /// If there was a problem parsing the row or if it wasn't valid UTF-8,
+    /// then this returns an error.
     ///
     /// Note that this method may be used regardless of whether `has_headers`
     /// is enabled.
-    pub fn headers(&mut self) -> Result<&Headers> {
+    pub fn headers(&mut self) -> Result<&StringRecord> {
         if self.state.headers.is_none() {
             if self.state.seeked {
                 return Err(Error::Seek);
@@ -289,33 +303,79 @@ impl<R: io::Read> Reader<R> {
             let mut record = ByteRecord::new();
             let pos = self.position().clone();
             self.read_byte_record_impl(&mut record)?;
-            self.set_headers_pos(record, Some(pos));
+            self.set_headers_pos(Err(record), Some(pos));
         }
-        Ok(self.state.headers.as_ref().unwrap())
+        let headers = self.state.headers.as_ref().unwrap();
+        match headers.string_record {
+            Ok(ref record) => Ok(record),
+            Err(ref err) => Err(Error::Utf8 {
+                pos: headers.pos.clone(),
+                err: err.clone(),
+            }),
+        }
     }
 
     /// Set the headers of this CSV parser manually.
     ///
     /// This overrides any other setting. Any automatic detection of headers
     /// is disabled.
-    pub fn set_headers(&mut self, headers: ByteRecord) {
-        self.set_headers_pos(headers, None);
+    pub fn set_headers(&mut self, headers: StringRecord) {
+        self.set_headers_pos(Ok(headers), None);
     }
 
-    fn set_headers_pos(&mut self, headers: ByteRecord, pos: Option<Position>) {
-        let sr = match StringRecord::from_byte_record(headers.clone()) {
-            Ok(str_headers) => Ok(str_headers),
-            Err(err) => Err(err.utf8_error().clone()),
-        };
-        let mut map = HashMap::new();
-        for (i, field) in headers.iter().enumerate() {
-            map.insert(field.to_vec(), i);
+    /// Returns a reference to the first row read by this parser as raw bytes.
+    ///
+    /// If no row has been read yet, then this will force parsing of the first
+    /// row.
+    ///
+    /// If there was a problem parsing the row then this returns an error.
+    ///
+    /// Note that this method may be used regardless of whether `has_headers`
+    /// is enabled.
+    pub fn byte_headers(&mut self) -> Result<&ByteRecord> {
+        if self.state.headers.is_none() {
+            if self.state.seeked {
+                return Err(Error::Seek);
+            }
+            let mut record = ByteRecord::new();
+            let pos = self.position().clone();
+            self.read_byte_record_impl(&mut record)?;
+            self.set_headers_pos(Err(record), Some(pos));
         }
+        Ok(&self.state.headers.as_ref().unwrap().byte_record)
+    }
+
+    /// Set the headers of this CSV parser manually as raw bytes.
+    ///
+    /// This overrides any other setting. Any automatic detection of headers
+    /// is disabled.
+    pub fn set_byte_headers(&mut self, headers: ByteRecord) {
+        self.set_headers_pos(Err(headers), None);
+    }
+
+    fn set_headers_pos(
+        &mut self,
+        headers: result::Result<StringRecord, ByteRecord>,
+        pos: Option<Position>,
+    ) {
+        // If we have string headers, then get byte headers. But if we have
+        // byte headers, then get the string headers (or a UTF-8 error).
+        let (str_headers, byte_headers) = match headers {
+            Ok(string) => {
+                let bytes = string.clone().into_byte_record();
+                (Ok(string), bytes)
+            }
+            Err(bytes) => {
+                match StringRecord::from_byte_record(bytes.clone()) {
+                    Ok(str_headers) => (Ok(str_headers), bytes),
+                    Err(err) => (Err(err.utf8_error().clone()), bytes),
+                }
+            }
+        };
         self.state.headers = Some(Headers {
             pos: pos,
-            byte_record: headers,
-            string_record: sr,
-            map: map,
+            byte_record: byte_headers,
+            string_record: str_headers,
         });
     }
 
@@ -355,7 +415,7 @@ impl<R: io::Read> Reader<R> {
         let eof = self.read_byte_record_impl(record)?;
         self.state.first = true;
         if !self.state.seeked && self.state.headers.is_none() {
-            self.set_headers_pos(record.clone(), Some(pos));
+            self.set_headers_pos(Err(record.clone()), Some(pos));
             // If the end user indicated that we have headers, then we should
             // never return the first row. Instead, we should attempt to
             // read and return the next one.
@@ -530,59 +590,10 @@ impl Position {
     }
 }
 
-/// Headers encapsulates any data associated with the headers of CSV data.
-///
-/// The headers always correspond to the first row of CSV data.
-#[derive(Clone, Debug)]
-pub struct Headers {
-    /// The position just of the parser just before the headers were parsed,
-    /// if available. This is unavailable when the caller sets the headers
-    /// explicitly.
-    pos: Option<Position>,
-    /// The header, as raw bytes.
-    byte_record: ByteRecord,
-    /// The header, as valid UTF-8 (or a UTF-8 error).
-    string_record: result::Result<StringRecord, Utf8Error>,
-    /// A map from header name (as raw bytes) to its index in `byte_record`.
-    map: HashMap<Vec<u8>, usize>,
-}
-
-impl Headers {
-    /// Read the headers a s string record.
-    ///
-    /// If the headers are not valid UTF-8, then this returns an error.
-    pub fn as_record(&self) -> Result<&StringRecord> {
-        match self.string_record {
-            Ok(ref record) => Ok(record),
-            Err(ref err) => Err(Error::Utf8 {
-                pos: self.pos.clone(),
-                err: err.clone(),
-            }),
-        }
-    }
-
-    /// Read the headers as a raw byte record.
-    pub fn as_byte_record(&self) -> &ByteRecord {
-        &self.byte_record
-    }
-
-    /// Return the number of fields in this header.
-    pub fn len(&self) -> usize {
-        self.byte_record.len()
-    }
-}
-
 /// An owned iterator over records as strings.
 pub struct StringRecordsIntoIter<R> {
     rdr: Reader<R>,
     rec: StringRecord,
-}
-
-impl<R: io::Read> StringRecordsIntoIter<R> {
-    /// Return a reference to the underlying CSV reader.
-    pub fn reader(&mut self) -> &mut Reader<R> {
-        &mut self.rdr
-    }
 }
 
 impl<R: io::Read> Iterator for StringRecordsIntoIter<R> {
@@ -606,13 +617,6 @@ pub struct StringRecordsIter<'r, R: 'r> {
     rec: StringRecord,
 }
 
-impl<'r, R: io::Read> StringRecordsIter<'r, R> {
-    /// Return a reference to the underlying CSV reader.
-    pub fn reader(&mut self) -> &mut Reader<R> {
-        &mut self.rdr
-    }
-}
-
 impl<'r, R: io::Read> Iterator for StringRecordsIter<'r, R> {
     type Item = Result<StringRecord>;
 
@@ -629,13 +633,6 @@ impl<'r, R: io::Read> Iterator for StringRecordsIter<'r, R> {
 pub struct ByteRecordsIntoIter<R> {
     rdr: Reader<R>,
     rec: ByteRecord,
-}
-
-impl<R: io::Read> ByteRecordsIntoIter<R> {
-    /// Return a reference to the underlying CSV reader.
-    pub fn reader(&mut self) -> &mut Reader<R> {
-        &mut self.rdr
-    }
 }
 
 impl<R: io::Read> Iterator for ByteRecordsIntoIter<R> {
@@ -657,13 +654,6 @@ impl<R: io::Read> Iterator for ByteRecordsIntoIter<R> {
 pub struct ByteRecordsIter<'r, R: 'r> {
     rdr: &'r mut Reader<R>,
     rec: ByteRecord,
-}
-
-impl<'r, R: io::Read> ByteRecordsIter<'r, R> {
-    /// Return a reference to the underlying CSV reader.
-    pub fn reader(&mut self) -> &mut Reader<R> {
-        &mut self.rdr
-    }
 }
 
 impl<'r, R: io::Read> Iterator for ByteRecordsIter<'r, R> {
@@ -810,16 +800,20 @@ mod tests {
 
         assert!(rdr.read_record(&mut rec).unwrap());
 
-        let headers = rdr.headers().unwrap();
-        assert_eq!(3, headers.len());
-
-        assert_eq!(b"foo", &headers.as_byte_record()[0]);
-        assert_eq!(b"bar", &headers.as_byte_record()[1]);
-        assert_eq!(b"baz", &headers.as_byte_record()[2]);
-
-        assert_eq!("foo", &headers.as_record().unwrap()[0]);
-        assert_eq!("bar", &headers.as_record().unwrap()[1]);
-        assert_eq!("baz", &headers.as_record().unwrap()[2]);
+        {
+            let headers = rdr.byte_headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!(b"foo", &headers[0]);
+            assert_eq!(b"bar", &headers[1]);
+            assert_eq!(b"baz", &headers[2]);
+        }
+        {
+            let headers = rdr.headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!("foo", &headers[0]);
+            assert_eq!("bar", &headers[1]);
+            assert_eq!("baz", &headers[2]);
+        }
     }
 
     #[test]
@@ -841,13 +835,13 @@ mod tests {
         // Check that we can read the headers as raw bytes, but that
         // if we read them as strings, we get an appropriate UTF-8 error.
         {
-            let headers = rdr.headers().unwrap().as_byte_record();
+            let headers = rdr.byte_headers().unwrap();
             assert_eq!(3, headers.len());
             assert_eq!(b"foo", &headers[0]);
             assert_eq!(b"b\xFFar", &headers[1]);
             assert_eq!(b"baz", &headers[2]);
         }
-        match rdr.headers().unwrap().as_record().unwrap_err() {
+        match rdr.headers().unwrap_err() {
             Error::Utf8 { pos: Some(pos), err } => {
                 assert_eq!(pos, Position { byte: 0, line: 1, record: 0 });
                 assert_eq!(err.field(), 1);
@@ -866,7 +860,7 @@ mod tests {
         let mut rec = StringRecord::new();
 
         {
-            let headers = rdr.headers().unwrap().as_record().unwrap();
+            let headers = rdr.headers().unwrap();
             assert_eq!(3, headers.len());
             assert_eq!("foo", &headers[0]);
             assert_eq!("bar", &headers[1]);
@@ -910,7 +904,7 @@ mod tests {
 
         assert!(rdr.read_record(&mut rec).unwrap());
 
-        let headers = rdr.headers().unwrap().as_record().unwrap();
+        let headers = rdr.headers().unwrap();
         assert_eq!(3, headers.len());
         assert_eq!("foo", &headers[0]);
         assert_eq!("bar", &headers[1]);
@@ -964,9 +958,7 @@ mod tests {
         let headers = rdr.headers().unwrap().clone();
         let pos = Position { byte: 18, line: 3, record: 2 };
         rdr.seek(&pos).unwrap();
-        assert_eq!(
-            headers.as_byte_record(),
-            rdr.headers().unwrap().as_byte_record());
+        assert_eq!(&headers, rdr.headers().unwrap());
     }
 
     // Test that even if we didn't read headers before seeking, if we seek to
@@ -978,6 +970,6 @@ mod tests {
         let mut rdr = ReaderBuilder::new()
             .from_reader(io::Cursor::new(data));
         rdr.seek(&Position::new()).unwrap();
-        assert_eq!("foo", &rdr.headers().unwrap().as_record().unwrap()[0]);
+        assert_eq!("foo", &rdr.headers().unwrap()[0]);
     }
 }
