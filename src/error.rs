@@ -1,4 +1,4 @@
-use std::error;
+use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 use std::result;
@@ -6,6 +6,7 @@ use std::str;
 
 use reader::Position;
 use byte_record::ByteRecord;
+use deserializer::DeserializeError;
 
 /// A type alias for `Result<T, csv::Error>`.
 pub type Result<T> = result::Result<T, Error>;
@@ -49,6 +50,9 @@ pub enum Error {
     /// are called on a CSV reader that was asked to `seek` before it parsed
     /// the first record.
     Seek,
+    /// An error of this kind occurs only when performing automatic
+    /// deserialization with serde.
+    Deserialize(DeserializeError),
 }
 
 impl From<io::Error> for Error {
@@ -57,22 +61,24 @@ impl From<io::Error> for Error {
     }
 }
 
-impl error::Error for Error {
+impl StdError for Error {
     fn description(&self) -> &str {
         match *self {
             Error::Io(ref err) => err.description(),
             Error::Utf8 { ref err, .. } => err.description(),
             Error::UnequalLengths{..} => "record of different length found",
             Error::Seek => "headers unavailable on seeked CSV reader",
+            Error::Deserialize(ref err) => err.description(),
         }
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&StdError> {
         match *self {
             Error::Io(ref err) => Some(err),
             Error::Utf8 { ref err, .. } => Some(err),
             Error::UnequalLengths{..} => None,
             Error::Seek => None,
+            Error::Deserialize(ref err) => Some(err),
         }
     }
 }
@@ -103,6 +109,7 @@ impl fmt::Display for Error {
                            when the parser was seeked before the first record \
                            could be read")
             }
+            Error::Deserialize(ref err) => err.fmt(f),
         }
     }
 }
@@ -138,9 +145,9 @@ impl fmt::Display for FromUtf8Error {
     }
 }
 
-impl error::Error for FromUtf8Error {
+impl StdError for FromUtf8Error {
     fn description(&self) -> &str { self.err.description() }
-    fn cause(&self) -> Option<&error::Error> { Some(&self.err) }
+    fn cause(&self) -> Option<&StdError> { Some(&self.err) }
 }
 
 /// A UTF-8 validation error that occurred when attempting to convert a
@@ -168,6 +175,10 @@ impl Utf8Error {
     pub fn valid_up_to(&self) -> usize { self.valid_up_to }
 }
 
+impl StdError for Utf8Error {
+    fn description(&self) -> &str { "invalid utf-8 in CSV record" }
+}
+
 impl fmt::Display for Utf8Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
@@ -176,8 +187,4 @@ impl fmt::Display for Utf8Error {
             self.field,
             self.valid_up_to)
     }
-}
-
-impl error::Error for Utf8Error {
-    fn description(&self) -> &str { "invalid utf-8 in CSV record" }
 }
