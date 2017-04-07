@@ -5,10 +5,7 @@ use std::str;
 
 use rustc_serialize::Decodable;
 
-use {
-    ByteString, Result, Decoded,
-    Error, LocatableError, ParseError,
-};
+use {ByteString, Result, Decoded, Error, LocatableError, ParseError};
 
 use self::State::*;
 
@@ -44,7 +41,7 @@ impl PartialEq<u8> for RecordTerminator {
     fn eq(&self, &other: &u8) -> bool {
         match *self {
             RecordTerminator::CRLF => other == b'\r' || other == b'\n',
-            RecordTerminator::Any(b) => other == b
+            RecordTerminator::Any(b) => other == b,
         }
     }
 }
@@ -93,6 +90,7 @@ impl PartialEq<u8> for RecordTerminator {
 ///     println!("{:?}", row);
 /// }
 /// ```
+#[derive(Clone)]
 pub struct Reader<R> {
     rdr: R,
     buf: Vec<u8>,
@@ -161,13 +159,15 @@ impl Reader<fs::File> {
 impl Reader<io::Cursor<Vec<u8>>> {
     /// Creates a CSV reader for an in memory string buffer.
     pub fn from_string<'a, S>(s: S) -> Reader<io::Cursor<Vec<u8>>>
-            where S: Into<String> {
+        where S: Into<String>
+    {
         Reader::from_bytes(s.into().into_bytes())
     }
 
     /// Creates a CSV reader for an in memory buffer of bytes.
     pub fn from_bytes<'a, V>(bytes: V) -> Reader<io::Cursor<Vec<u8>>>
-            where V: Into<Vec<u8>> {
+        where V: Into<Vec<u8>>
+    {
         Reader::from_reader(io::Cursor::new(bytes.into()))
     }
 }
@@ -495,7 +495,11 @@ impl<'a, T: ?Sized + ::std::fmt::Debug> NextField<'a, T> {
 
     /// Returns true if and only if the end of CSV data has been reached.
     pub fn is_end(&self) -> bool {
-        if let NextField::EndOfCsv = *self { true } else { false }
+        if let NextField::EndOfCsv = *self {
+            true
+        } else {
+            false
+        }
     }
 
     /// Returns the underlying field data.
@@ -538,7 +542,11 @@ impl<R: io::Read> Reader<R> {
     /// of `String`s.
     pub fn byte_records<'a>(&'a mut self) -> ByteRecords<'a, R> {
         let first = self.has_seeked;
-        ByteRecords { p: self, first: first, errored: false }
+        ByteRecords {
+            p: self,
+            first: first,
+            errored: false,
+        }
     }
 
     /// Returns `true` if the CSV parser has reached its final state. When
@@ -620,7 +628,9 @@ impl<R: io::Read> Reader<R> {
     /// }
     /// ```
     pub fn next_bytes(&mut self) -> NextField<[u8]> {
-        unsafe { self.fieldbuf.set_len(0); }
+        unsafe {
+            self.fieldbuf.set_len(0);
+        }
         loop {
             if let Err(err) = self.fill_buf() {
                 return NextField::Error(Error::Io(err));
@@ -736,11 +746,13 @@ impl<R: io::Read> Reader<R> {
             NextField::Data(bytes) => {
                 match str::from_utf8(bytes) {
                     Ok(s) => NextField::Data(s),
-                    Err(_) => NextField::Error(Error::Parse(LocatableError {
-                        record: record,
-                        field: field,
-                        err: ParseError::InvalidUtf8,
-                    })),
+                    Err(_) => {
+                        NextField::Error(Error::Parse(LocatableError {
+                            record: record,
+                            field: field,
+                            err: ParseError::InvalidUtf8,
+                        }))
+                    }
                 }
             }
         }
@@ -778,9 +790,7 @@ impl<R: io::Read> Reader<R> {
 
     #[inline]
     fn next_eor(&mut self) -> NextField<[u8]> {
-        if !self.flexible
-                && self.first_row_done
-                && self.ifield != self.first_row.len() as u64 {
+        if !self.flexible && self.first_row_done && self.ifield != self.first_row.len() as u64 {
             return self.parse_error(ParseError::UnequalLengths {
                 expected: self.first_row.len() as u64,
                 got: self.ifield as u64,
@@ -800,9 +810,14 @@ impl<R: io::Read> Reader<R> {
     #[inline]
     fn fill_buf(&mut self) -> io::Result<()> {
         if self.bufi == self.buf.len() {
-            unsafe { let cap = self.buf.capacity(); self.buf.set_len(cap); }
+            unsafe {
+                let cap = self.buf.capacity();
+                self.buf.set_len(cap);
+            }
             let n = try!(self.rdr.read(&mut self.buf));
-            unsafe { self.buf.set_len(n); }
+            unsafe {
+                self.buf.set_len(n);
+            }
             self.bufi = 0;
         }
         Ok(())
@@ -843,7 +858,7 @@ impl<R: io::Read> Reader<R> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum State {
     StartRecord,
     EndRecord,
@@ -871,7 +886,7 @@ impl<R: io::Read + io::Seek> Reader<R> {
         self.has_seeked = true;
         self.state = StartRecord;
         if pos == self.byte_offset() {
-            return Ok(())
+            return Ok(());
         }
         self.bufi = self.buf.len(); // will force a buffer refresh
         self.eof = false;
@@ -887,13 +902,13 @@ pub struct UnsafeByteFields<'a, R: 'a> {
 }
 
 #[doc(hidden)]
-impl<'a, R> Iterator for UnsafeByteFields<'a, R> where R: io::Read {
+impl<'a, R> Iterator for UnsafeByteFields<'a, R>
+    where R: io::Read
+{
     type Item = Result<&'a [u8]>;
 
     fn next(&mut self) -> Option<Result<&'a [u8]>> {
-        unsafe {
-            ::std::mem::transmute(self.rdr.next_bytes().into_iter_result())
-        }
+        unsafe { ::std::mem::transmute(self.rdr.next_bytes().into_iter_result()) }
     }
 }
 
@@ -911,14 +926,14 @@ pub struct DecodedRecords<'a, R: 'a, D> {
 }
 
 impl<'a, R, D> Iterator for DecodedRecords<'a, R, D>
-        where R: io::Read, D: Decodable {
+    where R: io::Read,
+          D: Decodable
+{
     type Item = Result<D>;
 
     fn next(&mut self) -> Option<Result<D>> {
         self.p.next().map(|res| {
-            res.and_then(|byte_record| {
-                Decodable::decode(&mut Decoded::new(byte_record))
-            })
+            res.and_then(|byte_record| Decodable::decode(&mut Decoded::new(byte_record)))
         })
     }
 }
@@ -933,15 +948,13 @@ pub struct StringRecords<'a, R: 'a> {
     p: ByteRecords<'a, R>,
 }
 
-impl<'a, R> Iterator for StringRecords<'a, R> where R: io::Read {
+impl<'a, R> Iterator for StringRecords<'a, R>
+    where R: io::Read
+{
     type Item = Result<Vec<String>>;
 
     fn next(&mut self) -> Option<Result<Vec<String>>> {
-        self.p.next().map(|res| {
-            res.and_then(|byte_record| {
-                byte_record_to_utf8(byte_record)
-            })
-        })
+        self.p.next().map(|res| res.and_then(|byte_record| byte_record_to_utf8(byte_record)))
     }
 }
 
@@ -957,7 +970,9 @@ pub struct ByteRecords<'a, R: 'a> {
     errored: bool,
 }
 
-impl<'a, R> Iterator for ByteRecords<'a, R> where R: io::Read {
+impl<'a, R> Iterator for ByteRecords<'a, R>
+    where R: io::Read
+{
     type Item = Result<Vec<ByteString>>;
 
     fn next(&mut self) -> Option<Result<Vec<ByteString>>> {
@@ -1003,9 +1018,9 @@ impl<'a, R> Iterator for ByteRecords<'a, R> where R: io::Read {
             match self.p.next_bytes() {
                 NextField::EndOfRecord | NextField::EndOfCsv => {
                     if record.len() == 0 {
-                        return None
+                        return None;
                     }
-                    break
+                    break;
                 }
                 NextField::Error(err) => {
                     self.errored = true;
@@ -1021,9 +1036,10 @@ impl<'a, R> Iterator for ByteRecords<'a, R> where R: io::Read {
 fn byte_record_to_utf8(record: Vec<ByteString>) -> Result<Vec<String>> {
     for bytes in record.iter() {
         if let Err(err) = ::std::str::from_utf8(&**bytes) {
-            return Err(Error::Decode(format!(
-                "Could not decode the following bytes as UTF-8 \
-                 because {}: {:?}", err.to_string(), bytes)));
+            return Err(Error::Decode(format!("Could not decode the following bytes as UTF-8 \
+                                              because {}: {:?}",
+                                             err.to_string(),
+                                             bytes)));
         }
     }
     Ok(unsafe { ::std::mem::transmute(record) })
