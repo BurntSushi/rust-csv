@@ -16,6 +16,10 @@ bench = false
 
 [dependencies]
 csv-core = { path = "csv-core", version = "0.1.0" }
+serde = "0.9"
+
+[dev-dependencies]
+serde_derive = "0.9"
 
 [profile.release]
 debug = true
