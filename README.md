@@ -123,7 +123,7 @@ fn main() {
     loop {
         match rdr.next_bytes() {
             NextField::EndOfCsv => break,
-            NextField::EndOfRecord => { count += 1; break; }
+            NextField::EndOfRecord => { count += 1; }
             NextField::Data(_) => {}
             NextField::Error(err) => panic!(err),
         }
