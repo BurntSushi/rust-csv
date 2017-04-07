@@ -288,6 +288,11 @@ impl<W: io::Write> Writer<W> {
     pub fn flush(&mut self) -> Result<()> {
         self.buf.flush().map_err(From::from)
     }
+
+    /// Consumes the CSV writer and returns the inner buffered writer
+    pub fn into_inner(self) -> io::BufWriter<W> {
+        self.buf
+    }
 }
 
 impl<W: io::Write> Writer<W> {
