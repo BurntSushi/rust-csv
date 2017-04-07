@@ -80,6 +80,30 @@ get plain access to records as vectors of strings. There are examples with more
 details in the documentation.
 
 
+### Features
+
+The crate has additional features which are disabled by default but they can
+be enabled using [\[features\] section](http://doc.crates.io/manifest.html#the-features-section).
+
+The only feature the crate supports now is `multiline`.
+
+
+#### Multiline
+
+The `multiline` feature allows to change the parsing behavior. By default the parser allows multiline records when quoted field my have one more or EOLs (see the example below).
+
+```csv
+Field1,Field2,"Multiline
+field",Field4,Field5
+```
+
+The feature introduces a new parsing boolean option `Reader::multiline` which by default is `true`, which is the default behavior. When the option is set to `false` the parser does not allow multiline records and when it encounters a record like in the example the further action depends on `Reader::flexible` option.
+
+- If `flexible` is `true` then the parser returns the record where the number of fields may differ from the number of fields in the first record.
+- If `flexible` is `false` then the parser returns error `ParseError::UnclosedQuotedField` enclosed in `LocatableError`.
+
+_Please notice enabling that feature may slightly reduce the parser performance._
+
 ### Installation
 
 This crate works with Cargo and is on

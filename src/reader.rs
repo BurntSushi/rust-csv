@@ -112,6 +112,10 @@ pub struct Reader<R> {
     record_term: RecordTerminator,
     flexible: bool,
 
+    // This field is available only if multiline feature is enabled.
+    #[cfg(feature = "multiline")]
+    multiline: bool,
+
     // When this is true, the first record is interpreted as a "header" row.
     // This is opaque to the raw iterator, but is used in any iterator that
     // allocates.
@@ -126,7 +130,13 @@ impl<R: io::Read> Reader<R> {
     /// Creates a new CSV reader from an arbitrary `io::Read`.
     ///
     /// The reader is buffered for you automatically.
+    #[inline]
     pub fn from_reader(rdr: R) -> Reader<R> {
+        Self::from_reader_ll(rdr)
+    }
+
+    #[cfg(not(feature = "multiline"))]
+    fn from_reader_ll(rdr: R) -> Reader<R> {
         Reader {
             rdr: rdr,
             buf: vec![0; BUF_SIZE],
@@ -145,6 +155,32 @@ impl<R: io::Read> Reader<R> {
             double_quote: true,
             record_term: RecordTerminator::CRLF,
             flexible: false,
+            has_headers: true,
+            has_seeked: false,
+        }
+    }
+
+    #[cfg(feature = "multiline")]
+    fn from_reader_ll(rdr: R) -> Reader<R> {
+        Reader {
+            rdr: rdr,
+            buf: vec![0; BUF_SIZE],
+            bufi: BUF_SIZE,
+            fieldbuf: Vec::with_capacity(1024),
+            state: StartRecord,
+            eof: false,
+            first_row: vec![],
+            first_row_done: false,
+            irecord: 1,
+            ifield: 1,
+            byte_offset: 0,
+            delimiter: b',',
+            quote: b'"',
+            escape: None,
+            double_quote: true,
+            record_term: RecordTerminator::CRLF,
+            flexible: false,
+            multiline: true,
             has_headers: true,
             has_seeked: false,
         }
@@ -455,6 +491,24 @@ impl<R: io::Read> Reader<R> {
         self.delimiter(b'\x1f')
             .record_terminator(RecordTerminator::Any(b'\x1e'))
     }
+
+    /// Enable multiline records. By default multiline records are
+    /// enabled and that means the default and predicted behavior
+    /// conforming the RFC.
+    ///
+    /// When disabled, multiline records are prohibited. If the
+    /// parser encounters the end of the text line and the field
+    /// is still opened, for example there is a missing closing
+    /// quote, it will act depending on `flexible` option.
+    /// - If `flexible` is `true` the parser will return the 
+    /// record where the number of fields may differ from the
+    /// number of fields in the header.
+    /// - If `flexible` is `false` the parser will return error.
+    #[cfg(feature = "multiline")]
+    pub fn multiline(mut self, yes: bool) -> Reader<R> {
+        self.multiline = yes;
+        self
+    }
 }
 
 /// NextField is the result of parsing a single CSV field.
@@ -619,7 +673,14 @@ impl<R: io::Read> Reader<R> {
     ///     println!("");
     /// }
     /// ```
+    #[inline]
     pub fn next_bytes(&mut self) -> NextField<[u8]> {
+        self.next_bytes_ll()
+    }
+
+    // Default parsing behavior
+    #[cfg(not(feature = "multiline"))]
+    fn next_bytes_ll(&mut self) -> NextField<[u8]> {
         unsafe { self.fieldbuf.set_len(0); }
         loop {
             if let Err(err) = self.fill_buf() {
@@ -685,6 +746,113 @@ impl<R: io::Read> Reader<R> {
                             self.state = InDoubleEscapedQuote;
                         } else if self.escape == Some(c) {
                             self.state = InEscapedQuote;
+                        } else {
+                            self.add(c);
+                        }
+                    }
+                    InEscapedQuote => {
+                        self.bump();
+                        self.add(c);
+                        self.state = InQuotedField;
+                    }
+                    InDoubleEscapedQuote => {
+                        self.bump();
+                        if self.double_quote && c == self.quote {
+                            self.add(c);
+                            self.state = InQuotedField;
+                        } else if c == self.delimiter {
+                            self.state = StartField;
+                            return self.next_data();
+                        } else if self.is_record_term(c) {
+                            self.bump_eor(c);
+                            self.state = EndRecord;
+                            return self.next_data();
+                        } else {
+                            self.add(c);
+                            self.state = InField; // degrade gracefully?
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Extended parsng behavior
+    #[cfg(feature = "multiline")]
+    fn next_bytes_ll(&mut self) -> NextField<[u8]> {
+        unsafe { self.fieldbuf.set_len(0); }
+        loop {
+            if let Err(err) = self.fill_buf() {
+                return NextField::Error(Error::Io(err));
+            }
+            if self.buf.len() == 0 {
+                self.eof = true;
+                if let StartRecord = self.state {
+                    return self.next_eoc();
+                } else if let EndRecord = self.state {
+                    self.state = StartRecord;
+                    return self.next_eor();
+                } else {
+                    self.state = EndRecord;
+                    return self.next_data();
+                }
+            }
+            while self.bufi < self.buf.len() {
+                let c = self.buf[self.bufi];
+                match self.state {
+                    StartRecord => {
+                        if self.is_record_term(c) {
+                            self.bump();
+                        } else {
+                            self.state = StartField;
+                        }
+                    }
+                    EndRecord => {
+                        self.state = StartRecord;
+                        return self.next_eor();
+                    }
+                    StartField => {
+                        self.bump();
+                        if c == self.quote {
+                            self.state = InQuotedField;
+                        } else if c == self.delimiter {
+                            return self.next_data();
+                        } else if self.is_record_term(c) {
+                            self.bump_eor(c);
+                            self.state = EndRecord;
+                            return self.next_data();
+                        } else {
+                            self.add(c);
+                            self.state = InField;
+                        }
+                    }
+                    InField => {
+                        self.bump();
+                        if c == self.delimiter {
+                            self.state = StartField;
+                            return self.next_data();
+                        } else if self.is_record_term(c) {
+                            self.bump_eor(c);
+                            self.state = EndRecord;
+                            return self.next_data();
+                        } else {
+                            self.add(c);
+                        }
+                    }
+                    InQuotedField => {
+                        self.bump();
+                        if c == self.quote {
+                            self.state = InDoubleEscapedQuote;
+                        } else if self.escape == Some(c) {
+                            self.state = InEscapedQuote;
+                        } else if self.is_record_term(c) && !self.multiline {
+                            if self.flexible {
+                                self.bump_eor(c);
+                                self.state = EndRecord;
+                                return self.next_data();
+                            } else {
+                                return self.parse_error(ParseError::UnclosedQuotedField);
+                            }
                         } else {
                             self.add(c);
                         }

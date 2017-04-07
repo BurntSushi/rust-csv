@@ -268,6 +268,10 @@ pub enum ParseError {
     ///
     /// TODO: Include the real Utf8Error, but it is not stabilized yet.
     InvalidUtf8,
+    /// A record was found where a quoted field has no the closing quote.
+    /// Effective only if the feature `multiline` is enabled.
+    #[cfg(feature = "multiline")]
+    UnclosedQuotedField,
 }
 
 impl fmt::Display for Error {
@@ -297,6 +301,10 @@ impl fmt::Display for ParseError {
                            with length {}.", expected, got),
             ParseError::InvalidUtf8 =>
                 write!(f, "Invalid UTF8 encoding."),
+            // This error is available only if the multiline feature is enabled.
+            #[cfg(feature = "multiline")]
+            ParseError::UnclosedQuotedField =>
+                write!(f, "Record has unclosed quoted field."),
         }
     }
 }
