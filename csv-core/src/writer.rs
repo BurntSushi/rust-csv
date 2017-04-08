@@ -138,8 +138,19 @@ pub struct Writer {
 
 #[derive(Debug)]
 struct WriterState {
+    /// This is set whenever we've begun writing the contents of a field, even
+    /// if the contents are empty. We use it to avoid re-computing whether
+    /// quotes are necessary.
     in_field: bool,
+    /// This is set whenever we've started writing a field that is enclosed in
+    /// quotes. When the writer is finished, or if a delimiter or terminator
+    /// are written, then a closing quote is inserted when this is true.
     quoting: bool,
+    /// The number of total bytes written for the current record.
+    ///
+    /// If the writer is finished or a terminator is written when this is `0`,
+    /// then an empty field is added as a pair of adjacent quotes.
+    record_bytes: u64,
 }
 
 impl Writer {
@@ -152,14 +163,27 @@ impl Writer {
     ///
     /// This must be called when one is done writing CSV data to `output`.
     /// In particular, it will write closing quotes if necessary.
-    pub fn finish(&mut self, output: &mut [u8]) -> (WriteResult, usize) {
-        if !self.state.quoting {
-            return (WriteResult::InputEmpty, 0);
+    pub fn finish(&mut self, mut output: &mut [u8]) -> (WriteResult, usize) {
+        let mut nout = 0;
+        if self.state.record_bytes == 0 {
+            assert!(!self.state.quoting);
+            let (res, o) = self.write(&[self.quote, self.quote], output);
+            if o == 0 {
+                return (res, 0);
+            }
+            output = &mut moving(output)[o..];
+            nout += o;
+            self.state.record_bytes += o as u64;
         }
-        let (res, nout) = self.write(&[self.quote], output);
-        if nout == 0 {
+        if !self.state.quoting {
+            return (WriteResult::InputEmpty, nout);
+        }
+        let (res, o) = self.write(&[self.quote], output);
+        if o == 0 {
             return (res, nout);
         }
+        nout += o;
+        self.state.record_bytes += o as u64;
         self.state.in_field = false;
         self.state.quoting = false;
         (res, nout)
@@ -203,6 +227,7 @@ impl Writer {
                 }
                 output = &mut moving(output)[o..];
                 nout += o;
+                self.state.record_bytes += o as u64;
             }
             self.state.in_field = true;
         }
@@ -216,6 +241,7 @@ impl Writer {
             };
         nin += i;
         nout += o;
+        self.state.record_bytes += o as u64;
         (res, nin, nout)
     }
 
@@ -238,6 +264,7 @@ impl Writer {
             }
             output = &mut moving(output)[o..];
             nout += o;
+            self.state.record_bytes += o as u64;
             self.state.quoting = false;
         }
         let (res, o) = self.write(&[self.delimiter], output);
@@ -245,6 +272,7 @@ impl Writer {
             return (res, nout);
         }
         nout += o;
+        self.state.record_bytes += o as u64;
         self.state.in_field = false;
         (res, nout)
     }
@@ -261,6 +289,16 @@ impl Writer {
         mut output: &mut [u8],
     ) -> (WriteResult, usize) {
         let mut nout = 0;
+        if self.state.record_bytes == 0 {
+            assert!(!self.state.quoting);
+            let (res, o) = self.write(&[self.quote, self.quote], output);
+            if o == 0 {
+                return (res, 0);
+            }
+            output = &mut moving(output)[o..];
+            nout += o;
+            self.state.record_bytes += o as u64;
+        }
         if self.state.quoting {
             let (res, o) = self.write(&[self.quote], output);
             if o == 0 {
@@ -268,6 +306,7 @@ impl Writer {
             }
             output = &mut moving(output)[o..];
             nout += o;
+            self.state.record_bytes += o as u64;
             self.state.quoting = false;
         }
         let (res, o) = match self.term {
@@ -278,6 +317,7 @@ impl Writer {
             return (res, nout);
         }
         nout += o;
+        self.state.record_bytes += o as u64;
         self.state.in_field = false;
         (res, nout)
     }
@@ -337,6 +377,7 @@ impl Default for WriterState {
         WriterState {
             in_field: false,
             quoting: false,
+            record_bytes: 0,
         }
     }
 }
@@ -504,6 +545,25 @@ mod tests {
         n += 3;
 
         assert_write!(wtr, finish, &mut out[n..], 0, InputEmpty, "");
+    }
+
+    #[test]
+    fn writer_one_empty_field_terminator() {
+        let mut wtr = Writer::new();
+        let mut out = &mut [0; 1024];
+
+        assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
+        assert_write!(wtr, terminator, &mut out[..], 3, InputEmpty, "\"\"\n");
+        assert_write!(wtr, finish, &mut out[..], 0, InputEmpty, "");
+    }
+
+    #[test]
+    fn writer_one_empty_field_finish() {
+        let mut wtr = Writer::new();
+        let mut out = &mut [0; 1024];
+
+        assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
+        assert_write!(wtr, finish, &mut out[..], 2, InputEmpty, "\"\"");
     }
 
     #[test]
