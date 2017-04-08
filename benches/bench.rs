@@ -110,11 +110,16 @@ macro_rules! bench_serde {
 }
 
 bench_serde!(
+    count_nfl_deserialize_bytes, NFL, count_deserialize_bytes, NFLRow, 9999);
+bench_serde!(
     count_nfl_deserialize_str, NFL, count_deserialize_str, NFLRow, 9999);
 bench!(count_nfl_iter_bytes, NFL, count_iter_bytes, 10000);
 bench!(count_nfl_iter_str, NFL, count_iter_str, 10000);
 bench!(count_nfl_read_bytes, NFL, count_read_bytes, 10000);
 bench!(count_nfl_read_str, NFL, count_read_str, 10000);
+bench_serde!(
+    no_headers,
+    count_game_deserialize_bytes, GAME, count_deserialize_bytes, GAMERow, 100000);
 bench_serde!(
     no_headers,
     count_game_deserialize_str, GAME, count_deserialize_str, GAMERow, 100000);
@@ -123,17 +128,33 @@ bench!(count_game_iter_str, GAME, count_iter_str, 100000);
 bench!(count_game_read_bytes, GAME, count_read_bytes, 100000);
 bench!(count_game_read_str, GAME, count_read_str, 100000);
 bench_serde!(
+    count_pop_deserialize_bytes, POP, count_deserialize_bytes, POPRow, 20000);
+bench_serde!(
     count_pop_deserialize_str, POP, count_deserialize_str, POPRow, 20000);
 bench!(count_pop_iter_bytes, POP, count_iter_bytes, 20001);
 bench!(count_pop_iter_str, POP, count_iter_str, 20001);
 bench!(count_pop_read_bytes, POP, count_read_bytes, 20001);
 bench!(count_pop_read_str, POP, count_read_str, 20001);
 bench_serde!(
+    count_mbta_deserialize_bytes, MBTA, count_deserialize_bytes, MBTARow, 9999);
+bench_serde!(
     count_mbta_deserialize_str, MBTA, count_deserialize_str, MBTARow, 9999);
 bench!(count_mbta_iter_bytes, MBTA, count_iter_bytes, 10000);
 bench!(count_mbta_iter_str, MBTA, count_iter_str, 10000);
 bench!(count_mbta_read_bytes, MBTA, count_read_bytes, 10000);
 bench!(count_mbta_read_str, MBTA, count_read_str, 10000);
+
+fn count_deserialize_bytes<R, D>(rdr: &mut Reader<R>) -> u64
+    where R: io::Read, D: Deserialize
+{
+    let mut count = 0;
+    let mut rec = ByteRecord::new();
+    while !rdr.read_byte_record(&mut rec).unwrap() {
+        let _: D = rec.deserialize(None).unwrap();
+        count += 1;
+    }
+    count
+}
 
 fn count_deserialize_str<R, D>(rdr: &mut Reader<R>) -> u64
     where R: io::Read, D: Deserialize

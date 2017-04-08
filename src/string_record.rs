@@ -4,9 +4,12 @@ use std::ops::{self, Range};
 use std::result;
 use std::str;
 
+use serde::Deserialize;
+
+use deserializer::deserialize_string_record;
 use error::{Error, FromUtf8Error, Result, new_from_utf8_error};
 use reader::Reader;
-use byte_record::{self, ByteRecord, ByteRecordIter};
+use byte_record::{self, ByteRecord, ByteRecordIter, Position};
 
 /// A safe function for reading CSV data into a `StringRecord`.
 ///
@@ -86,6 +89,21 @@ impl StringRecord {
         }
     }
 
+    /// Deserialize this record.
+    ///
+    /// The `D` type parameter refers to the type that this record should be
+    /// deserialized into.
+    ///
+    /// An optional `headers` parameter permits deserializing into a struct
+    /// based on its field names (corresponding to header values) rather than
+    /// the order in which the fields are defined.
+    pub fn deserialize<D: Deserialize>(
+        &self,
+        headers: Option<&StringRecord>,
+    ) -> Result<D> {
+        deserialize_string_record(self, headers)
+    }
+
     /// Returns an iterator over all fields in this record.
     #[inline]
     pub fn iter(&self) -> StringRecordIter {
@@ -126,6 +144,18 @@ impl StringRecord {
         self.0.clear();
     }
 
+    /// Return the position of this record, if available.
+    #[inline]
+    pub fn position(&self) -> Option<&Position> {
+        self.0.position()
+    }
+
+    /// Set the position of this record.
+    #[inline]
+    pub fn set_position(&mut self, pos: Option<Position>) {
+        self.0.set_position(pos);
+    }
+
     /// Return the start and end position of a field in this record.
     ///
     /// If no such field exists at the given index, then return `None`.
@@ -145,7 +175,13 @@ impl StringRecord {
         unsafe { str::from_utf8_unchecked(self.0.as_slice()) }
     }
 
-    /// Convert this `StringRecord` into `ByteRecord`.
+    /// Return a reference to this record's raw `ByteRecord`.
+    #[inline]
+    pub fn as_byte_record(&self) -> &ByteRecord {
+        &self.0
+    }
+
+    /// Convert this `StringRecord` into a `ByteRecord`.
     #[inline]
     pub fn into_byte_record(self) -> ByteRecord {
         self.0

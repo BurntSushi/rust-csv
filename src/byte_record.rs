@@ -4,7 +4,10 @@ use std::ops::{self, Range};
 use std::result;
 use std::str;
 
-use error::{Utf8Error, new_utf8_error};
+use serde::Deserialize;
+
+use deserializer::deserialize_byte_record;
+use error::{Result, Utf8Error, new_utf8_error};
 use string_record::StringRecord;
 
 /// Retrieve the underlying parts of a byte record.
@@ -75,6 +78,8 @@ pub struct ByteRecord(Box<ByteRecordInner>);
 /// may heavily depend on the underlying allocator.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ByteRecordInner {
+    /// The position of this byte record.
+    pos: Option<Position>,
     /// All fields in this record, stored contiguously.
     fields: Vec<u8>,
     /// The number of and location of each field in this record.
@@ -103,9 +108,25 @@ impl ByteRecord {
     #[inline]
     pub fn with_capacity(buffer: usize, fields: usize) -> ByteRecord {
         ByteRecord(Box::new(ByteRecordInner {
+            pos: None,
             fields: vec![0; buffer],
             bounds: Bounds::with_capacity(fields),
         }))
+    }
+
+    /// Deserialize this record.
+    ///
+    /// The `D` type parameter refers to the type that this record should be
+    /// deserialized into.
+    ///
+    /// An optional `headers` parameter permits deserializing into a struct
+    /// based on its field names (corresponding to header values) rather than
+    /// the order in which the fields are defined.
+    pub fn deserialize<D: Deserialize>(
+        &self,
+        headers: Option<&ByteRecord>,
+    ) -> Result<D> {
+        deserialize_byte_record(self, headers)
     }
 
     /// Returns an iterator over all fields in this record.
@@ -154,6 +175,18 @@ impl ByteRecord {
         self.0.bounds.add(e);
     }
 
+    /// Return the position of this record, if available.
+    #[inline]
+    pub fn position(&self) -> Option<&Position> {
+        self.0.pos.as_ref()
+    }
+
+    /// Set the position of this record.
+    #[inline]
+    pub fn set_position(&mut self, pos: Option<Position>) {
+        self.0.pos = pos;
+    }
+
     /// Return the start and end position of a field in this record.
     ///
     /// If no such field exists at the given index, then return `None`.
@@ -168,6 +201,53 @@ impl ByteRecord {
     #[inline]
     pub fn as_slice(&self) -> &[u8] {
         &self.0.fields[..self.0.bounds.end()]
+    }
+}
+
+/// A position in CSV data.
+///
+/// A position is used to report errors in CSV data. All positions include the
+/// byte offset, line number and record index at which the error occurred.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Position {
+    byte: u64,
+    line: u64,
+    record: u64,
+}
+
+impl Position {
+    /// Returns a new position initialized to the start value.
+    #[inline]
+    pub fn new() -> Position {
+        Position { byte: 0, line: 1, record: 0 }
+    }
+
+    /// The byte offset, starting at `0`, of this position.
+    #[inline] pub fn byte(&self) -> u64 { self.byte }
+    /// The line number, starting at `1`, of this position.
+    #[inline] pub fn line(&self) -> u64 { self.line }
+    /// The record index, starting at `0`, of this position.
+    #[inline] pub fn record(&self) -> u64 { self.record }
+
+    /// Set the byte offset of this position.
+    #[inline]
+    pub fn set_byte(&mut self, byte: u64) {
+        self.byte = byte;
+    }
+
+    /// Set the line number of this position.
+    ///
+    /// If the line number is less than `1`, then this method panics.
+    #[inline]
+    pub fn set_line(&mut self, line: u64) {
+        assert!(line > 0);
+        self.line = line;
+    }
+
+    /// Set the record index of this position.
+    #[inline]
+    pub fn set_record(&mut self, record: u64) {
+        self.record = record;
     }
 }
 

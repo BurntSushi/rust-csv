@@ -7,8 +7,7 @@ use std::result;
 use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
 use serde::Deserialize;
 
-use byte_record::{self, ByteRecord};
-use deserializer::DeStringRecord;
+use byte_record::{self, ByteRecord, Position};
 use string_record::{self, StringRecord};
 use {Error, Result, Terminator, Utf8Error};
 
@@ -189,8 +188,6 @@ struct ReaderState {
     flexible: bool,
     /// The number of fields in the first record parsed.
     first_field_count: Option<u64>,
-    /// The position of the parser just before the previous record was parsed.
-    prev_pos: Position,
     /// The current position of the parser.
     ///
     /// Note that this position is only observable by callers at the start
@@ -209,10 +206,6 @@ struct ReaderState {
 /// The headers always correspond to the first row.
 #[derive(Debug)]
 struct Headers {
-    /// The position just of the parser just before the headers were parsed,
-    /// if available. This is unavailable when the caller sets the headers
-    /// explicitly.
-    pos: Option<Position>,
     /// The header, as raw bytes.
     byte_record: ByteRecord,
     /// The header, as valid UTF-8 (or a UTF-8 error).
@@ -231,7 +224,6 @@ impl<R: io::Read> Reader<R> {
                 has_headers: builder.has_headers,
                 flexible: builder.flexible,
                 first_field_count: None,
-                prev_pos: Position::new(),
                 cur_pos: Position::new(),
                 seeked: false,
                 first: false,
@@ -326,15 +318,14 @@ impl<R: io::Read> Reader<R> {
                 return Err(Error::Seek);
             }
             let mut record = ByteRecord::new();
-            let pos = self.position().clone();
             self.read_byte_record_impl(&mut record)?;
-            self.set_headers_pos(Err(record), Some(pos));
+            self.set_headers_impl(Err(record));
         }
         let headers = self.state.headers.as_ref().unwrap();
         match headers.string_record {
             Ok(ref record) => Ok(record),
             Err(ref err) => Err(Error::Utf8 {
-                pos: headers.pos.clone(),
+                pos: headers.byte_record.position().map(Clone::clone),
                 err: err.clone(),
             }),
         }
@@ -345,7 +336,7 @@ impl<R: io::Read> Reader<R> {
     /// This overrides any other setting. Any automatic detection of headers
     /// is disabled.
     pub fn set_headers(&mut self, headers: StringRecord) {
-        self.set_headers_pos(Ok(headers), None);
+        self.set_headers_impl(Ok(headers));
     }
 
     /// Returns a reference to the first row read by this parser as raw bytes.
@@ -363,9 +354,8 @@ impl<R: io::Read> Reader<R> {
                 return Err(Error::Seek);
             }
             let mut record = ByteRecord::new();
-            let pos = self.position().clone();
             self.read_byte_record_impl(&mut record)?;
-            self.set_headers_pos(Err(record), Some(pos));
+            self.set_headers_impl(Err(record));
         }
         Ok(&self.state.headers.as_ref().unwrap().byte_record)
     }
@@ -375,13 +365,12 @@ impl<R: io::Read> Reader<R> {
     /// This overrides any other setting. Any automatic detection of headers
     /// is disabled.
     pub fn set_byte_headers(&mut self, headers: ByteRecord) {
-        self.set_headers_pos(Err(headers), None);
+        self.set_headers_impl(Err(headers));
     }
 
-    fn set_headers_pos(
+    fn set_headers_impl(
         &mut self,
         headers: result::Result<StringRecord, ByteRecord>,
-        pos: Option<Position>,
     ) {
         // If we have string headers, then get byte headers. But if we have
         // byte headers, then get the string headers (or a UTF-8 error).
@@ -398,7 +387,6 @@ impl<R: io::Read> Reader<R> {
             }
         };
         self.state.headers = Some(Headers {
-            pos: pos,
             byte_record: byte_headers,
             string_record: str_headers,
         });
@@ -436,11 +424,10 @@ impl<R: io::Read> Reader<R> {
                 return Ok(self.state.eof);
             }
         }
-        let pos = self.position().clone();
         let eof = self.read_byte_record_impl(record)?;
         self.state.first = true;
         if !self.state.seeked && self.state.headers.is_none() {
-            self.set_headers_pos(Err(record.clone()), Some(pos));
+            self.set_headers_impl(Err(record.clone()));
             // If the end user indicated that we have headers, then we should
             // never return the first row. Instead, we should attempt to
             // read and return the next one.
@@ -461,6 +448,7 @@ impl<R: io::Read> Reader<R> {
         use csv_core::ReadRecordResult::*;
 
         record.clear();
+        record.set_position(Some(self.state.cur_pos.clone()));
         if self.state.eof {
             return Ok(true);
         }
@@ -473,8 +461,9 @@ impl<R: io::Read> Reader<R> {
                     input, &mut fields[outlen..], &mut ends[endlen..])
             };
             self.rdr.consume(nin);
-            self.state.cur_pos.byte += nin as u64;
-            self.state.cur_pos.line = self.core.line();
+            let byte = self.state.cur_pos.byte();
+            self.state.cur_pos.set_byte(byte + nin as u64);
+            self.state.cur_pos.set_line(self.core.line());
             outlen += nout;
             endlen += nend;
             match res {
@@ -489,7 +478,7 @@ impl<R: io::Read> Reader<R> {
                 }
                 Record => {
                     byte_record::set_len(record, endlen);
-                    self.state.add_record(endlen as u64)?;
+                    self.state.add_record(record)?;
                     break;
                 }
                 End => {
@@ -542,7 +531,6 @@ impl<R: io::Read + io::Seek> Reader<R> {
         self.core.reset();
         self.core.set_line(pos.line());
         self.state.seeked = true;
-        self.state.prev_pos = pos.clone();
         self.state.cur_pos = pos.clone();
         self.state.eof = false;
         Ok(())
@@ -551,67 +539,24 @@ impl<R: io::Read + io::Seek> Reader<R> {
 
 impl ReaderState {
     #[inline(always)]
-    fn add_record(&mut self, num_fields: u64) -> Result<()> {
-        self.cur_pos.record = self.cur_pos.record.checked_add(1).unwrap();
+    fn add_record(&mut self, record: &ByteRecord) -> Result<()> {
+        let i = self.cur_pos.record();
+        self.cur_pos.set_record(i.checked_add(1).unwrap());
         if !self.flexible {
             match self.first_field_count {
-                None => self.first_field_count = Some(num_fields),
+                None => self.first_field_count = Some(record.len() as u64),
                 Some(expected) => {
-                    if num_fields != expected {
+                    if record.len() as u64 != expected {
                         return Err(Error::UnequalLengths {
                             expected_len: expected,
-                            pos: self.prev_pos.clone(),
-                            len: num_fields,
+                            pos: record.position().unwrap().clone(),
+                            len: record.len() as u64,
                         });
                     }
                 }
             }
         }
-        self.prev_pos = self.cur_pos.clone();
         Ok(())
-    }
-}
-
-/// A position in CSV data.
-///
-/// A position is used to report errors in CSV data. All positions include the
-/// byte offset, line number and record index at which the error occurred.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Position {
-    byte: u64,
-    line: u64,
-    record: u64,
-}
-
-impl Position {
-    /// Returns a new position initialized to the start value.
-    fn new() -> Position { Position { byte: 0, line: 1, record: 0 } }
-    /// The byte offset, starting at `0`, of this position.
-    pub fn byte(&self) -> u64 { self.byte }
-    /// The line number, starting at `1`, of this position.
-    pub fn line(&self) -> u64 { self.line }
-    /// The record index, starting at `0`, of this position.
-    pub fn record(&self) -> u64 { self.record }
-
-    /// Set the byte offset of this position.
-    pub fn set_byte(&mut self, byte: u64) -> &mut Position {
-        self.byte = byte;
-        self
-    }
-
-    /// Set the line number of this position.
-    ///
-    /// If the line number is less than `1`, then this method panics.
-    pub fn set_line(&mut self, line: u64) -> &mut Position {
-        assert!(line > 0);
-        self.line = line;
-        self
-    }
-
-    /// Set the record index of this position.
-    pub fn set_record(&mut self, record: u64) -> &mut Position {
-        self.record = record;
-        self
     }
 }
 
@@ -632,7 +577,7 @@ impl<R: io::Read, D: Deserialize> DeserializeRecordsIntoIter<R, D> {
             if !rdr.state.has_headers {
                 None
             } else {
-                rdr.headers().ok().map(|rec| rec.clone())
+                rdr.headers().ok().map(Clone::clone)
             };
         DeserializeRecordsIntoIter {
             rdr: rdr,
@@ -654,21 +599,10 @@ impl<R: io::Read, D: Deserialize>
     type Item = Result<D>;
 
     fn next(&mut self) -> Option<Result<D>> {
-        let pos = self.rdr.position().clone();
         match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
             Ok(true) => None,
-            Ok(false) => {
-                let mut deser = DeStringRecord::new(
-                    &self.rec, self.headers.as_ref());
-                match D::deserialize(&mut deser) {
-                    Ok(v) => Some(Ok(v)),
-                    Err(err) => Some(Err(Error::Deserialize {
-                        pos: Some(pos),
-                        err: err,
-                    })),
-                }
-            }
+            Ok(false) => Some(self.rec.deserialize(self.headers.as_ref())),
         }
     }
 }
@@ -692,7 +626,7 @@ impl<'r, R: io::Read, D: Deserialize> DeserializeRecordsIter<'r, R, D> {
             if !rdr.state.has_headers {
                 None
             } else {
-                rdr.headers().ok().map(|rec| rec.clone())
+                rdr.headers().ok().map(Clone::clone)
             };
         DeserializeRecordsIter {
             rdr: rdr,
@@ -714,21 +648,10 @@ impl<'r, R: io::Read, D: Deserialize>
     type Item = Result<D>;
 
     fn next(&mut self) -> Option<Result<D>> {
-        let pos = self.rdr.position().clone();
         match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
             Ok(true) => None,
-            Ok(false) => {
-                let mut deser = DeStringRecord::new(
-                    &self.rec, self.headers.as_ref());
-                match D::deserialize(&mut deser) {
-                    Ok(v) => Some(Ok(v)),
-                    Err(err) => Some(Err(Error::Deserialize {
-                        pos: Some(pos),
-                        err: err,
-                    })),
-                }
-            }
+            Ok(false) => Some(self.rec.deserialize(self.headers.as_ref())),
         }
     }
 }
@@ -868,6 +791,14 @@ mod tests {
     fn b(s: &str) -> &[u8] { s.as_bytes() }
     fn s(b: &[u8]) -> &str { ::std::str::from_utf8(b).unwrap() }
 
+    fn newpos(byte: u64, line: u64, record: u64) -> Position {
+        let mut p = Position::new();
+        p.set_byte(byte);
+        p.set_line(line);
+        p.set_record(record);
+        p
+    }
+
     macro_rules! assert_match {
         ($e:expr, $p:pat) => {{
             match $e {
@@ -912,13 +843,16 @@ mod tests {
         assert_eq!(1, rec.len());
         assert_eq!("foo", s(&rec[0]));
 
-        assert_match!(
-            rdr.read_byte_record(&mut rec),
+        match rdr.read_byte_record(&mut rec) {
             Err(Error::UnequalLengths {
                 expected_len: 1,
-                pos: Position { byte: 4, line: 2, record: 1},
+                pos,
                 len: 2,
-            }));
+            }) => {
+                assert_eq!(pos, newpos(4, 2, 1));
+            }
+            wrong => panic!("match failed, got {:?}", wrong),
+        }
     }
 
     #[test]
@@ -956,13 +890,16 @@ mod tests {
         assert_eq!(1, rec.len());
         assert_eq!("foo", s(&rec[0]));
 
-        assert_match!(
-            rdr.read_byte_record(&mut rec),
+        match rdr.read_byte_record(&mut rec) {
             Err(Error::UnequalLengths {
                 expected_len: 1,
-                pos: Position { byte: 4, line: 2, record: 1},
+                pos,
                 len: 2,
-            }));
+            }) => {
+                assert_eq!(pos, newpos(4, 2, 1));
+            }
+            wrong => panic!("match failed, got {:?}", wrong),
+        }
 
         assert!(!rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(1, rec.len());
@@ -1030,7 +967,7 @@ mod tests {
         }
         match rdr.headers().unwrap_err() {
             Error::Utf8 { pos: Some(pos), err } => {
-                assert_eq!(pos, Position { byte: 0, line: 1, record: 0 });
+                assert_eq!(pos, newpos(0, 1, 0));
                 assert_eq!(err.field(), 1);
                 assert_eq!(err.valid_up_to(), 1);
             }
@@ -1103,8 +1040,7 @@ mod tests {
         let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
         let mut rdr = ReaderBuilder::new()
             .from_reader(io::Cursor::new(data));
-        let pos = Position { byte: 18, line: 3, record: 2 };
-        rdr.seek(&pos).unwrap();
+        rdr.seek(&newpos(18, 3, 2)).unwrap();
 
         let mut rec = StringRecord::new();
 
@@ -1130,8 +1066,7 @@ mod tests {
         let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
         let mut rdr = ReaderBuilder::new()
             .from_reader(io::Cursor::new(data));
-        let pos = Position { byte: 18, line: 3, record: 2 };
-        rdr.seek(&pos).unwrap();
+        rdr.seek(&newpos(18, 3, 2)).unwrap();
         assert_match!(rdr.headers(), Err(Error::Seek));
     }
 
@@ -1143,8 +1078,7 @@ mod tests {
         let mut rdr = ReaderBuilder::new()
             .from_reader(io::Cursor::new(data));
         let headers = rdr.headers().unwrap().clone();
-        let pos = Position { byte: 18, line: 3, record: 2 };
-        rdr.seek(&pos).unwrap();
+        rdr.seek(&newpos(18, 3, 2)).unwrap();
         assert_eq!(&headers, rdr.headers().unwrap());
     }
 

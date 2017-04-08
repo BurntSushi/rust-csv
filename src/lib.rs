@@ -8,9 +8,10 @@ extern crate serde_derive;
 
 pub use csv_core::{QuoteStyle, Terminator};
 
-pub use byte_record::ByteRecord;
+pub use byte_record::{ByteRecord, Position};
+pub use deserializer::{DeserializeError, DeserializeErrorKind};
 pub use error::{Error, FromUtf8Error, Result, Utf8Error};
-pub use reader::{Position, Reader, ReaderBuilder};
+pub use reader::{Reader, ReaderBuilder};
 pub use string_record::StringRecord;
 
 mod byte_record;
