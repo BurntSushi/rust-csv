@@ -1,11 +1,14 @@
 use std::fs::File;
 use std::io::{self, BufRead, Seek};
+use std::marker::PhantomData;
 use std::path::Path;
 use std::result;
 
 use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
+use serde::Deserialize;
 
 use byte_record::{self, ByteRecord};
+use deserializer::DeStringRecord;
 use string_record::{self, StringRecord};
 use {Error, Result, Terminator, Utf8Error};
 
@@ -251,6 +254,28 @@ impl<R: io::Read> Reader<R> {
     /// To customize CSV parsing, use a `ReaderBuilder`.
     pub fn from_reader(rdr: R) -> Reader<R> {
         ReaderBuilder::new().from_reader(rdr)
+    }
+
+    /// Returns a borrowed iterator over deserialized records.
+    ///
+    /// If `has_headers` is enabled, then this does not include the first
+    /// record. Additionally, if `has_headers` is enabled, then deserialization
+    /// uses the field names of structs.
+    pub fn deserializer<D>(&mut self) -> DeserializeRecordsIter<R, D>
+            where D: Deserialize
+    {
+        DeserializeRecordsIter::new(self)
+    }
+
+    /// Returns an owned iterator over deserialized records.
+    ///
+    /// If `has_headers` is enabled, then this does not include the first
+    /// record. Additionally, if `has_headers` is enabled, then deserialization
+    /// uses the field names of structs.
+    pub fn into_deserializer<D>(self) -> DeserializeRecordsIntoIter<R, D>
+            where D: Deserialize
+    {
+        DeserializeRecordsIntoIter::new(self)
     }
 
     /// Returns a borrowed iterator over all records as strings.
@@ -587,6 +612,124 @@ impl Position {
     pub fn set_record(&mut self, record: u64) -> &mut Position {
         self.record = record;
         self
+    }
+}
+
+/// An owned iterator over deserialized records.
+///
+/// The type parameter `R` refers to the underlying `io::Read` type, and `D`
+/// refers to the type that this iterator will deserialize a record into.
+pub struct DeserializeRecordsIntoIter<R, D> {
+    rdr: Reader<R>,
+    rec: StringRecord,
+    headers: Option<StringRecord>,
+    _priv: PhantomData<D>,
+}
+
+impl<R: io::Read, D: Deserialize> DeserializeRecordsIntoIter<R, D> {
+    fn new(mut rdr: Reader<R>) -> DeserializeRecordsIntoIter<R, D> {
+        let headers =
+            if !rdr.state.has_headers {
+                None
+            } else {
+                rdr.headers().ok().map(|rec| rec.clone())
+            };
+        DeserializeRecordsIntoIter {
+            rdr: rdr,
+            rec: StringRecord::new(),
+            headers: headers,
+            _priv: PhantomData,
+        }
+    }
+
+    /// Return a mutable reference to the underlying CSV reader.
+    pub fn reader(&mut self) -> &mut Reader<R> {
+        &mut self.rdr
+    }
+}
+
+impl<R: io::Read, D: Deserialize>
+    Iterator for DeserializeRecordsIntoIter<R, D>
+{
+    type Item = Result<D>;
+
+    fn next(&mut self) -> Option<Result<D>> {
+        let pos = self.rdr.position().clone();
+        match self.rdr.read_record(&mut self.rec) {
+            Err(err) => Some(Err(err)),
+            Ok(true) => None,
+            Ok(false) => {
+                let mut deser = DeStringRecord::new(
+                    &self.rec, self.headers.as_ref());
+                match D::deserialize(&mut deser) {
+                    Ok(v) => Some(Ok(v)),
+                    Err(err) => Some(Err(Error::Deserialize {
+                        pos: Some(pos),
+                        err: err,
+                    })),
+                }
+            }
+        }
+    }
+}
+
+/// A borrowed iterator over deserialized records.
+///
+/// The lifetime parameter `'r` refers to the lifetime of the underlying
+/// CSV `Reader`. The type parameter `R` refers to the underlying `io::Read`
+/// type, and `D` refers to the type that this iterator will deserialize a
+/// record into.
+pub struct DeserializeRecordsIter<'r, R: 'r, D> {
+    rdr: &'r mut Reader<R>,
+    rec: StringRecord,
+    headers: Option<StringRecord>,
+    _priv: PhantomData<D>,
+}
+
+impl<'r, R: io::Read, D: Deserialize> DeserializeRecordsIter<'r, R, D> {
+    fn new(rdr: &'r mut Reader<R>) -> DeserializeRecordsIter<'r, R, D> {
+        let headers =
+            if !rdr.state.has_headers {
+                None
+            } else {
+                rdr.headers().ok().map(|rec| rec.clone())
+            };
+        DeserializeRecordsIter {
+            rdr: rdr,
+            rec: StringRecord::new(),
+            headers: headers,
+            _priv: PhantomData,
+        }
+    }
+
+    /// Return a mutable reference to the underlying CSV reader.
+    pub fn reader(&mut self) -> &mut Reader<R> {
+        self.rdr
+    }
+}
+
+impl<'r, R: io::Read, D: Deserialize>
+    Iterator for DeserializeRecordsIter<'r, R, D>
+{
+    type Item = Result<D>;
+
+    fn next(&mut self) -> Option<Result<D>> {
+        let pos = self.rdr.position().clone();
+        match self.rdr.read_record(&mut self.rec) {
+            Err(err) => Some(Err(err)),
+            Ok(true) => None,
+            Ok(false) => {
+                let mut deser = DeStringRecord::new(
+                    &self.rec, self.headers.as_ref());
+                match D::deserialize(&mut deser) {
+                    Ok(v) => Some(Ok(v)),
+                    Err(err) => Some(Err(Error::Deserialize {
+                        pos: Some(pos),
+                        err: err,
+                    })),
+                }
+            }
+        }
     }
 }
 
