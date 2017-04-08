@@ -14,6 +14,10 @@ license = "Unlicense/MIT"
 name = "csv"
 bench = false
 
+# [[test]]
+# path = "src/lib.rs"
+# name = "wat"
+
 [dependencies]
 csv-core = { path = "csv-core", version = "0.1.0" }
 serde = "0.9"

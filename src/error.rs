@@ -52,7 +52,12 @@ pub enum Error {
     Seek,
     /// An error of this kind occurs only when performing automatic
     /// deserialization with serde.
-    Deserialize(DeserializeError),
+    Deserialize {
+        /// The position of this error, if available.
+        pos: Option<Position>,
+        /// The deserialization error.
+        err: DeserializeError,
+    },
 }
 
 impl From<io::Error> for Error {
@@ -68,7 +73,7 @@ impl StdError for Error {
             Error::Utf8 { ref err, .. } => err.description(),
             Error::UnequalLengths{..} => "record of different length found",
             Error::Seek => "headers unavailable on seeked CSV reader",
-            Error::Deserialize(ref err) => err.description(),
+            Error::Deserialize { ref err, .. } => err.description(),
         }
     }
 
@@ -78,7 +83,7 @@ impl StdError for Error {
             Error::Utf8 { ref err, .. } => Some(err),
             Error::UnequalLengths{..} => None,
             Error::Seek => None,
-            Error::Deserialize(ref err) => Some(err),
+            Error::Deserialize { ref err, .. } => Some(err),
         }
     }
 }
@@ -109,7 +114,16 @@ impl fmt::Display for Error {
                            when the parser was seeked before the first record \
                            could be read")
             }
-            Error::Deserialize(ref err) => err.fmt(f),
+            Error::Deserialize { pos: None, ref err } => {
+                write!(f, "CSV deserialize error: {}", err)
+            }
+            Error::Deserialize { pos: Some(ref pos), ref err } => {
+                write!(
+                    f,
+                    "CSV deserialize error: record {} \
+                     (byte {}, line {}): {}",
+                    pos.record(), pos.byte(), pos.line(), err)
+            }
         }
     }
 }
