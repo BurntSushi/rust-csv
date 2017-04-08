@@ -4,8 +4,7 @@ use std::io;
 use std::result;
 use std::str;
 
-use reader::Position;
-use byte_record::ByteRecord;
+use byte_record::{ByteRecord, Position};
 use deserializer::DeserializeError;
 
 /// A type alias for `Result<T, csv::Error>`.

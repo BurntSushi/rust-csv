@@ -5,50 +5,154 @@ use std::num;
 use std::str;
 
 use serde::de::{
-    Deserializer, DeserializeSeed,
+    Deserializer, DeserializeSeed, Deserialize,
     Error as SerdeError, Unexpected,
     Visitor, EnumVisitor, VariantVisitor, MapVisitor, SeqVisitor,
 };
 use serde::de::value::ValueDeserializer;
 
-use reader::Position;
+use byte_record::{ByteRecord, ByteRecordIter, Position};
+use error::Error;
 use string_record::{StringRecord, StringRecordIter};
 
-use self::{DeserializeErrorKind as DEK};
+use self::DeserializeErrorKind as DEK;
 
-pub struct DeStringRecord<'r> {
+pub fn deserialize_string_record<D: Deserialize>(
+    record: &StringRecord,
+    headers: Option<&StringRecord>,
+) -> Result<D, Error> {
+    let mut deser = DeRecordWrap(DeStringRecord {
+        it: record.iter().peekable(),
+        headers: headers.map(|r| r.iter()),
+        field: 0,
+    });
+    D::deserialize(&mut deser).map_err(|err| {
+        Error::Deserialize {
+            pos: record.position().map(Clone::clone),
+            err: err,
+        }
+    })
+}
+
+pub fn deserialize_byte_record<D: Deserialize>(
+    record: &ByteRecord,
+    headers: Option<&ByteRecord>,
+) -> Result<D, Error> {
+    let mut deser = DeRecordWrap(DeByteRecord {
+        it: record.iter().peekable(),
+        headers: headers.map(|r| r.iter()),
+        field: 0,
+    });
+    D::deserialize(&mut deser).map_err(|err| {
+        Error::Deserialize {
+            pos: record.position().map(Clone::clone),
+            err: err,
+        }
+    })
+}
+
+/// An over-engineered internal trait that permits writing a single Serde
+/// deserializer that works on both ByteRecord and StringRecord.
+///
+/// We *could* implement a single deserializer on `ByteRecord` and simply
+/// convert `StringRecord`s to `ByteRecord`s, but then the implementation
+/// would be required to redo UTF-8 validation checks in certain places.
+///
+///
+/// The lifetime `'r` refers to the lifetime of the underlying record.
+trait DeRecord<'r> {
+    /// Returns true if and only if this deserialize has access to headers.
+    fn has_headers(&self) -> bool;
+
+    /// Extracts the next string header value from the underlying record.
+    fn next_header(&mut self) -> Result<Option<&'r str>, DeserializeError>;
+
+    /// Extracts the next raw byte header value from the underlying record.
+    fn next_header_bytes(
+        &mut self,
+    ) -> Result<Option<&'r [u8]>, DeserializeError>;
+
+    /// Extracts the next string field from the underlying record.
+    fn next_field(&mut self) -> Result<&'r str, DeserializeError>;
+
+    /// Extracts the next raw byte field from the underlying record.
+    fn next_field_bytes(&mut self) -> Result<&'r [u8], DeserializeError>;
+
+    /// Peeks at the next field from the underlying record.
+    fn peek_field(&mut self) -> Option<&'r [u8]>;
+
+    /// Returns an error corresponding to the most recently extracted field.
+    fn error(&self, kind: DeserializeErrorKind) -> DeserializeError;
+
+    /// Infer the type of the next field and deserialize it.
+    fn infer_deserialize<V: Visitor>(
+        &mut self,
+        visitor: V,
+    ) -> Result<V::Value, DeserializeError>;
+}
+
+struct DeRecordWrap<T>(T);
+
+impl<'r, T: DeRecord<'r>> DeRecord<'r> for DeRecordWrap<T> {
+    fn has_headers(&self) -> bool {
+        self.0.has_headers()
+    }
+
+    fn next_header(&mut self) -> Result<Option<&'r str>, DeserializeError> {
+        self.0.next_header()
+    }
+
+    fn next_header_bytes(
+        &mut self,
+    ) -> Result<Option<&'r [u8]>, DeserializeError> {
+        self.0.next_header_bytes()
+    }
+
+    fn next_field(&mut self) -> Result<&'r str, DeserializeError> {
+        self.0.next_field()
+    }
+
+    fn next_field_bytes(&mut self) -> Result<&'r [u8], DeserializeError> {
+        self.0.next_field_bytes()
+    }
+
+    fn peek_field(&mut self) -> Option<&'r [u8]> {
+        self.0.peek_field()
+    }
+
+    fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
+        self.0.error(kind)
+    }
+
+    fn infer_deserialize<V: Visitor>(
+        &mut self,
+        visitor: V,
+    ) -> Result<V::Value, DeserializeError> {
+        self.0.infer_deserialize(visitor)
+    }
+}
+
+struct DeStringRecord<'r> {
     it: iter::Peekable<StringRecordIter<'r>>,
     headers: Option<StringRecordIter<'r>>,
     field: u64,
 }
 
-impl<'r> DeStringRecord<'r> {
-    pub fn new(
-        rec: &'r StringRecord,
-        headers: Option<&'r StringRecord>,
-    ) -> DeStringRecord<'r> {
-        DeStringRecord {
-            it: rec.iter().peekable(),
-            headers: headers.map(|r| r.iter()),
-            field: 0,
-        }
+impl<'r> DeRecord<'r> for DeStringRecord<'r> {
+    fn has_headers(&self) -> bool {
+        self.headers.is_some()
     }
 
-    /// Returns an error corresponding to the most recently extracted field.
-    fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
-        DeserializeError {
-            field: Some(self.field.saturating_sub(1)),
-            kind: kind,
-        }
+    fn next_header(&mut self) -> Result<Option<&'r str>, DeserializeError> {
+        Ok(self.headers.as_mut().and_then(|it| it.next()))
     }
 
-    /// Returns an arbitrary catch-all error for the most recently extracted
-    /// field.
-    fn message(&self, msg: String) -> DeserializeError {
-        self.error(DEK::Message(msg))
+    fn next_header_bytes(
+        &mut self,
+    ) -> Result<Option<&'r [u8]>, DeserializeError> {
+        Ok(self.next_header()?.map(|s| s.as_bytes()))
     }
 
-    /// Extracts the next field from the underlying record.
     #[inline(always)]
     fn next_field(&mut self) -> Result<&'r str, DeserializeError> {
         match self.it.next() {
@@ -63,20 +167,124 @@ impl<'r> DeStringRecord<'r> {
         }
     }
 
-    /// Extracts the next header value from the underlying record.
-    fn next_header(&mut self) -> Result<&'r str, DeserializeError> {
-        match self.headers.as_mut().and_then(|it| it.next()) {
-            Some(field) => Ok(field),
-            None => Err(DeserializeError {
-                field: None,
-                kind: DEK::UnexpectedEndOfRow,
-            }),
+    #[inline(always)]
+    fn next_field_bytes(&mut self) -> Result<&'r [u8], DeserializeError> {
+        self.next_field().map(|s| s.as_bytes())
+    }
+
+    fn peek_field(&mut self) -> Option<&'r [u8]> {
+        self.it.peek().map(|s| s.as_bytes())
+    }
+
+    fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
+        DeserializeError {
+            field: Some(self.field.saturating_sub(1)),
+            kind: kind,
         }
     }
 
-    /// Peeks at the next field from the underlying record.
-    fn peek_field(&mut self) -> Option<&'r str> {
+    fn infer_deserialize<V: Visitor>(
+        &mut self,
+        visitor: V,
+    ) -> Result<V::Value, DeserializeError> {
+        let x = self.next_field()?;
+        if x == "true" {
+            visitor.visit_bool(true)
+        } else if x == "false" {
+            visitor.visit_bool(false)
+        } else if let Some(n) = try_positive_integer(x) {
+            visitor.visit_u64(n)
+        } else if let Some(n) = try_negative_integer(x) {
+            visitor.visit_i64(n)
+        } else if let Some(n) = try_float(x) {
+            visitor.visit_f64(n)
+        } else {
+            visitor.visit_str(x)
+        }
+    }
+}
+
+struct DeByteRecord<'r> {
+    it: iter::Peekable<ByteRecordIter<'r>>,
+    headers: Option<ByteRecordIter<'r>>,
+    field: u64,
+}
+
+impl<'r> DeRecord<'r> for DeByteRecord<'r> {
+    fn has_headers(&self) -> bool {
+        self.headers.is_some()
+    }
+
+    fn next_header(&mut self) -> Result<Option<&'r str>, DeserializeError> {
+        match self.next_header_bytes() {
+            Ok(Some(field)) => Ok(Some(str::from_utf8(field).map_err(|err| {
+                self.error(DEK::InvalidUtf8(err))
+            })?)),
+            Ok(None) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn next_header_bytes(
+        &mut self,
+    ) -> Result<Option<&'r [u8]>, DeserializeError> {
+        Ok(self.headers.as_mut().and_then(|it| it.next()))
+    }
+
+    #[inline(always)]
+    fn next_field(&mut self) -> Result<&'r str, DeserializeError> {
+        self.next_field_bytes().and_then(|field| {
+            str::from_utf8(field).map_err(|err| {
+                self.error(DEK::InvalidUtf8(err))
+            })
+        })
+    }
+
+    #[inline(always)]
+    fn next_field_bytes(&mut self) -> Result<&'r [u8], DeserializeError> {
+        match self.it.next() {
+            Some(field) => {
+                self.field += 1;
+                Ok(field)
+            }
+            None => Err(DeserializeError {
+                field: None,
+                kind: DEK::UnexpectedEndOfRow,
+            })
+        }
+    }
+
+    fn peek_field(&mut self) -> Option<&'r [u8]> {
         self.it.peek().map(|s| *s)
+    }
+
+    fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
+        DeserializeError {
+            field: Some(self.field.saturating_sub(1)),
+            kind: kind,
+        }
+    }
+
+    fn infer_deserialize<V: Visitor>(
+        &mut self,
+        visitor: V,
+    ) -> Result<V::Value, DeserializeError> {
+        let x = self.next_field_bytes()?;
+        if x == b"true" {
+            visitor.visit_bool(true)
+        } else if x == b"false" {
+            visitor.visit_bool(false)
+        } else if let Some(n) = try_positive_integer_bytes(x) {
+            visitor.visit_u64(n)
+        } else if let Some(n) = try_negative_integer_bytes(x) {
+            visitor.visit_i64(n)
+        } else if let Some(n) = try_float_bytes(x) {
+            visitor.visit_f64(n)
+        } else if let Ok(s) = str::from_utf8(x) {
+            visitor.visit_str(s)
+        } else {
+            visitor.visit_bytes(x)
+        }
     }
 }
 
@@ -93,29 +301,14 @@ macro_rules! deserialize_int {
     }
 }
 
-impl<'a, 'r: 'a> Deserializer for &'a mut DeStringRecord<'r> {
+impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
     type Error = DeserializeError;
 
     fn deserialize<V: Visitor>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        let x = self.next_field()?;
-        if x == "true" {
-            visitor.visit_bool(true)
-        } else if x == "false" {
-            visitor.visit_bool(false)
-        } else if is_positive_integer(x.as_bytes()) {
-            let n: u64 = x.parse().map_err(|e| self.error(DEK::ParseInt(e)))?;
-            visitor.visit_u64(n)
-        } else if is_negative_integer(x.as_bytes()) {
-            let n: i64 = x.parse().map_err(|e| self.error(DEK::ParseInt(e)))?;
-            visitor.visit_i64(n)
-        } else if let Some(n) = try_float(x) {
-            visitor.visit_f64(n)
-        } else {
-            visitor.visit_str(x)
-        }
+        self.infer_deserialize(visitor)
     }
 
     fn deserialize_bool<V: Visitor>(
@@ -161,9 +354,9 @@ impl<'a, 'r: 'a> Deserializer for &'a mut DeStringRecord<'r> {
         let field = self.next_field()?;
         let len = field.chars().count();
         if len != 1 {
-            return Err(self.message(format!(
+            return Err(self.error(DEK::Message(format!(
                 "expected single character but got {} characters in '{}'",
-                len, field)));
+                len, field))));
         }
         visitor.visit_char(field.chars().next().unwrap())
     }
@@ -270,7 +463,7 @@ impl<'a, 'r: 'a> Deserializer for &'a mut DeStringRecord<'r> {
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        if self.headers.is_none() {
+        if !self.has_headers() {
             visitor.visit_seq(self)
         } else {
             visitor.visit_map(self)
@@ -283,7 +476,7 @@ impl<'a, 'r: 'a> Deserializer for &'a mut DeStringRecord<'r> {
         fields: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        if self.headers.is_none() {
+        if !self.has_headers() {
             visitor.visit_seq(self)
         } else {
             visitor.visit_map(self)
@@ -318,7 +511,7 @@ impl<'a, 'r: 'a> Deserializer for &'a mut DeStringRecord<'r> {
     }
 }
 
-impl<'a, 'r: 'a> EnumVisitor for &'a mut DeStringRecord<'r> {
+impl<'a, 'r: 'a, T: DeRecord<'r>> EnumVisitor for &'a mut DeRecordWrap<T> {
     type Error = DeserializeError;
     type Variant = Self;
 
@@ -331,17 +524,17 @@ impl<'a, 'r: 'a> EnumVisitor for &'a mut DeStringRecord<'r> {
     }
 }
 
-impl<'a, 'r: 'a> VariantVisitor for &'a mut DeStringRecord<'r> {
+impl<'a, 'r: 'a, T: DeRecord<'r>> VariantVisitor for &'a mut DeRecordWrap<T> {
     type Error = DeserializeError;
 
     fn visit_unit(self) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn visit_newtype_seed<T: DeserializeSeed>(
+    fn visit_newtype_seed<U: DeserializeSeed>(
         self,
-        seed: T,
-    ) -> Result<T::Value, Self::Error> {
+        seed: U,
+    ) -> Result<U::Value, Self::Error> {
         let unexp = Unexpected::UnitVariant;
         Err(DeserializeError::invalid_type(unexp, &"newtype variant"))
     }
@@ -365,13 +558,13 @@ impl<'a, 'r: 'a> VariantVisitor for &'a mut DeStringRecord<'r> {
     }
 }
 
-impl<'a, 'r: 'a> SeqVisitor for &'a mut DeStringRecord<'r> {
+impl<'a, 'r: 'a, T: DeRecord<'r>> SeqVisitor for &'a mut DeRecordWrap<T> {
     type Error = DeserializeError;
 
-    fn visit_seed<T: DeserializeSeed>(
+    fn visit_seed<U: DeserializeSeed>(
         &mut self,
-        seed: T,
-    ) -> Result<Option<T::Value>, Self::Error> {
+        seed: U,
+    ) -> Result<Option<U::Value>, Self::Error> {
         if self.peek_field().is_none() {
             Ok(None)
         } else {
@@ -380,15 +573,15 @@ impl<'a, 'r: 'a> SeqVisitor for &'a mut DeStringRecord<'r> {
     }
 }
 
-impl<'a, 'r: 'a> MapVisitor for &'a mut DeStringRecord<'r> {
+impl<'a, 'r: 'a, T: DeRecord<'r>> MapVisitor for &'a mut DeRecordWrap<T> {
     type Error = DeserializeError;
 
     fn visit_key_seed<K: DeserializeSeed>(
         &mut self,
         seed: K,
     ) -> Result<Option<K::Value>, Self::Error> {
-        let mut it = self.headers.as_mut().expect("headers");
-        let field = match it.next() {
+        assert!(self.has_headers());
+        let field = match self.next_header()? {
             None => return Ok(None),
             Some(field) => field,
         };
@@ -414,6 +607,7 @@ pub enum DeserializeErrorKind {
     Message(String),
     Unsupported(String),
     UnexpectedEndOfRow,
+    InvalidUtf8(str::Utf8Error),
     ParseBool(str::ParseBoolError),
     ParseInt(num::ParseIntError),
     ParseFloat(num::ParseFloatError),
@@ -454,9 +648,10 @@ impl fmt::Display for DeserializeErrorKind {
                 write!(f, "unsupported deserializer method: {}", which)
             }
             UnexpectedEndOfRow => write!(f, "{}", self.description()),
-            ParseBool(ref err) => write!(f, "{}", err),
-            ParseInt(ref err) => write!(f, "{}", err),
-            ParseFloat(ref err) => write!(f, "{}", err),
+            InvalidUtf8(ref err) => err.fmt(f),
+            ParseBool(ref err) => err.fmt(f),
+            ParseInt(ref err) => err.fmt(f),
+            ParseFloat(ref err) => err.fmt(f),
         }
     }
 }
@@ -481,6 +676,7 @@ impl DeserializeErrorKind {
             Message(_) => "deserialization error",
             Unsupported(_) => "unsupported deserializer method",
             UnexpectedEndOfRow => "expected field, but got end of row",
+            InvalidUtf8(ref err) => err.description(),
             ParseBool(ref err) => err.description(),
             ParseInt(ref err) => err.description(),
             ParseFloat(ref err) => err.description(),
@@ -488,16 +684,28 @@ impl DeserializeErrorKind {
     }
 }
 
-fn is_positive_integer(bs: &[u8]) -> bool {
-    bs.iter().all(|&b| b'0' <= b && b <= b'9')
+fn try_positive_integer(s: &str) -> Option<u64> {
+    s.parse().ok()
 }
 
-fn is_negative_integer(bs: &[u8]) -> bool {
-    !bs.is_empty() && bs[0] == b'-' && is_positive_integer(&bs[1..])
+fn try_negative_integer(s: &str) -> Option<i64> {
+    s.parse().ok()
 }
 
 fn try_float(s: &str) -> Option<f64> {
     s.parse().ok()
+}
+
+fn try_positive_integer_bytes(s: &[u8]) -> Option<u64> {
+    str::from_utf8(s).ok().and_then(|s| s.parse().ok())
+}
+
+fn try_negative_integer_bytes(s: &[u8]) -> Option<i64> {
+    str::from_utf8(s).ok().and_then(|s| s.parse().ok())
+}
+
+fn try_float_bytes(s: &[u8]) -> Option<f64> {
+    str::from_utf8(s).ok().and_then(|s| s.parse().ok())
 }
 
 #[cfg(test)]
@@ -508,7 +716,7 @@ mod tests {
     use serde::bytes::ByteBuf;
 
     use string_record::StringRecord;
-    use super::{DeStringRecord, DeserializeError};
+    use super::{DeRecordWrap, DeStringRecord, DeserializeError};
 
     fn sr(fields: &[&str]) -> StringRecord {
         StringRecord::from(fields)
@@ -516,8 +724,12 @@ mod tests {
 
     fn de<D: Deserialize>(fields: &[&str]) -> Result<D, DeserializeError> {
         let fields = StringRecord::from(fields);
-        let mut deser = DeStringRecord::new(&fields, None);
-        D::deserialize(&mut deser)
+        let deser = DeStringRecord {
+            it: fields.iter().peekable(),
+            headers: None,
+            field: 0,
+        };
+        D::deserialize(&mut DeRecordWrap(deser))
     }
 
     fn de_headers<D: Deserialize>(
@@ -526,8 +738,12 @@ mod tests {
     ) -> Result<D, DeserializeError> {
         let headers = StringRecord::from(headers);
         let fields = StringRecord::from(fields);
-        let mut deser = DeStringRecord::new(&fields, Some(&headers));
-        D::deserialize(&mut deser)
+        let deser = DeStringRecord {
+            it: fields.iter().peekable(),
+            headers: Some(headers.iter()),
+            field: 0,
+        };
+        D::deserialize(&mut DeRecordWrap(deser))
     }
 
     #[test]
