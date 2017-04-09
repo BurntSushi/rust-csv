@@ -159,7 +159,7 @@ impl WriterBuilder {
 #[derive(Debug)]
 pub struct Writer<W: io::Write> {
     core: CoreWriter,
-    wtr: W,
+    wtr: Option<W>,
     buf: Buffer,
     state: WriterState,
 }
@@ -189,7 +189,7 @@ struct Buffer {
 
 impl<W: io::Write> Drop for Writer<W> {
     fn drop(&mut self) {
-        if !self.state.panicked {
+        if self.wtr.is_some() && !self.state.panicked {
             let _ = self.flush();
         }
     }
@@ -199,7 +199,7 @@ impl<W: io::Write> Writer<W> {
     fn new(builder: &WriterBuilder, wtr: W) -> Writer<W> {
         Writer {
             core: builder.builder.build(),
-            wtr: wtr,
+            wtr: Some(wtr),
             buf: Buffer {
                 buf: vec![0; builder.capacity],
                 len: 0,
@@ -258,12 +258,21 @@ impl<W: io::Write> Writer<W> {
     /// Note that this also flushes the underlying writer.
     pub fn flush(&mut self) -> Result<()> {
         self.state.panicked = true;
-        let result = self.wtr.write_all(self.buf.readable());
+        let result = self.wtr.as_mut().unwrap().write_all(self.buf.readable());
         self.state.panicked = false;
         result?;
         self.buf.clear();
-        self.wtr.flush()?;
+        self.wtr.as_mut().unwrap().flush()?;
         Ok(())
+    }
+
+    /// Flush the contents of the internal buffer and return the underlying
+    /// writer.
+    pub fn into_inner(mut self) -> Result<W> {
+        // TODO(burntsushi): This should return an IntoInnerError so that
+        // callers can re-capture ownership of the writer.
+        self.flush()?;
+        Ok(self.wtr.take().unwrap())
     }
 
     /// Write a CSV delimiter.
@@ -314,5 +323,20 @@ impl Buffer {
     /// Clear the buffer.
     fn clear(&mut self) {
         self.len = 0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WriterBuilder;
+
+    fn b(s: &str) -> &[u8] { s.as_bytes() }
+
+    #[test]
+    fn one_field() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.write_record(vec!["a", "b", "c"]).unwrap();
+
+        assert_eq!(wtr.into_inner().unwrap(), b("a,b,c\n"));
     }
 }
