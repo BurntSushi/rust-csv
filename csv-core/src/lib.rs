@@ -96,8 +96,7 @@ foo,\"bar,baz\"
 */
 
 #![deny(missing_docs)]
-// #![no_std]
-extern crate core;
+#![no_std]
 
 #[cfg(test)]
 extern crate arrayvec;
