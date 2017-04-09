@@ -4,7 +4,7 @@ use std::path::Path;
 
 use csv_core::{
     Writer as CoreWriter, WriterBuilder as CoreWriterBuilder,
-    QuoteStyle, Terminator,
+    QuoteStyle, Terminator, WriteResult,
 };
 
 use byte_record::Position;
@@ -159,7 +159,8 @@ impl WriterBuilder {
 #[derive(Debug)]
 pub struct Writer<W: io::Write> {
     core: CoreWriter,
-    wtr: io::BufWriter<W>,
+    wtr: W,
+    buf: Buffer,
     state: WriterState,
 }
 
@@ -170,11 +171,27 @@ struct WriterState {
     fields_written: u64,
 }
 
+/// A simple internal buffer for buffering writes.
+///
+/// We need this because the `csv_core` APIs want to write into a `&mut [u8]`,
+/// which is not available with the `std::io::BufWriter` API.
+#[derive(Debug)]
+struct Buffer {
+    /// The contents of the buffer.
+    buf: Vec<u8>,
+    /// The number of bytes written to the buffer.
+    len: usize,
+}
+
 impl<W: io::Write> Writer<W> {
     fn new(builder: &WriterBuilder, wtr: W) -> Writer<W> {
         Writer {
             core: builder.builder.build(),
-            wtr: io::BufWriter::with_capacity(builder.capacity, wtr),
+            wtr: wtr,
+            buf: Buffer {
+                buf: vec![0; builder.capacity],
+                len: 0,
+            },
             state: WriterState {
                 flexible: builder.flexible,
                 has_headers: builder.has_headers,
@@ -191,9 +208,85 @@ impl<W: io::Write> Writer<W> {
     ///
     /// Note that if this API is used, `write_record` should be called with an
     /// empty iterator to write a record terminator.
-    pub fn write_field<T: AsRef<[u8]>>(field: T) -> Result<()> {
-        // if self.state.fields_written > 0 {
-        // }
-        unimplemented!()
+    pub fn write_field<T: AsRef<[u8]>>(&mut self, field: T) -> Result<()> {
+        if self.state.fields_written > 0 {
+            self.write_delimiter()?;
+        }
+        let mut field = field.as_ref();
+        loop {
+            let (res, nin, nout) = self.core.field(field, self.buf.writable());
+            field = &field[nin..];
+            self.buf.written(nout);
+            match res {
+                WriteResult::InputEmpty => {
+                    self.state.fields_written += 1;
+                    return Ok(());
+                }
+                WriteResult::OutputFull => self.flush()?,
+            }
+        }
+    }
+
+    /// Flush the contents of the internal buffer to the underlying writer.
+    ///
+    /// If there was a problem writing to the underlying writer, then an error
+    /// is returned.
+    ///
+    /// Note that this also flushes the underlying writer.
+    pub fn flush(&mut self) -> Result<()> {
+        self.wtr.write_all(self.buf.readable())?;
+        self.buf.clear();
+        self.wtr.flush()?;
+        Ok(())
+    }
+
+    /// Write a CSV delimiter.
+    fn write_delimiter(&mut self) -> Result<()> {
+        loop {
+            let (res, nout) = self.core.delimiter(self.buf.writable());
+            self.buf.written(nout);
+            match res {
+                WriteResult::InputEmpty => return Ok(()),
+                WriteResult::OutputFull => self.flush()?,
+            }
+        }
+    }
+
+    /// Write a CSV terminator.
+    fn write_terminator(&mut self) -> Result<()> {
+        loop {
+            let (res, nout) = self.core.terminator(self.buf.writable());
+            self.buf.written(nout);
+            match res {
+                WriteResult::InputEmpty => return Ok(()),
+                WriteResult::OutputFull => self.flush()?,
+            }
+        }
+    }
+}
+
+impl Buffer {
+    /// Returns a slice of the buffer's current contents.
+    ///
+    /// The slice returned may be empty.
+    fn readable(&self) -> &[u8] {
+        &self.buf[..self.len]
+    }
+
+    /// Returns a mutable slice of the remaining space in this buffer.
+    ///
+    /// The slice returned may be empty.
+    fn writable(&mut self) -> &mut [u8] {
+        &mut self.buf[self.len..]
+    }
+
+    /// Indicates that `n` bytes have been written to this buffer.
+    fn written(&mut self, n: usize) {
+        self.len += n;
+    }
+
+    /// Clear the buffer.
+    fn clear(&mut self) {
+        self.len = 0;
     }
 }
