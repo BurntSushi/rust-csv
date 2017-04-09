@@ -169,6 +169,10 @@ struct WriterState {
     flexible: bool,
     has_headers: bool,
     fields_written: u64,
+    /// This is set immediately before flushing the buffer and then unset
+    /// immediately after flushing the buffer. This avoids flushing the buffer
+    /// twice if the inner writer panics.
+    panicked: bool,
 }
 
 /// A simple internal buffer for buffering writes.
@@ -181,6 +185,14 @@ struct Buffer {
     buf: Vec<u8>,
     /// The number of bytes written to the buffer.
     len: usize,
+}
+
+impl<W: io::Write> Drop for Writer<W> {
+    fn drop(&mut self) {
+        if !self.state.panicked {
+            let _ = self.flush();
+        }
+    }
 }
 
 impl<W: io::Write> Writer<W> {
@@ -196,8 +208,19 @@ impl<W: io::Write> Writer<W> {
                 flexible: builder.flexible,
                 has_headers: builder.has_headers,
                 fields_written: 0,
+                panicked: false,
             },
         }
+    }
+
+    /// Write a single record.
+    pub fn write_record<I, T>(&mut self, record: I) -> Result<()>
+        where I: IntoIterator<Item=T>, T: AsRef<[u8]>
+    {
+        for field in record.into_iter() {
+            self.write_field(field)?;
+        }
+        self.write_terminator()
     }
 
     /// Write a single field.
@@ -234,7 +257,10 @@ impl<W: io::Write> Writer<W> {
     ///
     /// Note that this also flushes the underlying writer.
     pub fn flush(&mut self) -> Result<()> {
-        self.wtr.write_all(self.buf.readable())?;
+        self.state.panicked = true;
+        let result = self.wtr.write_all(self.buf.readable());
+        self.state.panicked = false;
+        result?;
         self.buf.clear();
         self.wtr.flush()?;
         Ok(())
