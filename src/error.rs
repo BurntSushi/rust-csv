@@ -33,15 +33,15 @@ pub enum Error {
     },
     /// This error occurs when two records with an unequal number of fields
     /// are found. This error only occurs when the `flexible` option in a
-    /// CSV reader is disabled.
+    /// CSV reader/writer is disabled.
     UnequalLengths {
+        /// The position of the first record with an unequal number of fields
+        /// to the previous record, if available.
+        pos: Option<Position>,
         /// The expected number of fields in a record. This is the number of
         /// fields in the record read prior to the record indicated by
         /// `pos`.
         expected_len: u64,
-        /// The position of the first record with an unequal number of fields
-        /// to the previous record.
-        pos: Position,
         /// The number of fields in the bad record.
         len: u64,
     },
@@ -101,9 +101,18 @@ impl fmt::Display for Error {
                      (byte {}, line {}, field: {}): {}",
                     pos.record(), pos.byte(), pos.line(), err.field(), err)
             }
-            Error::UnequalLengths { expected_len, ref pos, len } => {
+            Error::UnequalLengths { pos: None, expected_len, len } => {
                 write!(
-                    f, "CSV parse error: record {} (byte {}, line {}): \
+                    f, "CSV error: \
+                        found record with {} fields, but the previous record \
+                        has {} fields",
+                    len, expected_len)
+            }
+            Error::UnequalLengths {
+                pos: Some(ref pos), expected_len, len
+            } => {
+                write!(
+                    f, "CSV error: record {} (byte {}, line {}): \
                         found record with {} fields, but the previous record \
                         has {} fields",
                     pos.record(), pos.byte(), pos.line(), len, expected_len)

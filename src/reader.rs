@@ -4,12 +4,14 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::result;
 
-use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
+use csv_core::{
+    Reader as CoreReader, ReaderBuilder as CoreReaderBuilder, Terminator,
+};
 use serde::Deserialize;
 
 use byte_record::{self, ByteRecord, Position};
+use error::{Error, Result, Utf8Error};
 use string_record::{self, StringRecord};
-use {Error, Result, Terminator, Utf8Error};
 
 /// Builds a CSV reader with various configuration knobs.
 ///
@@ -47,13 +49,13 @@ impl ReaderBuilder {
     /// Build a CSV parser from this configuration that reads data from the
     /// given file path.
     ///
-    /// If there was a problem open the file at the given path, then this
+    /// If there was a problem opening the file at the given path, then this
     /// returns the corresponding error.
     pub fn from_path<P: AsRef<Path>>(&self, path: P) -> Result<Reader<File>> {
         Ok(Reader::new(self, File::open(path)?))
     }
 
-    /// Build a CSV parser from this configuration that reads data from `rdr.
+    /// Build a CSV parser from this configuration that reads data from `rdr`.
     ///
     /// Note that the CSV reader is buffered automatically, so you should not
     /// wrap `rdr` in a buffered reader like `io::BufReader`.
@@ -147,9 +149,6 @@ impl ReaderBuilder {
     }
 
     /// Set the capacity (in bytes) of the buffer used in the CSV reader.
-    ///
-    /// Note that if a custom buffer is given with the `buffer` method, then
-    /// this setting has no effect.
     pub fn buffer_capacity(&mut self, capacity: usize) -> &mut ReaderBuilder {
         self.capacity = capacity;
         self
@@ -548,8 +547,8 @@ impl ReaderState {
                 Some(expected) => {
                     if record.len() as u64 != expected {
                         return Err(Error::UnequalLengths {
+                            pos: record.position().map(Clone::clone),
                             expected_len: expected,
-                            pos: record.position().unwrap().clone(),
                             len: record.len() as u64,
                         });
                     }
@@ -849,7 +848,7 @@ mod tests {
                 pos,
                 len: 2,
             }) => {
-                assert_eq!(pos, newpos(4, 2, 1));
+                assert_eq!(pos, Some(newpos(4, 2, 1)));
             }
             wrong => panic!("match failed, got {:?}", wrong),
         }
@@ -896,7 +895,7 @@ mod tests {
                 pos,
                 len: 2,
             }) => {
-                assert_eq!(pos, newpos(4, 2, 1));
+                assert_eq!(pos, Some(newpos(4, 2, 1)));
             }
             wrong => panic!("match failed, got {:?}", wrong),
         }
