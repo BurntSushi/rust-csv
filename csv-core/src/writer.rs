@@ -30,7 +30,7 @@ impl Default for QuoteStyle {
 ///
 /// This builder permits specifying the CSV delimiter, terminator, quoting
 /// style and more.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct WriterBuilder {
     wtr: Writer,
 }
@@ -39,6 +39,11 @@ impl WriterBuilder {
     /// Create a new builder for configuring a CSV writer.
     pub fn new() -> WriterBuilder {
         WriterBuilder { wtr: Writer::default() }
+    }
+
+    /// Builder a CSV writer from this configuration.
+    pub fn build(&self) -> Writer {
+        self.wtr.clone()
     }
 
     /// The field delimiter to use when writing CSV.
@@ -125,7 +130,7 @@ pub enum WriteResult {
 /// This writer conforms to RFC 4180 with one exception: it doesn't guarantee
 /// that all records written are of the same length. Instead, the onus is on
 /// the caller to ensure that all records written are of the same length.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Writer {
     state: WriterState,
     delimiter: u8,
@@ -136,7 +141,7 @@ pub struct Writer {
     double_quote: bool,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct WriterState {
     /// This is set whenever we've begun writing the contents of a field, even
     /// if the contents are empty. We use it to avoid re-computing whether

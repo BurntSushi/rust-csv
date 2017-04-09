@@ -19,3 +19,4 @@ mod deserializer;
 mod error;
 mod reader;
 mod string_record;
+mod writer;
