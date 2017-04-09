@@ -1,3 +1,5 @@
+use core::str;
+
 use memchr::memchr;
 
 use Terminator;
@@ -14,6 +16,10 @@ pub enum QuoteStyle {
     ///
     /// This is the default.
     Necessary,
+    /// This puts quotes around all fields that are non-numeric. Namely, when
+    /// writing a field that does not parse as a valid float or integer, then
+    /// quotes will be used even if they aren't strictly necessary.
+    NonNumeric,
     /// This *never* writes quotes.
     ///
     /// If a field requires quotes, then the writer will report an error.
@@ -327,8 +333,9 @@ impl Writer {
         (res, nout)
     }
 
-    /// Returns true if and only if the given input field requires quotes,
-    /// taking into account the current configuration of this writer.
+    /// Returns true if and only if the given input field *requires* quotes to
+    /// preserve the integrity of `input` while taking into account the current
+    /// configuration of this writer (except for the configured quoting style).
     pub fn needs_quotes(&self, input: &[u8]) -> bool {
         input.iter().any(|&b| self.byte_needs_quotes(b))
     }
@@ -349,6 +356,7 @@ impl Writer {
         match self.style {
             QuoteStyle::Always => true,
             QuoteStyle::Never => false,
+            QuoteStyle::NonNumeric => is_non_numeric(input),
             QuoteStyle::Necessary => self.needs_quotes(input),
         }
     }
@@ -385,6 +393,18 @@ impl Default for WriterState {
             record_bytes: 0,
         }
     }
+}
+
+/// Returns true if and only if the given input is non-numeric.
+pub fn is_non_numeric(input: &[u8]) -> bool {
+    let s = match str::from_utf8(input) {
+        Err(_) => return true,
+        Ok(s) => s,
+    };
+    // I suppose this could be faster if we wrote validators of numbers instead
+    // of using the actual parser, but that's probably a lot of work for a bit
+    // of a niche feature.
+    !s.parse::<f64>().is_ok() && !s.parse::<i64>().is_ok()
 }
 
 /// Escape quotes in `input` and write the result to `output`.
@@ -507,7 +527,7 @@ fn moving<T>(x: T) -> T { x }
 
 #[cfg(test)]
 mod tests {
-    use writer::{Writer, quote};
+    use writer::{Writer, WriterBuilder, QuoteStyle, quote};
     use writer::WriteResult::*;
 
     // OMG I HATE BYTE STRING LITERALS SO MUCH.
@@ -640,6 +660,30 @@ mod tests {
         assert_write!(wtr, finish, &mut out[n..], 0, InputEmpty, "");
 
         assert_eq!("abc,yz", s(&out[..n]));
+    }
+
+    #[test]
+    fn writer_two_fields_non_numeric() {
+        let mut wtr = WriterBuilder::new()
+            .quote_style(QuoteStyle::NonNumeric)
+            .build();
+        let mut out = &mut [0; 1024];
+        let mut n = 0;
+
+        assert_field!(wtr, b("abc"), &mut out[n..], 3, 4, InputEmpty, "\"abc");
+        n += 4;
+        assert_write!(wtr, delimiter, &mut out[n..], 2, InputEmpty, "\",");
+        n += 2;
+        assert_field!(wtr, b("5.2"), &mut out[n..], 3, 3, InputEmpty, "5.2");
+        n += 3;
+        assert_write!(wtr, delimiter, &mut out[n..], 1, InputEmpty, ",");
+        n += 1;
+        assert_field!(wtr, b("98"), &mut out[n..], 2, 2, InputEmpty, "98");
+        n += 2;
+
+        assert_write!(wtr, finish, &mut out[n..], 0, InputEmpty, "");
+
+        assert_eq!("\"abc\",5.2,98", s(&out[..n]));
     }
 
     #[test]
