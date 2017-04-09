@@ -328,14 +328,33 @@ impl Buffer {
 
 #[cfg(test)]
 mod tests {
+    use byte_record::ByteRecord;
+    use string_record::StringRecord;
+
     use super::WriterBuilder;
 
     fn b(s: &str) -> &[u8] { s.as_bytes() }
 
     #[test]
-    fn one_field() {
+    fn one_record() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.write_record(vec!["a", "b", "c"]).unwrap();
+
+        assert_eq!(wtr.into_inner().unwrap(), b("a,b,c\n"));
+    }
+
+    #[test]
+    fn one_string_record() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.write_record(&StringRecord::from(vec!["a", "b", "c"])).unwrap();
+
+        assert_eq!(wtr.into_inner().unwrap(), b("a,b,c\n"));
+    }
+
+    #[test]
+    fn one_byte_record() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.write_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();
 
         assert_eq!(wtr.into_inner().unwrap(), b("a,b,c\n"));
     }
