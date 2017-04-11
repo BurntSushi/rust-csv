@@ -617,7 +617,7 @@ impl SerdeError for DeserializeError {
     fn custom<T: fmt::Display>(msg: T) -> DeserializeError {
         DeserializeError {
             field: None,
-            kind: DeserializeErrorKind::Message(msg.to_string()),
+            kind: DEK::Message(msg.to_string()),
         }
     }
 }
