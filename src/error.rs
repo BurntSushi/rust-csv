@@ -210,3 +210,62 @@ impl fmt::Display for Utf8Error {
             self.valid_up_to)
     }
 }
+
+/// `IntoInnerError` occurs when consuming a `Writer` fails.
+///
+/// Consuming the `Writer` causes a flush to happen. If the flush fails, then
+/// this error is returned, which contains both the original `Writer` and
+/// the error that occurred.
+///
+/// The type parameter `W` is the unconsumed writer.
+pub struct IntoInnerError<W> {
+    wtr: W,
+    err: io::Error,
+}
+
+/// Creates a new `IntoInnerError`.
+///
+/// (This is a visibility hack. It's public in this module, but not in the
+/// crate.)
+pub fn new_into_inner_error<W>(wtr: W, err: io::Error) -> IntoInnerError<W> {
+    IntoInnerError { wtr: wtr, err: err }
+}
+
+impl<W> IntoInnerError<W> {
+    /// Returns the error which caused the call to `into_inner` to fail.
+    ///
+    /// This error was returned when attempting to flush the internal buffer.
+    pub fn error(&self) -> &io::Error {
+        &self.err
+    }
+
+    /// Returns the underlying writer which generated the error.
+    ///
+    /// The returned value can be used for error recovery, such as
+    /// re-inspecting the buffer.
+    pub fn into_inner(self) -> W {
+        self.wtr
+    }
+}
+
+impl<W: ::std::any::Any> StdError for IntoInnerError<W> {
+    fn description(&self) -> &str {
+        self.err.description()
+    }
+
+    fn cause(&self) -> Option<&StdError> {
+        self.err.cause()
+    }
+}
+
+impl<W> fmt::Display for IntoInnerError<W> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.err.fmt(f)
+    }
+}
+
+impl<W> fmt::Debug for IntoInnerError<W> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.err.fmt(f)
+    }
+}

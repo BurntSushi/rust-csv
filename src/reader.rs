@@ -332,8 +332,8 @@ impl<R: io::Read> Reader<R> {
 
     /// Set the headers of this CSV parser manually.
     ///
-    /// This overrides any other setting. Any automatic detection of headers
-    /// is disabled.
+    /// This overrides any other setting (including `set_byte_headers`). Any
+    /// automatic detection of headers is disabled.
     pub fn set_headers(&mut self, headers: StringRecord) {
         self.set_headers_impl(Ok(headers));
     }
@@ -361,8 +361,8 @@ impl<R: io::Read> Reader<R> {
 
     /// Set the headers of this CSV parser manually as raw bytes.
     ///
-    /// This overrides any other setting. Any automatic detection of headers
-    /// is disabled.
+    /// This overrides any other setting (including `set_headers`). Any
+    /// automatic detection of headers is disabled.
     pub fn set_byte_headers(&mut self, headers: ByteRecord) {
         self.set_headers_impl(Err(headers));
     }

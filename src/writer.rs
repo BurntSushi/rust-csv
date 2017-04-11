@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io;
 use std::path::Path;
+use std::result;
 
 use csv_core::{
     Writer as CoreWriter, WriterBuilder as CoreWriterBuilder,
@@ -8,7 +9,7 @@ use csv_core::{
 };
 
 use byte_record::Position;
-use error::Result;
+use error::{Result, IntoInnerError, new_into_inner_error};
 
 /// Builds a CSV writer with various configuration knobs.
 ///
@@ -43,7 +44,7 @@ impl WriterBuilder {
         WriterBuilder::default()
     }
 
-    /// Build a CSV writer from this configuration that writer data to the
+    /// Build a CSV writer from this configuration that writes data to the
     /// given file path.
     ///
     /// If there was a problem opening the file at the given path, then this
@@ -213,6 +214,24 @@ impl<W: io::Write> Writer<W> {
         }
     }
 
+    /// Build a CSV writer with a default configuration that writes data to the
+    /// given file path.
+    ///
+    /// If there was a problem opening the file at the given path, then this
+    /// returns the corresponding error.
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Writer<File>> {
+        WriterBuilder::new().from_path(path)
+    }
+
+    /// Build a CSV writer with a default configuration that writes data to
+    /// `wtr`.
+    ///
+    /// Note that the CSV writer is buffered automatically, so you should not
+    /// wrap `wtr` in a buffered writer like `io::BufWriter`.
+    pub fn from_writer(wtr: W) -> Writer<W> {
+        WriterBuilder::new().from_writer(wtr)
+    }
+
     /// Write a single record.
     pub fn write_record<I, T>(&mut self, record: I) -> Result<()>
         where I: IntoIterator<Item=T>, T: AsRef<[u8]>
@@ -256,7 +275,7 @@ impl<W: io::Write> Writer<W> {
     /// is returned.
     ///
     /// Note that this also flushes the underlying writer.
-    pub fn flush(&mut self) -> Result<()> {
+    pub fn flush(&mut self) -> io::Result<()> {
         self.state.panicked = true;
         let result = self.wtr.as_mut().unwrap().write_all(self.buf.readable());
         self.state.panicked = false;
@@ -268,11 +287,13 @@ impl<W: io::Write> Writer<W> {
 
     /// Flush the contents of the internal buffer and return the underlying
     /// writer.
-    pub fn into_inner(mut self) -> Result<W> {
-        // TODO(burntsushi): This should return an IntoInnerError so that
-        // callers can re-capture ownership of the writer.
-        self.flush()?;
-        Ok(self.wtr.take().unwrap())
+    pub fn into_inner(
+        mut self,
+    ) -> result::Result<W, IntoInnerError<Writer<W>>> {
+        match self.flush() {
+            Ok(()) => Ok(self.wtr.take().unwrap()),
+            Err(err) => Err(new_into_inner_error(self, err)),
+        }
     }
 
     /// Write a CSV delimiter.
