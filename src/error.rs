@@ -49,6 +49,8 @@ pub enum Error {
     /// are called on a CSV reader that was asked to `seek` before it parsed
     /// the first record.
     Seek,
+    /// An error of this kind occurs only when using the Serde serializer.
+    Serialize(String),
     /// An error of this kind occurs only when performing automatic
     /// deserialization with serde.
     Deserialize {
@@ -72,6 +74,7 @@ impl StdError for Error {
             Error::Utf8 { ref err, .. } => err.description(),
             Error::UnequalLengths{..} => "record of different length found",
             Error::Seek => "headers unavailable on seeked CSV reader",
+            Error::Serialize(ref err) => err,
             Error::Deserialize { ref err, .. } => err.description(),
         }
     }
@@ -82,6 +85,7 @@ impl StdError for Error {
             Error::Utf8 { ref err, .. } => Some(err),
             Error::UnequalLengths{..} => None,
             Error::Seek => None,
+            Error::Serialize(_) => None,
             Error::Deserialize { ref err, .. } => Some(err),
         }
     }
@@ -121,6 +125,9 @@ impl fmt::Display for Error {
                 write!(f, "CSV error: cannot access headers of CSV data \
                            when the parser was seeked before the first record \
                            could be read")
+            }
+            Error::Serialize(ref err) => {
+                write!(f, "CSV write error: {}", err)
             }
             Error::Deserialize { pos: None, ref err } => {
                 write!(f, "CSV deserialize error: {}", err)

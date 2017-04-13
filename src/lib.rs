@@ -12,7 +12,6 @@ pub use byte_record::{ByteRecord, Position};
 pub use deserializer::{DeserializeError, DeserializeErrorKind};
 pub use error::{Error, FromUtf8Error, IntoInnerError, Result, Utf8Error};
 pub use reader::{Reader, ReaderBuilder};
-pub use serializer::{SerializeError, SerializeErrorKind};
 pub use string_record::StringRecord;
 pub use writer::{Writer, WriterBuilder};
 
