@@ -10,18 +10,16 @@ use serde::ser::{
     SerializeStructVariant,
 };
 
+use error::Error;
 use writer::Writer;
-
-use self::SerializeErrorKind as SEK;
 
 struct SeRecord<'w, W: 'w + io::Write> {
     wtr: &'w mut Writer<W>,
-    field: u64,
 }
 
 impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     type Ok = ();
-    type Error = SerializeError;
+    type Error = Error;
     type SerializeSeq = Self;
     type SerializeTuple = Self;
     type SerializeTupleStruct = Self;
@@ -32,85 +30,84 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         if v {
-            self.wtr.write_field("true").unwrap();
+            self.wtr.write_field("true")
         } else {
-            self.wtr.write_field("false").unwrap();
+            self.wtr.write_field("false")
         }
-        Ok(())
     }
 
     fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(v.to_string().as_bytes())
     }
 
     fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(v.to_string().as_bytes())
     }
 
     fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(v.to_string().as_bytes())
     }
 
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(v.to_string().as_bytes())
     }
 
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(v.to_string().as_bytes())
     }
 
     fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(v.to_string().as_bytes())
     }
 
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(v.to_string().as_bytes())
     }
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(v.to_string().as_bytes())
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(v.to_string().as_bytes())
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(v.to_string().as_bytes())
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(v.to_string().as_bytes())
     }
 
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(value)
     }
 
     fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(value)
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(&[])
     }
 
     fn serialize_some<T: ?Sized + Serialize>(
         self,
         value: &T,
     ) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        value.serialize(self)
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        None::<()>.serialize(self)
     }
 
     fn serialize_unit_struct(
         self,
         name: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(name)
     }
 
     fn serialize_unit_variant(
@@ -119,7 +116,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         variant_index: usize,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        self.wtr.write_field(variant)
     }
 
     fn serialize_newtype_struct<T: ?Sized + Serialize>(
@@ -127,7 +124,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        value.serialize(self)
     }
 
     fn serialize_newtype_variant<T: ?Sized + Serialize>(
@@ -137,28 +134,28 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         variant: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        value.serialize(self)
     }
 
     fn serialize_seq(
         self,
         len: Option<usize>,
     ) -> Result<Self::SerializeSeq, Self::Error> {
-        unimplemented!()
+        Ok(self)
     }
 
     fn serialize_seq_fixed_size(
         self,
         size: usize,
     ) -> Result<Self::SerializeSeq, Self::Error> {
-        unimplemented!()
+        Ok(self)
     }
 
     fn serialize_tuple(
         self,
         len: usize,
     ) -> Result<Self::SerializeTuple, Self::Error> {
-        unimplemented!()
+        Ok(self)
     }
 
     fn serialize_tuple_struct(
@@ -166,7 +163,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        unimplemented!()
+        Ok(self)
     }
 
     fn serialize_tuple_variant(
@@ -176,8 +173,27 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        unimplemented!()
+        Err(Error::custom("serializing enum tuple variants is not supported"))
     }
+
+    // BREADCRUMBS:
+    //
+    // This part is a little tricky, because we really want to support
+    // writing the header row, and then writing subsequent rows based on the
+    // header name rather than the order in which the serializer emits them.
+    // This implies we need to do record buffering, which should be fine, since
+    // we should be able to reuse the buffer.
+    //
+    // However, we also need to handle the case where we don't have headers.
+    // In that case, fields in a struct should be emitted in the order that
+    // the serializer provides them, since we can rely on that to be stable.
+    //
+    // But maps are a different story. Their iteration order might change from
+    // record to record. So even if we don't care about headers, we need to
+    // maintain a stable order based on whatever the first serialization did.
+    // It's not quite clear what we should do. We should probably take the
+    // conservative route and ban map serialization unless we're serializing
+    // headers.
 
     fn serialize_map(
         self,
@@ -201,77 +217,77 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        unimplemented!()
+        Err(Error::custom("serializing enum struct variants is not supported"))
     }
 }
 
 impl<'a, 'w, W: io::Write> SerializeSeq for &'a mut SeRecord<'w, W> {
     type Ok = ();
-    type Error = SerializeError;
+    type Error = Error;
 
     fn serialize_element<T: ?Sized + Serialize>(
         &mut self,
         value: &T,
     ) -> Result<(), Self::Error> {
-        unimplemented!()
+        value.serialize(&mut **self)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        Ok(())
     }
 }
 
 impl<'a, 'w, W: io::Write> SerializeTuple for &'a mut SeRecord<'w, W> {
     type Ok = ();
-    type Error = SerializeError;
+    type Error = Error;
 
     fn serialize_element<T: ?Sized + Serialize>(
         &mut self,
         value: &T,
     ) -> Result<(), Self::Error> {
-        unimplemented!()
+        value.serialize(&mut **self)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        Ok(())
     }
 }
 
 impl<'a, 'w, W: io::Write> SerializeTupleStruct for &'a mut SeRecord<'w, W> {
     type Ok = ();
-    type Error = SerializeError;
+    type Error = Error;
 
     fn serialize_field<T: ?Sized + Serialize>(
         &mut self,
         value: &T,
     ) -> Result<(), Self::Error> {
-        unimplemented!()
+        value.serialize(&mut **self)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        Ok(())
     }
 }
 
 impl<'a, 'w, W: io::Write> SerializeTupleVariant for &'a mut SeRecord<'w, W> {
     type Ok = ();
-    type Error = SerializeError;
+    type Error = Error;
 
     fn serialize_field<T: ?Sized + Serialize>(
         &mut self,
         value: &T,
     ) -> Result<(), Self::Error> {
-        unimplemented!()
+        unreachable!()
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        unreachable!()
     }
 }
 
 impl<'a, 'w, W: io::Write> SerializeMap for &'a mut SeRecord<'w, W> {
     type Ok = ();
-    type Error = SerializeError;
+    type Error = Error;
 
     fn serialize_key<T: ?Sized + Serialize>(
         &mut self,
@@ -294,7 +310,7 @@ impl<'a, 'w, W: io::Write> SerializeMap for &'a mut SeRecord<'w, W> {
 
 impl<'a, 'w, W: io::Write> SerializeStruct for &'a mut SeRecord<'w, W> {
     type Ok = ();
-    type Error = SerializeError;
+    type Error = Error;
 
     fn serialize_field<T: ?Sized + Serialize>(
         &mut self,
@@ -311,109 +327,201 @@ impl<'a, 'w, W: io::Write> SerializeStruct for &'a mut SeRecord<'w, W> {
 
 impl<'a, 'w, W: io::Write> SerializeStructVariant for &'a mut SeRecord<'w, W> {
     type Ok = ();
-    type Error = SerializeError;
+    type Error = Error;
 
     fn serialize_field<T: ?Sized + Serialize>(
         &mut self,
         key: &'static str,
         value: &T,
     ) -> Result<(), Self::Error> {
-        unimplemented!()
+        unreachable!()
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        unreachable!()
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SerializeError {
-    field: Option<u64>,
-    kind: SerializeErrorKind,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SerializeErrorKind {
-    Message(String),
-}
-
-impl SerdeError for SerializeError {
-    fn custom<T: fmt::Display>(msg: T) -> SerializeError {
-        SerializeError {
-            field: None,
-            kind: SEK::Message(msg.to_string()),
-        }
-    }
-}
-
-impl StdError for SerializeError {
-    fn description(&self) -> &str {
-        self.kind.description()
-    }
-}
-
-impl fmt::Display for SerializeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(field) = self.field {
-            write!(f, "field {}: {}", field, self.kind)
-        } else {
-            write!(f, "{}", self.kind)
-        }
-    }
-}
-
-impl fmt::Display for SerializeErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use self::SerializeErrorKind::*;
-
-        match *self {
-            Message(ref msg) => write!(f, "{}", msg),
-        }
-    }
-}
-
-impl SerializeError {
-    /// Return the field index (starting at 0) of this error, if available.
-    pub fn field(&self) -> Option<u64> {
-        self.field
-    }
-
-    /// Return the underlying error kind.
-    pub fn kind(&self) -> &SerializeErrorKind {
-        &self.kind
-    }
-}
-
-impl SerializeErrorKind {
-    fn description(&self) -> &str {
-        use self::SerializeErrorKind::*;
-
-        match *self {
-            Message(_) => "serialization error",
-        }
+impl SerdeError for Error {
+    fn custom<T: fmt::Display>(msg: T) -> Error {
+        Error::Serialize(msg.to_string())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use serde::Serialize;
+    use serde::bytes::Bytes;
 
+    use error::Error;
     use writer::Writer;
 
     use super::SeRecord;
 
-    #[test]
-    fn scratch() {
+    fn serialize<S: Serialize>(s: S) -> String {
         let mut wtr = Writer::from_writer(vec![]);
         {
-            let mut ser = SeRecord {
-                wtr: &mut wtr,
-                field: 0,
-            };
-            true.serialize(&mut ser).unwrap();
+            let mut ser = SeRecord { wtr: &mut wtr };
+            s.serialize(&mut ser).unwrap();
         }
-        wtr.write_record(None::<&str>).unwrap();
-        let res = String::from_utf8(wtr.into_inner().unwrap()).unwrap();
-        assert_eq!(res, "true\n");
+        wtr.write_record(None::<&[u8]>).unwrap();
+        String::from_utf8(wtr.into_inner().unwrap()).unwrap()
+    }
+
+    fn serialize_err<S: Serialize>(s: S) -> Error {
+        let mut wtr = Writer::from_writer(vec![]);
+        let mut ser = SeRecord { wtr: &mut wtr };
+        s.serialize(&mut ser).unwrap_err()
+    }
+
+    #[test]
+    fn bool() {
+        let got = serialize(true);
+        assert_eq!(got, "true\n");
+    }
+
+    #[test]
+    fn integer() {
+        let got = serialize(12345);
+        assert_eq!(got, "12345\n");
+    }
+
+    #[test]
+    fn float() {
+        let got = serialize(1.23);
+        assert_eq!(got, "1.23\n");
+    }
+
+    #[test]
+    fn char() {
+        let got = serialize('☃');
+        assert_eq!(got, "☃\n");
+    }
+
+    #[test]
+    fn str() {
+        let got = serialize("how\nare\n\"you\"?");
+        assert_eq!(got, "\"how\nare\n\"\"you\"\"?\"\n");
+    }
+
+    #[test]
+    fn bytes() {
+        let got = serialize(Bytes::new(&b"how\nare\n\"you\"?"[..]));
+        assert_eq!(got, "\"how\nare\n\"\"you\"\"?\"\n");
+    }
+
+    #[test]
+    fn option() {
+        let got = serialize(None::<()>);
+        assert_eq!(got, "\"\"\n");
+
+        let got = serialize(Some(5));
+        assert_eq!(got, "5\n");
+    }
+
+    #[test]
+    fn unit() {
+        let got = serialize(());
+        assert_eq!(got, "\"\"\n");
+    }
+
+    #[test]
+    fn struct_unit() {
+        #[derive(Serialize)]
+        struct Foo;
+
+        let got = serialize(Foo);
+        assert_eq!(got, "Foo\n");
+    }
+
+    #[test]
+    fn struct_newtype() {
+        #[derive(Serialize)]
+        struct Foo(f64);
+
+        let got = serialize(Foo(1.5));
+        assert_eq!(got, "1.5\n");
+    }
+
+    #[test]
+    fn enum_units() {
+        #[derive(Serialize)]
+        enum Wat { Foo, Bar, Baz }
+
+        let got = serialize(Wat::Foo);
+        assert_eq!(got, "Foo\n");
+
+        let got = serialize(Wat::Bar);
+        assert_eq!(got, "Bar\n");
+
+        let got = serialize(Wat::Baz);
+        assert_eq!(got, "Baz\n");
+    }
+
+    #[test]
+    fn enum_newtypes() {
+        #[derive(Serialize)]
+        enum Wat { Foo(i32), Bar(f32), Baz(bool) }
+
+        let got = serialize(Wat::Foo(5));
+        assert_eq!(got, "5\n");
+
+        let got = serialize(Wat::Bar(1.5));
+        assert_eq!(got, "1.5\n");
+
+        let got = serialize(Wat::Baz(true));
+        assert_eq!(got, "true\n");
+    }
+
+    #[test]
+    fn seq() {
+        let got = serialize(vec![1, 2, 3]);
+        assert_eq!(got, "1,2,3\n");
+    }
+
+    #[test]
+    fn tuple() {
+        let got = serialize((true, 1.5, "hi"));
+        assert_eq!(got, "true,1.5,hi\n");
+
+        let got = serialize((true, 1.5, vec![1, 2, 3]));
+        assert_eq!(got, "true,1.5,1,2,3\n");
+    }
+
+    #[test]
+    fn tuple_struct() {
+        #[derive(Serialize)]
+        struct Foo(bool, i32, String);
+
+        let got = serialize(Foo(false, 42, "hi".to_string()));
+        assert_eq!(got, "false,42,hi\n");
+    }
+
+    #[test]
+    fn tuple_variant() {
+        #[derive(Serialize)]
+        enum Foo {
+            X(bool, i32, String),
+        }
+
+        let err = serialize_err(Foo::X(false, 42, "hi".to_string()));
+        match err {
+            Error::Serialize(_) => {}
+            x => panic!("expected Error::Serialize but got '{:?}'", x),
+        }
+    }
+
+    #[test]
+    fn enum_struct_variant() {
+        #[derive(Serialize)]
+        enum Foo {
+            X { a: bool, b: i32, c: String },
+        }
+
+        let err = serialize_err(Foo::X { a: false, b: 1, c: "hi".into() });
+        match err {
+            Error::Serialize(_) => {}
+            x => panic!("expected Error::Serialize but got '{:?}'", x),
+        }
     }
 }

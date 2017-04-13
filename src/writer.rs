@@ -9,7 +9,7 @@ use csv_core::{
 };
 
 use byte_record::Position;
-use error::{Result, IntoInnerError, new_into_inner_error};
+use error::{Error, Result, IntoInnerError, new_into_inner_error};
 
 /// Builds a CSV writer with various configuration knobs.
 ///
@@ -167,8 +167,16 @@ pub struct Writer<W: io::Write> {
 
 #[derive(Debug)]
 struct WriterState {
-    flexible: bool,
+    /// Whether the Serde serializer should attempt to write a header row.
     has_headers: bool,
+    /// Whether inconsistent record lengths are allowed.
+    flexible: bool,
+    /// The number of fields writtein in the first record. This is compared
+    /// with `fields_written` on all subsequent records to check for
+    /// inconsistent record lengths.
+    first_field_count: Option<u64>,
+    /// The number of fields written in this record. This is used to report
+    /// errors for inconsistent record lengths if `flexible` is disabled.
     fields_written: u64,
     /// This is set immediately before flushing the buffer and then unset
     /// immediately after flushing the buffer. This avoids flushing the buffer
@@ -206,8 +214,9 @@ impl<W: io::Write> Writer<W> {
                 len: 0,
             },
             state: WriterState {
-                flexible: builder.flexible,
                 has_headers: builder.has_headers,
+                flexible: builder.flexible,
+                first_field_count: None,
                 fields_written: 0,
                 panicked: false,
             },
@@ -310,11 +319,30 @@ impl<W: io::Write> Writer<W> {
 
     /// Write a CSV terminator.
     fn write_terminator(&mut self) -> Result<()> {
+        if !self.state.flexible {
+            match self.state.first_field_count {
+                None => {
+                    self.state.first_field_count =
+                        Some(self.state.fields_written);
+                }
+                Some(expected) if expected != self.state.fields_written => {
+                    return Err(Error::UnequalLengths {
+                        pos: None,
+                        expected_len: expected,
+                        len: self.state.fields_written,
+                    })
+                }
+                Some(_) => {}
+            }
+        }
         loop {
             let (res, nout) = self.core.terminator(self.buf.writable());
             self.buf.written(nout);
             match res {
-                WriteResult::InputEmpty => return Ok(()),
+                WriteResult::InputEmpty => {
+                    self.state.fields_written = 0;
+                    return Ok(());
+                }
                 WriteResult::OutputFull => self.flush()?,
             }
         }
@@ -350,6 +378,7 @@ impl Buffer {
 #[cfg(test)]
 mod tests {
     use byte_record::ByteRecord;
+    use error::Error;
     use string_record::StringRecord;
 
     use super::WriterBuilder;
@@ -378,5 +407,28 @@ mod tests {
         wtr.write_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();
 
         assert_eq!(wtr.into_inner().unwrap(), b("a,b,c\n"));
+    }
+
+    #[test]
+    fn unequal_records_bad() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.write_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();
+        let err = wtr.write_record(&ByteRecord::from(vec!["a"])).unwrap_err();
+        match err {
+            Error::UnequalLengths { pos, expected_len, len } => {
+                assert!(pos.is_none());
+                assert_eq!(expected_len, 3);
+                assert_eq!(len, 1);
+            }
+            x => panic!("expected UnequalLengths error, but got '{:?}'", x),
+        }
+    }
+
+    #[test]
+    fn unequal_records_ok() {
+        let mut wtr = WriterBuilder::new().flexible(true).from_writer(vec![]);
+        wtr.write_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();
+        wtr.write_record(&ByteRecord::from(vec!["a"])).unwrap();
+        assert_eq!(wtr.into_inner().unwrap(), b("a,b,c\na\n"));
     }
 }
