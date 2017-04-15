@@ -13,8 +13,29 @@ use serde::ser::{
 use error::Error;
 use writer::Writer;
 
+/// Serialize the given value to the given writer, and return an error if
+/// anything went wrong.
+///
+/// If `headers` is true, then the serializer will attempt to writer a header
+/// row. If it did write a header row, then `true` is returned. In all other
+/// cases, `false` is returned.
+pub fn serialize<S: Serialize, W: io::Write>(
+    wtr: &mut Writer<W>,
+    value: S,
+    headers: bool,
+) -> Result<bool, Error> {
+    let mut ser = SeRecord {
+        wtr: wtr,
+        header_only: headers,
+        did_headers: false,
+    };
+    value.serialize(&mut ser).map(|_| ser.did_headers)
+}
+
 struct SeRecord<'w, W: 'w + io::Write> {
     wtr: &'w mut Writer<W>,
+    header_only: bool,
+    did_headers: bool,
 }
 
 impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
@@ -176,30 +197,15 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         Err(Error::custom("serializing enum tuple variants is not supported"))
     }
 
-    // BREADCRUMBS:
-    //
-    // This part is a little tricky, because we really want to support
-    // writing the header row, and then writing subsequent rows based on the
-    // header name rather than the order in which the serializer emits them.
-    // This implies we need to do record buffering, which should be fine, since
-    // we should be able to reuse the buffer.
-    //
-    // However, we also need to handle the case where we don't have headers.
-    // In that case, fields in a struct should be emitted in the order that
-    // the serializer provides them, since we can rely on that to be stable.
-    //
-    // But maps are a different story. Their iteration order might change from
-    // record to record. So even if we don't care about headers, we need to
-    // maintain a stable order based on whatever the first serialization did.
-    // It's not quite clear what we should do. We should probably take the
-    // conservative route and ban map serialization unless we're serializing
-    // headers.
-
     fn serialize_map(
         self,
         len: Option<usize>,
     ) -> Result<Self::SerializeMap, Self::Error> {
-        unimplemented!()
+        // The right behavior for serializing maps isn't clear.
+        Err(Error::custom(
+            "serializing maps is not supported, \
+             if you have a use case, please file an issue at \
+             https://github.com/BurntSushi/rust-csv"))
     }
 
     fn serialize_struct(
@@ -207,7 +213,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        unimplemented!()
+        Ok(self)
     }
 
     fn serialize_struct_variant(
@@ -317,11 +323,16 @@ impl<'a, 'w, W: io::Write> SerializeStruct for &'a mut SeRecord<'w, W> {
         key: &'static str,
         value: &T,
     ) -> Result<(), Self::Error> {
-        unimplemented!()
+        if self.header_only {
+            self.did_headers = true;
+            key.serialize(&mut **self)
+        } else {
+            value.serialize(&mut **self)
+        }
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        Ok(())
     }
 }
 
@@ -361,8 +372,28 @@ mod tests {
     fn serialize<S: Serialize>(s: S) -> String {
         let mut wtr = Writer::from_writer(vec![]);
         {
-            let mut ser = SeRecord { wtr: &mut wtr };
+            let mut ser = SeRecord {
+                wtr: &mut wtr,
+                header_only: false,
+                did_headers: false,
+            };
             s.serialize(&mut ser).unwrap();
+            assert!(!ser.did_headers);
+        }
+        wtr.write_record(None::<&[u8]>).unwrap();
+        String::from_utf8(wtr.into_inner().unwrap()).unwrap()
+    }
+
+    fn serialize_header<S: Serialize>(s: S) -> String {
+        let mut wtr = Writer::from_writer(vec![]);
+        {
+            let mut ser = SeRecord {
+                wtr: &mut wtr,
+                header_only: true,
+                did_headers: false,
+            };
+            s.serialize(&mut ser).unwrap();
+            assert!(ser.did_headers);
         }
         wtr.write_record(None::<&[u8]>).unwrap();
         String::from_utf8(wtr.into_inner().unwrap()).unwrap()
@@ -370,7 +401,11 @@ mod tests {
 
     fn serialize_err<S: Serialize>(s: S) -> Error {
         let mut wtr = Writer::from_writer(vec![]);
-        let mut ser = SeRecord { wtr: &mut wtr };
+        let mut ser = SeRecord {
+            wtr: &mut wtr,
+            header_only: false,
+            did_headers: false,
+        };
         s.serialize(&mut ser).unwrap_err()
     }
 
@@ -523,5 +558,33 @@ mod tests {
             Error::Serialize(_) => {}
             x => panic!("expected Error::Serialize but got '{:?}'", x),
         }
+    }
+
+    #[test]
+    fn struct_no_headers() {
+        #[derive(Serialize)]
+        struct Foo {
+            x: bool,
+            y: i32,
+            z: String,
+        }
+
+        let got = serialize(Foo { x: true, y: 5, z: "hi".into() });
+        assert_eq!(got, "true,5,hi\n");
+    }
+
+    #[test]
+    fn struct_headers() {
+        #[derive(Serialize)]
+        struct Foo {
+            x: bool,
+            y: i32,
+            z: String,
+        }
+
+        let got = serialize_header(Foo { x: true, y: 5, z: "hi".into() });
+        assert_eq!(got, "x,y,z\n");
+        let got = serialize(Foo { x: true, y: 5, z: "hi".into() });
+        assert_eq!(got, "true,5,hi\n");
     }
 }
