@@ -20,7 +20,12 @@ use string_record::{self, StringRecord};
 /// cannot be changed.
 #[derive(Debug)]
 pub struct ReaderBuilder {
-    builder: CoreReaderBuilder,
+    /// The underlying CSV parser builder.
+    ///
+    /// We explicitly put this on the heap because CoreReaderBuilder embeds an
+    /// entire DFA transition table, which along with other things, tallies up
+    /// to almost 500 bytes on the stack.
+    builder: Box<CoreReaderBuilder>,
     capacity: usize,
     flexible: bool,
     has_headers: bool,
@@ -29,7 +34,7 @@ pub struct ReaderBuilder {
 impl Default for ReaderBuilder {
     fn default() -> ReaderBuilder {
         ReaderBuilder {
-            builder: CoreReaderBuilder::default(),
+            builder: Box::new(CoreReaderBuilder::default()),
             capacity: 8 * (1<<10),
             flexible: false,
             has_headers: true,
@@ -138,6 +143,17 @@ impl ReaderBuilder {
         self
     }
 
+    /// The comment character to use when parsing CSV.
+    ///
+    /// If the start of a record begins with the byte given here, then that
+    /// line is ignored by the CSV parser.
+    ///
+    /// This is disabled by default.
+    pub fn comment(&mut self, comment: Option<u8>) -> &mut ReaderBuilder {
+        self.builder.comment(comment);
+        self
+    }
+
     /// A convenience method for specifying a configuration to read ASCII
     /// delimited text.
     ///
@@ -167,8 +183,17 @@ impl ReaderBuilder {
 
 #[derive(Debug)]
 pub struct Reader<R> {
-    core: CoreReader,
+    /// The underlying CSV parser.
+    ///
+    /// We explicitly put this on the heap because CoreReader embeds an entire
+    /// DFA transition table, which along with other things, tallies up to
+    /// almost 500 bytes on the stack.
+    core: Box<CoreReader>,
+    /// The underlying reader.
     rdr: io::BufReader<R>,
+    /// Various state tracking.
+    ///
+    /// There is more state embedded in the `CoreReader`.
     state: ReaderState,
 }
 
@@ -216,7 +241,7 @@ impl<R: io::Read> Reader<R> {
     /// bytes.
     fn new(builder: &ReaderBuilder, rdr: R) -> Reader<R> {
         Reader {
-            core: builder.builder.build(),
+            core: Box::new(builder.builder.build()),
             rdr: io::BufReader::with_capacity(builder.capacity, rdr),
             state: ReaderState {
                 headers: None,
