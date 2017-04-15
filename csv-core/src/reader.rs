@@ -1,5 +1,7 @@
 use core::fmt;
 
+// BE ADVISED
+//
 // This may just be one of the more complicated CSV parsers you'll come across.
 // The implementation never allocates and consists of both a functional NFA
 // parser and a DFA parser. The DFA parser is the work horse and we could elide
@@ -19,6 +21,32 @@ use core::fmt;
 // is one of the key performance benefits of the DFA: it doesn't have any
 // overhead (other than a bigger transition table) associated with the number
 // of configuration options.
+//
+// ADVICE FOR HACKERS
+//
+// This code is too clever for its own good. As such, changes to some parts of
+// the code may have a non-obvious impact on other parts. This is mostly
+// motivated by trying to keep the DFA transition table as small as possible,
+// since it is stored on the stack. Here are some tips that may save you some
+// time:
+//
+// * If you add a new NFA state, then you also need to consider how it impacts
+//   the DFA. If all of the incoming transitions into an NFA state are
+//   epsilon transitions, then it probably isn't materialized in the DFA.
+//   If the NFA state indicates that a field or a record has been parsed, then
+//   it should be considered final. Let the comments in `NfaState` be your
+//   guide.
+// * If you add a new configuration knob to the parser, then you may need to
+//   modify the `TRANS_CLASSES` constant below. The `TRANS_CLASSES` constant
+//   indicates the total number of discriminating bytes in the DFA. And if you
+//   modify `TRANS_CLASSES`, you probably also need to modify `build_dfa` to
+//   add a new class. For example, in order to add parsing support for
+//   comments, I bumped `TRANS_CLASSES` from `6` to `7` and added the comment
+//   byte (if one exists) to the list of classes in `build_dfa`.
+// * The special DFA start state doubles as the final state once all input
+//   from the caller has been exhausted. We must be careful to guard this
+//   case analysis on whether the input is actually exhausted, since the start
+//   state is an otherwise valid state.
 
 /// A record terminator.
 ///
@@ -67,6 +95,25 @@ impl PartialEq<u8> for Terminator {
 /// the full gamut of Unicode delimiters/terminators/quotes/escapes. Instead,
 /// any byte can be used, although callers probably want to stick to the ASCII
 /// subset (`<= 0x7F`).
+///
+/// # Usage
+///
+/// A reader has four different ways to read CSV data, each with their own
+/// trade offs.
+///
+/// * `read_field` - Copies a single CSV field into an output buffer while
+///   unescaping quotes. This is simple to use and doesn't require storing an
+///   entire record contiguously in memory, but it is slower.
+/// * `read_field_nocopy` - Like `read_field`, but doesn't copy the CSV field
+///   anywhere. This has limited utility, e.g., for counting data or extracting
+///   the positions of fields.
+/// * `read_record` - Copies an entire CSV record into an output buffer while
+///   unescaping quotes. The ending positions of each field are copied into
+///   an additional buffer. This is harder to use and requires larger output
+///   buffers, but it is faster than `read_field` since it amortizes more
+///   costs.
+/// * `read_record_nocopy` - Like `read_record`, but doesn't copy the CSV
+///   record anywhere.
 ///
 /// # RFC 4180
 ///
@@ -415,6 +462,13 @@ pub enum ReadRecordNoCopyResult {
 /// optimized out when converting the machine to a DFA.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum NfaState {
+    // These states aren't used in the DFA, so we
+    // assign them meaningless numbers.
+    EndFieldTerm = 200,
+    InRecordTerm = 201,
+    End = 202,
+
+    // All states below are DFA states.
     StartRecord = 0,
     StartField = 1,
     InField = 2,
@@ -422,15 +476,13 @@ enum NfaState {
     InEscapedQuote = 4,
     InDoubleEscapedQuote = 5,
     InComment = 6,
+    // All states below are "final field" states.
+    // Namely, they indicate that a field has been parsed.
     EndFieldDelim = 7,
+    // All states below are "final record" states.
+    // Namely, they indicate that a record has been parsed.
     EndRecord = 8,
     CRLF = 9,
-
-    // These states aren't used in the DFA, so we
-    // assign them meaningless numbers.
-    EndFieldTerm = 200,
-    InRecordTerm = 201,
-    End = 202,
 }
 
 /// A list of NFA states that have an explicit representation in the DFA.
@@ -448,6 +500,7 @@ const NFA_STATES: &'static [NfaState] = &[
 ];
 
 impl NfaState {
+    /// Returns true if this state indicates that a field has been parsed.
     fn is_field_final(&self) -> bool {
         match *self {
             NfaState::End
@@ -458,6 +511,7 @@ impl NfaState {
         }
     }
 
+    /// Returns true if this state indicates that a record has been parsed.
     fn is_record_final(&self) -> bool {
         match *self {
             NfaState::End
@@ -724,6 +778,9 @@ impl Reader {
             if state >= self.dfa.final_record {
                 break;
             }
+            // Unroll the loop for some nice gains.
+            // Sadly, a similar optimization doesn't work well in the
+            // copy variant, which makes this cleverness suspicious.
             if nin + 4 < input.len() {
                 state = self.dfa.get(state, input[nin]);
                 self.line += (input[nin] == b'\n') as u64;
@@ -857,7 +914,13 @@ impl Reader {
         (res, nin)
     }
 
+    /// Perform the final state transition, i.e., when the caller indicates
+    /// that the input has been exhausted.
     fn transition_final_dfa(&self, state: DfaState) -> DfaState {
+        // If we''ve already emitted a record or think we're ready to start
+        // parsing a new record, then we should sink into the final state
+        // and never move from there. (pro-tip: the start state doubles as
+        // the final state!)
         if state >= self.dfa.final_record || state.is_start() {
             self.dfa.new_state_final_end()
         } else {
@@ -865,7 +928,46 @@ impl Reader {
         }
     }
 
+    /// Write the transition tables for the DFA based on this parser's
+    /// configuration.
     fn build_dfa(&mut self) {
+        // A naive DFA transition table has
+        // `cells = (# number of states) * (# size of alphabet)`. While we
+        // could get away with that, the table would have `10 * 256 = 2560`
+        // entries. Even worse, in order to avoid a multiplication instruction
+        // when computing the next transition, we store the starting index of
+        // each state's row, which would not be representible in a single byte.
+        // So we'd need a `u16`, which doubles our transition table size to
+        // ~5KB. This is a lot to put on the stack, even though it probably
+        // fits in the L1 cache of most modern CPUs.
+        //
+        // To avoid this, we note that while our "true" alpha has 256 distinct
+        // possibilities, the DFA itself is only discriminatory on a very small
+        // subset of that alphabet. For example, assuming neither `a` nor `b`
+        // are set as special quote/comment/escape/delimiter/terminator
+        // bytes, they are otherwise indistinguishable to the DFA, so it would
+        // be OK to treat them as if they were equivalent. That is, they are
+        // in the same equivalence class.
+        //
+        // As it turns out, using this logic, we can shrink our effective
+        // alphabet down to 7 equivalence classes:
+        //
+        //   1. The field delimiter.
+        //   2. The record terminator.
+        //   3. If the record terminator is CRLF, then CR and LF are
+        //      distinct equivalence classes.
+        //   4. The quote byte.
+        //   5. The escape byte.
+        //   6. The comment byte.
+        //   7. Everything else.
+        //
+        // We add those equivalence classes here. If more configuration knobs
+        // are added to the parser with more discriminating bytes, then this
+        // logic will need to be adjusted further.
+        //
+        // Even though this requires an extra bit of indirection when computing
+        // the next transition, microbenchmarks say that it doesn't make much
+        // of a difference. Perhaps because everything fits into the L1 cache.
         self.dfa.classes.add(self.delimiter);
         self.dfa.classes.add(self.quote);
         if let Some(escape) = self.escape {
@@ -881,14 +983,19 @@ impl Reader {
                 self.dfa.classes.add(b'\n');
             }
         }
+        // Build the DFA transition table by computing the DFA state for all
+        // possible combinations of state and input byte.
         for &state in NFA_STATES {
             for c in (0..256).map(|c| c as u8) {
-                let (mut nextstate, mut inp, mut out) =
-                    (state, false, false);
+                let (mut nextstate, mut inp, mut out) = (state, false, false);
+                // Consume NFA states until we hit a non-epsilon transition.
                 while !inp && nextstate != NfaState::End {
                     let (s, i, o) = self.transition_nfa(nextstate, c);
+                    assert!(i || !o);
                     nextstate = s;
                     inp = i;
+                    // If any state we visit emits an output byte, then mark
+                    // this state as emitting output.
                     out = out || o;
                 }
                 let from = self.dfa.new_state(state);
@@ -941,6 +1048,7 @@ impl Reader {
         let mut state = self.nfa_state;
         while nin < input.len() && nout < output.len() && nend < ends.len() {
             let (s, i, o) = self.transition_nfa(state, input[nin]);
+            debug_assert!(i || !o);
             if o {
                 output[nout] = input[nin];
                 nout += 1;
@@ -987,6 +1095,7 @@ impl Reader {
         let mut state = self.nfa_state;
         while nin < input.len() && nout < output.len() {
             let (s, i, o) = self.transition_nfa(state, input[nin]);
+            debug_assert!(i || !o);
             if o {
                 output[nout] = input[nin];
                 nout += 1;
@@ -1005,6 +1114,8 @@ impl Reader {
         (res, nin, nout)
     }
 
+    /// Compute the final NFA transition after all caller-provided input has
+    /// been exhausted.
     #[inline(always)]
     fn transition_final_nfa(&self, state: NfaState) -> NfaState {
         use self::NfaState::*;
@@ -1025,6 +1136,17 @@ impl Reader {
         }
     }
 
+    /// Compute the next NFA state given the current NFA state and the current
+    /// input byte.
+    ///
+    /// This returns the next NFA state along with two booleans that indicate
+    /// whether an input byte was consumed (i.e., a non-epsilon transition)
+    /// and whether the input byte should be copied to a caller provided output
+    /// buffer. For example, seeing a field delimiter will consume an input
+    /// byte but should not copy it to the output buffer.
+    ///
+    /// It is illegal for this to emit an output byte without consuming the
+    /// input byte.
     #[inline(always)]
     fn transition_nfa(
         &self,
@@ -1146,11 +1268,32 @@ const TRANS_SIZE: usize = TRANS_CLASSES * DFA_STATES;
 /// for more details.)
 const CLASS_SIZE: usize = 256;
 
+/// A representation of a DFA.
+///
+/// For the most part, this is a transition table, but various optimizations
+/// have been applied to reduce its memory footprint.
 struct Dfa {
+    /// The core transition table. Each row corresponds to the transitions for
+    /// each input equivalence class. (Input bytes are mapped to their
+    /// corresponding equivalence class with the `classes` map.)
+    ///
+    /// DFA states are represented as an index corresponding to the start of
+    /// its row in this table.
     trans: [DfaState; TRANS_SIZE],
+    /// A table with the same layout as `trans`, except its values indicate
+    /// whether a particular `(state, equivalence class)` pair should emit an
+    /// output byte.
     has_output: [bool; TRANS_SIZE],
+    /// A map from input byte to equivalence class.
+    ///
+    /// This is responsible for reducing the effective alphabet size from
+    /// 256 to `TRANS_CLASSES`.
     classes: DfaClasses,
+    /// The minimum DFA state that indicates a field has been parsed. All DFA
+    /// states greater than this are also final-field states.
     final_field: DfaState,
+    /// The minimum DFA state that indicates a record has been parsed. All DFA
+    /// states greater than this are also final-record states.
     final_record: DfaState,
 }
 
@@ -1193,8 +1336,9 @@ impl Dfa {
 
     fn set(&mut self, from: DfaState, c: u8, to: DfaState, output: bool) {
         let cls = self.classes.classes[c as usize];
-        self.trans[from.0 as usize + cls as usize] = to;
-        self.has_output[from.0 as usize + cls as usize] = output;
+        let idx = from.0 as usize + cls as usize;
+        self.trans[idx] = to;
+        self.has_output[idx] = output;
     }
 
     fn finish(&mut self) {
@@ -1282,6 +1426,7 @@ impl Dfa {
     }
 }
 
+/// A map from input byte to equivalence class.
 struct DfaClasses {
     classes: [u8; CLASS_SIZE],
     next_class: usize,
@@ -1305,6 +1450,12 @@ impl DfaClasses {
     }
 }
 
+/// A single DFA state.
+///
+/// A DFA state is represented by the starting index of its corresponding row
+/// in the DFA transition table. This representation allows us to elide a
+/// single multiplication instruction when computing the next transition for
+/// a particular input byte.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct DfaState(u8);
 
