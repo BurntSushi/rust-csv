@@ -205,7 +205,7 @@ impl Writer {
     ///
     /// This returns the result of writing field data, in addition to the
     /// number of bytes consumed from `input` and the number of bytes
-    /// consumed from `output`.
+    /// written to `output`.
     ///
     /// The result of writing field data is either `WriteResult::InputEmpty`
     /// or `WriteResult::OutputFull`. The former occurs when all bytes in
@@ -336,7 +336,7 @@ impl Writer {
     /// Returns true if and only if the given input field *requires* quotes to
     /// preserve the integrity of `input` while taking into account the current
     /// configuration of this writer (except for the configured quoting style).
-    pub fn needs_quotes(&self, input: &[u8]) -> bool {
+    fn needs_quotes(&self, input: &[u8]) -> bool {
         input.iter().any(|&b| self.byte_needs_quotes(b))
     }
 
@@ -423,7 +423,7 @@ pub fn is_non_numeric(input: &[u8]) -> bool {
 /// storage space required to store an escaped quote).
 ///
 /// In addition to the `WriteResult`, the number of consumed bytes from `input`
-/// and `output` are also returned.
+/// and the number of bytes written to `output` are also returned.
 ///
 /// `quote` is the quote byte and `escape` is the escape byte. If
 /// `double_quote` is true, then quotes are escaped by doubling them,
@@ -485,11 +485,11 @@ pub fn quote(
 ///
 /// In the first case (`output` is too small), `WriteResult::OutputFull` is
 /// returned, in addition to the number of bytes consumed from `input` and
-/// `output`.
+/// the number of bytes written to `output`.
 ///
 /// In the second case (`input` is no bigger than `output`),
 /// `WriteResult::InputEmpty` is returned, in addition to the number of bytes
-/// consumed from `input` and `output`.
+/// consumed from `input` and the number of bytes written to `output`.
 fn write_optimistic(
     input: &[u8],
     output: &mut [u8],
