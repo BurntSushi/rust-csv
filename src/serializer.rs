@@ -1,4 +1,3 @@
-use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
@@ -133,8 +132,8 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
 
     fn serialize_unit_variant(
         self,
-        name: &'static str,
-        variant_index: usize,
+        _name: &'static str,
+        _variant_index: usize,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
         self.wtr.write_field(variant)
@@ -142,7 +141,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
 
     fn serialize_newtype_struct<T: ?Sized + Serialize>(
         self,
-        name: &'static str,
+        _name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error> {
         value.serialize(self)
@@ -150,9 +149,9 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
 
     fn serialize_newtype_variant<T: ?Sized + Serialize>(
         self,
-        name: &'static str,
-        variant_index: usize,
-        variant: &'static str,
+        _name: &'static str,
+        _variant_index: usize,
+        _variant: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error> {
         value.serialize(self)
@@ -160,46 +159,46 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
 
     fn serialize_seq(
         self,
-        len: Option<usize>,
+        _len: Option<usize>,
     ) -> Result<Self::SerializeSeq, Self::Error> {
         Ok(self)
     }
 
     fn serialize_seq_fixed_size(
         self,
-        size: usize,
+        _size: usize,
     ) -> Result<Self::SerializeSeq, Self::Error> {
         Ok(self)
     }
 
     fn serialize_tuple(
         self,
-        len: usize,
+        _len: usize,
     ) -> Result<Self::SerializeTuple, Self::Error> {
         Ok(self)
     }
 
     fn serialize_tuple_struct(
         self,
-        name: &'static str,
-        len: usize,
+        _name: &'static str,
+        _len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
         Ok(self)
     }
 
     fn serialize_tuple_variant(
         self,
-        name: &'static str,
-        variant_index: usize,
-        variant: &'static str,
-        len: usize,
+        _name: &'static str,
+        _variant_index: usize,
+        _variant: &'static str,
+        _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         Err(Error::custom("serializing enum tuple variants is not supported"))
     }
 
     fn serialize_map(
         self,
-        len: Option<usize>,
+        _len: Option<usize>,
     ) -> Result<Self::SerializeMap, Self::Error> {
         // The right behavior for serializing maps isn't clear.
         Err(Error::custom(
@@ -210,18 +209,18 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
 
     fn serialize_struct(
         self,
-        name: &'static str,
-        len: usize,
+        _name: &'static str,
+        _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
         Ok(self)
     }
 
     fn serialize_struct_variant(
         self,
-        name: &'static str,
-        variant_index: usize,
-        variant: &'static str,
-        len: usize,
+        _name: &'static str,
+        _variant_index: usize,
+        _variant: &'static str,
+        _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         Err(Error::custom("serializing enum struct variants is not supported"))
     }
@@ -281,7 +280,7 @@ impl<'a, 'w, W: io::Write> SerializeTupleVariant for &'a mut SeRecord<'w, W> {
 
     fn serialize_field<T: ?Sized + Serialize>(
         &mut self,
-        value: &T,
+        _value: &T,
     ) -> Result<(), Self::Error> {
         unreachable!()
     }
@@ -297,14 +296,14 @@ impl<'a, 'w, W: io::Write> SerializeMap for &'a mut SeRecord<'w, W> {
 
     fn serialize_key<T: ?Sized + Serialize>(
         &mut self,
-        key: &T,
+        _key: &T,
     ) -> Result<(), Self::Error> {
         unimplemented!()
     }
 
     fn serialize_value<T: ?Sized + Serialize>(
         &mut self,
-        value: &T,
+        _value: &T,
     ) -> Result<(), Self::Error> {
         unimplemented!()
     }
@@ -342,8 +341,8 @@ impl<'a, 'w, W: io::Write> SerializeStructVariant for &'a mut SeRecord<'w, W> {
 
     fn serialize_field<T: ?Sized + Serialize>(
         &mut self,
-        key: &'static str,
-        value: &T,
+        _key: &'static str,
+        _value: &T,
     ) -> Result<(), Self::Error> {
         unreachable!()
     }

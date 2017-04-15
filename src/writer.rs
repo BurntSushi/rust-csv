@@ -9,7 +9,6 @@ use csv_core::{
 };
 use serde::Serialize;
 
-use byte_record::Position;
 use error::{Error, Result, IntoInnerError, new_into_inner_error};
 use serializer::serialize;
 

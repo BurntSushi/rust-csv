@@ -11,7 +11,7 @@ use serde::de::{
 };
 use serde::de::value::ValueDeserializer;
 
-use byte_record::{ByteRecord, ByteRecordIter, Position};
+use byte_record::{ByteRecord, ByteRecordIter};
 use error::Error;
 use string_record::{StringRecord, StringRecordIter};
 
@@ -413,7 +413,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
 
     fn deserialize_unit_struct<V: Visitor>(
         self,
-        name: &'static str,
+        _name: &'static str,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         visitor.visit_unit()
@@ -421,7 +421,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
 
     fn deserialize_newtype_struct<V: Visitor>(
         self,
-        name: &'static str,
+        _name: &'static str,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         visitor.visit_newtype_struct(self)
@@ -436,7 +436,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
 
     fn deserialize_seq_fixed_size<V: Visitor>(
         self,
-        len: usize,
+        _len: usize,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         visitor.visit_seq(self)
@@ -444,7 +444,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
 
     fn deserialize_tuple<V: Visitor>(
         self,
-        len: usize,
+        _len: usize,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         visitor.visit_seq(self)
@@ -452,8 +452,8 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
 
     fn deserialize_tuple_struct<V: Visitor>(
         self,
-        name: &'static str,
-        len: usize,
+        _name: &'static str,
+        _len: usize,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         visitor.visit_seq(self)
@@ -472,8 +472,8 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
 
     fn deserialize_struct<V: Visitor>(
         self,
-        name: &'static str,
-        fields: &'static [&'static str],
+        _name: &'static str,
+        _fields: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         if !self.has_headers() {
@@ -485,15 +485,15 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
 
     fn deserialize_struct_field<V: Visitor>(
         self,
-        visitor: V,
+        _visitor: V,
     ) -> Result<V::Value, Self::Error> {
         Err(self.error(DEK::Unsupported("deserialize_struct_field".into())))
     }
 
     fn deserialize_enum<V: Visitor>(
         self,
-        name: &'static str,
-        variants: &'static [&'static str],
+        _name: &'static str,
+        _variants: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         visitor.visit_enum(self)
@@ -533,7 +533,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> VariantVisitor for &'a mut DeRecordWrap<T> {
 
     fn visit_newtype_seed<U: DeserializeSeed>(
         self,
-        seed: U,
+        _seed: U,
     ) -> Result<U::Value, Self::Error> {
         let unexp = Unexpected::UnitVariant;
         Err(DeserializeError::invalid_type(unexp, &"newtype variant"))
@@ -541,8 +541,8 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> VariantVisitor for &'a mut DeRecordWrap<T> {
 
     fn visit_tuple<V: Visitor>(
         self,
-        len: usize,
-        visitor: V,
+        _len: usize,
+        _visitor: V,
     ) -> Result<V::Value, Self::Error> {
         let unexp = Unexpected::UnitVariant;
         Err(DeserializeError::invalid_type(unexp, &"tuple variant"))
@@ -550,8 +550,8 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> VariantVisitor for &'a mut DeRecordWrap<T> {
 
     fn visit_struct<V: Visitor>(
         self,
-        fields: &'static [&'static str],
-        visitor: V,
+        _fields: &'static [&'static str],
+        _visitor: V,
     ) -> Result<V::Value, Self::Error> {
         let unexp = Unexpected::UnitVariant;
         Err(DeserializeError::invalid_type(unexp, &"struct variant"))
@@ -712,15 +712,11 @@ fn try_float_bytes(s: &[u8]) -> Option<f64> {
 mod tests {
     use std::collections::HashMap;
 
-    use serde::{Deserialize, Deserializer};
+    use serde::Deserialize;
     use serde::bytes::ByteBuf;
 
     use string_record::StringRecord;
     use super::{DeRecordWrap, DeStringRecord, DeserializeError};
-
-    fn sr(fields: &[&str]) -> StringRecord {
-        StringRecord::from(fields)
-    }
 
     fn de<D: Deserialize>(fields: &[&str]) -> Result<D, DeserializeError> {
         let fields = StringRecord::from(fields);
