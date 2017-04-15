@@ -7,9 +7,11 @@ use csv_core::{
     Writer as CoreWriter, WriterBuilder as CoreWriterBuilder,
     QuoteStyle, Terminator, WriteResult,
 };
+use serde::Serialize;
 
 use byte_record::Position;
 use error::{Error, Result, IntoInnerError, new_into_inner_error};
+use serializer::serialize;
 
 /// Builds a CSV writer with various configuration knobs.
 ///
@@ -168,7 +170,7 @@ pub struct Writer<W: io::Write> {
 #[derive(Debug)]
 struct WriterState {
     /// Whether the Serde serializer should attempt to write a header row.
-    has_headers: bool,
+    header: HeaderState,
     /// Whether inconsistent record lengths are allowed.
     flexible: bool,
     /// The number of fields writtein in the first record. This is compared
@@ -182,6 +184,13 @@ struct WriterState {
     /// immediately after flushing the buffer. This avoids flushing the buffer
     /// twice if the inner writer panics.
     panicked: bool,
+}
+
+#[derive(Debug)]
+enum HeaderState {
+    None,
+    Write,
+    Done,
 }
 
 /// A simple internal buffer for buffering writes.
@@ -206,6 +215,12 @@ impl<W: io::Write> Drop for Writer<W> {
 
 impl<W: io::Write> Writer<W> {
     fn new(builder: &WriterBuilder, wtr: W) -> Writer<W> {
+        let header_state =
+            if builder.has_headers {
+                HeaderState::Write
+            } else {
+                HeaderState::None
+            };
         Writer {
             core: builder.builder.build(),
             wtr: Some(wtr),
@@ -214,7 +229,7 @@ impl<W: io::Write> Writer<W> {
                 len: 0,
             },
             state: WriterState {
-                has_headers: builder.has_headers,
+                header: header_state,
                 flexible: builder.flexible,
                 first_field_count: None,
                 fields_written: 0,
@@ -239,6 +254,26 @@ impl<W: io::Write> Writer<W> {
     /// wrap `wtr` in a buffered writer like `io::BufWriter`.
     pub fn from_writer(wtr: W) -> Writer<W> {
         WriterBuilder::new().from_writer(wtr)
+    }
+
+    /// Serialize a single record.
+    pub fn serialize<S: Serialize>(&mut self, mut record: S) -> Result<()> {
+        match self.state.header {
+            HeaderState::None | HeaderState::Done => {
+                serialize(self, record, false)?;
+                self.write_terminator()?;
+            }
+            HeaderState::Write => {
+                let did = serialize(self, &mut record, true)?;
+                self.state.header = HeaderState::Done;
+                self.write_terminator()?;
+                if did {
+                    serialize(self, record, false)?;
+                    self.write_terminator()?;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Write a single record.
@@ -381,16 +416,18 @@ mod tests {
     use error::Error;
     use string_record::StringRecord;
 
-    use super::WriterBuilder;
+    use super::{Writer, WriterBuilder};
 
-    fn b(s: &str) -> &[u8] { s.as_bytes() }
+    fn wtr_as_string(wtr: Writer<Vec<u8>>) -> String {
+        String::from_utf8(wtr.into_inner().unwrap()).unwrap()
+    }
 
     #[test]
     fn one_record() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.write_record(vec!["a", "b", "c"]).unwrap();
 
-        assert_eq!(wtr.into_inner().unwrap(), b("a,b,c\n"));
+        assert_eq!(wtr_as_string(wtr), "a,b,c\n");
     }
 
     #[test]
@@ -398,7 +435,7 @@ mod tests {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.write_record(&StringRecord::from(vec!["a", "b", "c"])).unwrap();
 
-        assert_eq!(wtr.into_inner().unwrap(), b("a,b,c\n"));
+        assert_eq!(wtr_as_string(wtr), "a,b,c\n");
     }
 
     #[test]
@@ -406,7 +443,7 @@ mod tests {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.write_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();
 
-        assert_eq!(wtr.into_inner().unwrap(), b("a,b,c\n"));
+        assert_eq!(wtr_as_string(wtr), "a,b,c\n");
     }
 
     #[test]
@@ -429,6 +466,43 @@ mod tests {
         let mut wtr = WriterBuilder::new().flexible(true).from_writer(vec![]);
         wtr.write_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();
         wtr.write_record(&ByteRecord::from(vec!["a"])).unwrap();
-        assert_eq!(wtr.into_inner().unwrap(), b("a,b,c\na\n"));
+        assert_eq!(wtr_as_string(wtr), "a,b,c\na\n");
+    }
+
+    #[test]
+    fn serialize_with_headers() {
+        #[derive(Serialize)]
+        struct Row {
+            foo: i32,
+            bar: f64,
+            baz: bool,
+        }
+
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.serialize(Row { foo: 42, bar: 42.5, baz: true }).unwrap();
+        assert_eq!(wtr_as_string(wtr), "foo,bar,baz\n42,42.5,true\n");
+    }
+
+    #[test]
+    fn serialize_no_headers() {
+        #[derive(Serialize)]
+        struct Row {
+            foo: i32,
+            bar: f64,
+            baz: bool,
+        }
+
+        let mut wtr = WriterBuilder::new()
+            .has_headers(false)
+            .from_writer(vec![]);
+        wtr.serialize(Row { foo: 42, bar: 42.5, baz: true }).unwrap();
+        assert_eq!(wtr_as_string(wtr), "42,42.5,true\n");
+    }
+
+    #[test]
+    fn serialize_tuple() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.serialize((true, 1.3, "hi")).unwrap();
+        assert_eq!(wtr_as_string(wtr), "true,1.3,hi\n");
     }
 }
