@@ -1,5 +1,3 @@
-#![allow(dead_code, unused_imports, unused_variables)]
-
 extern crate csv_core;
 extern crate serde;
 #[cfg(test)]
