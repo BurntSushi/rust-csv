@@ -277,8 +277,8 @@ impl<R: io::Read> Reader<R> {
     /// If `has_headers` is enabled, then this does not include the first
     /// record. Additionally, if `has_headers` is enabled, then deserialization
     /// uses the field names of structs.
-    pub fn deserializer<D>(&mut self) -> DeserializeRecordsIter<R, D>
-            where D: Deserialize
+    pub fn deserializer<'de, D>(&mut self) -> DeserializeRecordsIter<R, D>
+            where D: Deserialize<'de>
     {
         DeserializeRecordsIter::new(self)
     }
@@ -288,8 +288,8 @@ impl<R: io::Read> Reader<R> {
     /// If `has_headers` is enabled, then this does not include the first
     /// record. Additionally, if `has_headers` is enabled, then deserialization
     /// uses the field names of structs.
-    pub fn into_deserializer<D>(self) -> DeserializeRecordsIntoIter<R, D>
-            where D: Deserialize
+    pub fn into_deserializer<'de, D>(self) -> DeserializeRecordsIntoIter<R, D>
+            where D: Deserialize<'de>
     {
         DeserializeRecordsIntoIter::new(self)
     }
@@ -595,7 +595,7 @@ pub struct DeserializeRecordsIntoIter<R, D> {
     _priv: PhantomData<D>,
 }
 
-impl<R: io::Read, D: Deserialize> DeserializeRecordsIntoIter<R, D> {
+impl<'de, R: io::Read, D: Deserialize<'de>> DeserializeRecordsIntoIter<R, D> {
     fn new(mut rdr: Reader<R>) -> DeserializeRecordsIntoIter<R, D> {
         let headers =
             if !rdr.state.has_headers {
@@ -617,7 +617,7 @@ impl<R: io::Read, D: Deserialize> DeserializeRecordsIntoIter<R, D> {
     }
 }
 
-impl<R: io::Read, D: Deserialize>
+impl<'de, R: io::Read, D: Deserialize<'de>>
     Iterator for DeserializeRecordsIntoIter<R, D>
 {
     type Item = Result<D>;
@@ -644,7 +644,9 @@ pub struct DeserializeRecordsIter<'r, R: 'r, D> {
     _priv: PhantomData<D>,
 }
 
-impl<'r, R: io::Read, D: Deserialize> DeserializeRecordsIter<'r, R, D> {
+impl<'de, 'r, R: io::Read, D: Deserialize<'de>>
+    DeserializeRecordsIter<'r, R, D>
+{
     fn new(rdr: &'r mut Reader<R>) -> DeserializeRecordsIter<'r, R, D> {
         let headers =
             if !rdr.state.has_headers {
@@ -666,7 +668,7 @@ impl<'r, R: io::Read, D: Deserialize> DeserializeRecordsIter<'r, R, D> {
     }
 }
 
-impl<'r, R: io::Read, D: Deserialize>
+impl<'de, 'r, R: io::Read, D: Deserialize<'de>>
     Iterator for DeserializeRecordsIter<'r, R, D>
 {
     type Item = Result<D>;

@@ -122,7 +122,7 @@ impl ByteRecord {
     /// An optional `headers` parameter permits deserializing into a struct
     /// based on its field names (corresponding to header values) rather than
     /// the order in which the fields are defined.
-    pub fn deserialize<D: Deserialize>(
+    pub fn deserialize<'de, D: Deserialize<'de>>(
         &self,
         headers: Option<&ByteRecord>,
     ) -> Result<D> {
