@@ -7,9 +7,9 @@ use std::str;
 use serde::de::{
     Deserializer, DeserializeSeed, Deserialize,
     Error as SerdeError, Unexpected,
-    Visitor, EnumVisitor, VariantVisitor, MapVisitor, SeqVisitor,
+    Visitor, EnumAccess, VariantAccess, MapAccess, SeqAccess,
 };
-use serde::de::value::ValueDeserializer;
+use serde::de::IntoDeserializer;
 
 use byte_record::{ByteRecord, ByteRecordIter};
 use error::Error;
@@ -17,7 +17,7 @@ use string_record::{StringRecord, StringRecordIter};
 
 use self::DeserializeErrorKind as DEK;
 
-pub fn deserialize_string_record<D: Deserialize>(
+pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
     record: &StringRecord,
     headers: Option<&StringRecord>,
 ) -> Result<D, Error> {
@@ -34,7 +34,7 @@ pub fn deserialize_string_record<D: Deserialize>(
     })
 }
 
-pub fn deserialize_byte_record<D: Deserialize>(
+pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
     record: &ByteRecord,
     headers: Option<&ByteRecord>,
 ) -> Result<D, Error> {
@@ -85,7 +85,7 @@ trait DeRecord<'r> {
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError;
 
     /// Infer the type of the next field and deserialize it.
-    fn infer_deserialize<V: Visitor>(
+    fn infer_deserialize<'de, V: Visitor<'de>>(
         &mut self,
         visitor: V,
     ) -> Result<V::Value, DeserializeError>;
@@ -124,7 +124,7 @@ impl<'r, T: DeRecord<'r>> DeRecord<'r> for DeRecordWrap<T> {
         self.0.error(kind)
     }
 
-    fn infer_deserialize<V: Visitor>(
+    fn infer_deserialize<'de, V: Visitor<'de>>(
         &mut self,
         visitor: V,
     ) -> Result<V::Value, DeserializeError> {
@@ -183,7 +183,7 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
         }
     }
 
-    fn infer_deserialize<V: Visitor>(
+    fn infer_deserialize<'de, V: Visitor<'de>>(
         &mut self,
         visitor: V,
     ) -> Result<V::Value, DeserializeError> {
@@ -265,7 +265,7 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
         }
     }
 
-    fn infer_deserialize<V: Visitor>(
+    fn infer_deserialize<'de, V: Visitor<'de>>(
         &mut self,
         visitor: V,
     ) -> Result<V::Value, DeserializeError> {
@@ -290,7 +290,7 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
 
 macro_rules! deserialize_int {
     ($method:ident, $visit:ident) => {
-        fn $method<V: Visitor>(
+        fn $method<V: Visitor<'de>>(
             mut self,
             visitor: V,
         ) -> Result<V::Value, Self::Error> {
@@ -301,17 +301,17 @@ macro_rules! deserialize_int {
     }
 }
 
-impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
+impl<'de, 'a, 'r: 'a, T: DeRecord<'r>> Deserializer<'de> for &'a mut DeRecordWrap<T> {
     type Error = DeserializeError;
 
-    fn deserialize<V: Visitor>(
+    fn deserialize_any<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         self.infer_deserialize(visitor)
     }
 
-    fn deserialize_bool<V: Visitor>(
+    fn deserialize_bool<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
@@ -329,7 +329,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
     deserialize_int!(deserialize_i32, visit_i32);
     deserialize_int!(deserialize_i64, visit_i64);
 
-    fn deserialize_f32<V: Visitor>(
+    fn deserialize_f32<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
@@ -338,7 +338,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
                 .parse().map_err(|err| self.error(DEK::ParseFloat(err)))?)
     }
 
-    fn deserialize_f64<V: Visitor>(
+    fn deserialize_f64<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
@@ -347,7 +347,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
                 .parse().map_err(|err| self.error(DEK::ParseFloat(err)))?)
     }
 
-    fn deserialize_char<V: Visitor>(
+    fn deserialize_char<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
@@ -361,28 +361,28 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
         visitor.visit_char(field.chars().next().unwrap())
     }
 
-    fn deserialize_str<V: Visitor>(
+    fn deserialize_str<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         self.next_field().and_then(|f| visitor.visit_str(f))
     }
 
-    fn deserialize_string<V: Visitor>(
+    fn deserialize_string<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         self.next_field().and_then(|f| visitor.visit_str(f.into()))
     }
 
-    fn deserialize_bytes<V: Visitor>(
+    fn deserialize_bytes<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         self.next_field().and_then(|f| visitor.visit_bytes(f.as_bytes()))
     }
 
-    fn deserialize_byte_buf<V: Visitor>(
+    fn deserialize_byte_buf<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
@@ -390,7 +390,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
             .and_then(|f| visitor.visit_byte_buf(f.as_bytes().to_vec()))
     }
 
-    fn deserialize_option<V: Visitor>(
+    fn deserialize_option<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
@@ -404,14 +404,14 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
         }
     }
 
-    fn deserialize_unit<V: Visitor>(
+    fn deserialize_unit<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         visitor.visit_unit()
     }
 
-    fn deserialize_unit_struct<V: Visitor>(
+    fn deserialize_unit_struct<V: Visitor<'de>>(
         self,
         _name: &'static str,
         visitor: V,
@@ -419,7 +419,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
         visitor.visit_unit()
     }
 
-    fn deserialize_newtype_struct<V: Visitor>(
+    fn deserialize_newtype_struct<V: Visitor<'de>>(
         self,
         _name: &'static str,
         visitor: V,
@@ -427,22 +427,14 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
         visitor.visit_newtype_struct(self)
     }
 
-    fn deserialize_seq<V: Visitor>(
+    fn deserialize_seq<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         visitor.visit_seq(self)
     }
 
-    fn deserialize_seq_fixed_size<V: Visitor>(
-        self,
-        _len: usize,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        visitor.visit_seq(self)
-    }
-
-    fn deserialize_tuple<V: Visitor>(
+    fn deserialize_tuple<V: Visitor<'de>>(
         self,
         _len: usize,
         visitor: V,
@@ -450,7 +442,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
         visitor.visit_seq(self)
     }
 
-    fn deserialize_tuple_struct<V: Visitor>(
+    fn deserialize_tuple_struct<V: Visitor<'de>>(
         self,
         _name: &'static str,
         _len: usize,
@@ -459,7 +451,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
         visitor.visit_seq(self)
     }
 
-    fn deserialize_map<V: Visitor>(
+    fn deserialize_map<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
@@ -470,7 +462,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
         }
     }
 
-    fn deserialize_struct<V: Visitor>(
+    fn deserialize_struct<V: Visitor<'de>>(
         self,
         _name: &'static str,
         _fields: &'static [&'static str],
@@ -483,14 +475,14 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
         }
     }
 
-    fn deserialize_struct_field<V: Visitor>(
+    fn deserialize_identifier<V: Visitor<'de>>(
         self,
         _visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        Err(self.error(DEK::Unsupported("deserialize_struct_field".into())))
+        Err(self.error(DEK::Unsupported("deserialize_identifier".into())))
     }
 
-    fn deserialize_enum<V: Visitor>(
+    fn deserialize_enum<V: Visitor<'de>>(
         self,
         _name: &'static str,
         _variants: &'static [&'static str],
@@ -499,7 +491,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
         visitor.visit_enum(self)
     }
 
-    fn deserialize_ignored_any<V: Visitor>(
+    fn deserialize_ignored_any<V: Visitor<'de>>(
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
@@ -511,11 +503,13 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> Deserializer for &'a mut DeRecordWrap<T> {
     }
 }
 
-impl<'a, 'r: 'a, T: DeRecord<'r>> EnumVisitor for &'a mut DeRecordWrap<T> {
+impl<'de, 'a, 'r: 'a, T: DeRecord<'r>> EnumAccess<'de>
+    for &'a mut DeRecordWrap<T>
+{
     type Error = DeserializeError;
     type Variant = Self;
 
-    fn visit_variant_seed<V: DeserializeSeed>(
+    fn variant_seed<V: DeserializeSeed<'de>>(
         self,
         seed: V,
     ) -> Result<(V::Value, Self::Variant), Self::Error> {
@@ -524,14 +518,16 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> EnumVisitor for &'a mut DeRecordWrap<T> {
     }
 }
 
-impl<'a, 'r: 'a, T: DeRecord<'r>> VariantVisitor for &'a mut DeRecordWrap<T> {
+impl<'de, 'a, 'r: 'a, T: DeRecord<'r>>
+    VariantAccess<'de> for &'a mut DeRecordWrap<T>
+{
     type Error = DeserializeError;
 
-    fn visit_unit(self) -> Result<(), Self::Error> {
+    fn unit_variant(self) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn visit_newtype_seed<U: DeserializeSeed>(
+    fn newtype_variant_seed<U: DeserializeSeed<'de>>(
         self,
         _seed: U,
     ) -> Result<U::Value, Self::Error> {
@@ -539,7 +535,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> VariantVisitor for &'a mut DeRecordWrap<T> {
         Err(DeserializeError::invalid_type(unexp, &"newtype variant"))
     }
 
-    fn visit_tuple<V: Visitor>(
+    fn tuple_variant<V: Visitor<'de>>(
         self,
         _len: usize,
         _visitor: V,
@@ -548,7 +544,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> VariantVisitor for &'a mut DeRecordWrap<T> {
         Err(DeserializeError::invalid_type(unexp, &"tuple variant"))
     }
 
-    fn visit_struct<V: Visitor>(
+    fn struct_variant<V: Visitor<'de>>(
         self,
         _fields: &'static [&'static str],
         _visitor: V,
@@ -558,10 +554,12 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> VariantVisitor for &'a mut DeRecordWrap<T> {
     }
 }
 
-impl<'a, 'r: 'a, T: DeRecord<'r>> SeqVisitor for &'a mut DeRecordWrap<T> {
+impl<'de, 'a, 'r: 'a, T: DeRecord<'r>>
+    SeqAccess<'de> for &'a mut DeRecordWrap<T>
+{
     type Error = DeserializeError;
 
-    fn visit_seed<U: DeserializeSeed>(
+    fn next_element_seed<U: DeserializeSeed<'de>>(
         &mut self,
         seed: U,
     ) -> Result<Option<U::Value>, Self::Error> {
@@ -573,10 +571,12 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> SeqVisitor for &'a mut DeRecordWrap<T> {
     }
 }
 
-impl<'a, 'r: 'a, T: DeRecord<'r>> MapVisitor for &'a mut DeRecordWrap<T> {
+impl<'de, 'a, 'r: 'a, T: DeRecord<'r>>
+    MapAccess<'de> for &'a mut DeRecordWrap<T>
+{
     type Error = DeserializeError;
 
-    fn visit_key_seed<K: DeserializeSeed>(
+    fn next_key_seed<K: DeserializeSeed<'de>>(
         &mut self,
         seed: K,
     ) -> Result<Option<K::Value>, Self::Error> {
@@ -588,7 +588,7 @@ impl<'a, 'r: 'a, T: DeRecord<'r>> MapVisitor for &'a mut DeRecordWrap<T> {
         seed.deserialize(field.into_deserializer()).map(Some)
     }
 
-    fn visit_value_seed<K: DeserializeSeed>(
+    fn next_value_seed<K: DeserializeSeed<'de>>(
         &mut self,
         seed: K,
     ) -> Result<K::Value, Self::Error> {
@@ -713,12 +713,14 @@ mod tests {
     use std::collections::HashMap;
 
     use serde::Deserialize;
-    use serde::bytes::ByteBuf;
+    use serde_bytes::ByteBuf;
 
     use string_record::StringRecord;
     use super::{DeRecordWrap, DeStringRecord, DeserializeError};
 
-    fn de<D: Deserialize>(fields: &[&str]) -> Result<D, DeserializeError> {
+    fn de<'de, D: Deserialize<'de>>(
+        fields: &[&str],
+    ) -> Result<D, DeserializeError> {
         let fields = StringRecord::from(fields);
         let deser = DeStringRecord {
             it: fields.iter().peekable(),
@@ -728,7 +730,7 @@ mod tests {
         D::deserialize(&mut DeRecordWrap(deser))
     }
 
-    fn de_headers<D: Deserialize>(
+    fn de_headers<'de, D: Deserialize<'de>>(
         headers: &[&str],
         fields: &[&str],
     ) -> Result<D, DeserializeError> {

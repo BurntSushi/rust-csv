@@ -133,7 +133,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     fn serialize_unit_variant(
         self,
         _name: &'static str,
-        _variant_index: usize,
+        _variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
         self.wtr.write_field(variant)
@@ -150,7 +150,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     fn serialize_newtype_variant<T: ?Sized + Serialize>(
         self,
         _name: &'static str,
-        _variant_index: usize,
+        _variant_index: u32,
         _variant: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error> {
@@ -160,13 +160,6 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     fn serialize_seq(
         self,
         _len: Option<usize>,
-    ) -> Result<Self::SerializeSeq, Self::Error> {
-        Ok(self)
-    }
-
-    fn serialize_seq_fixed_size(
-        self,
-        _size: usize,
     ) -> Result<Self::SerializeSeq, Self::Error> {
         Ok(self)
     }
@@ -189,7 +182,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     fn serialize_tuple_variant(
         self,
         _name: &'static str,
-        _variant_index: usize,
+        _variant_index: u32,
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
@@ -218,7 +211,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     fn serialize_struct_variant(
         self,
         _name: &'static str,
-        _variant_index: usize,
+        _variant_index: u32,
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
@@ -361,7 +354,7 @@ impl SerdeError for Error {
 #[cfg(test)]
 mod tests {
     use serde::Serialize;
-    use serde::bytes::Bytes;
+    use serde_bytes::Bytes;
 
     use error::Error;
     use writer::Writer;

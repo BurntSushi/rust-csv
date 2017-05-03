@@ -1,6 +1,8 @@
 extern crate csv_core;
 extern crate serde;
 #[cfg(test)]
+extern crate serde_bytes;
+#[cfg(test)]
 #[macro_use]
 extern crate serde_derive;
 
