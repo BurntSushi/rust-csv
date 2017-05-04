@@ -67,6 +67,11 @@ pub fn validate(record: &ByteRecord) -> result::Result<(), Utf8Error> {
 }
 
 /// A single CSV record stored as raw bytes.
+///
+/// A byte record permits reading or writing CSV rows that are not UTF-8 and
+/// avoid the overhead of UTF-8 validation. In general, you should use
+/// a `StringRecord` since it is more ergonomic, but a `ByteRecord` is provided
+/// in case you need it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ByteRecord(Box<ByteRecordInner>);
 
