@@ -8,7 +8,7 @@ extern crate test;
 
 use std::io;
 
-use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use test::Bencher;
 
 use csv::{ByteRecord, Reader, ReaderBuilder, StringRecord};
@@ -145,7 +145,7 @@ bench!(count_mbta_read_bytes, MBTA, count_read_bytes, 533496);
 bench!(count_mbta_read_str, MBTA, count_read_str, 533496);
 
 fn count_deserialize_bytes<R, D>(rdr: &mut Reader<R>) -> u64
-    where R: io::Read, D: Deserialize
+    where R: io::Read, D: DeserializeOwned
 {
     let mut count = 0;
     let mut rec = ByteRecord::new();
@@ -157,7 +157,7 @@ fn count_deserialize_bytes<R, D>(rdr: &mut Reader<R>) -> u64
 }
 
 fn count_deserialize_str<R, D>(rdr: &mut Reader<R>) -> u64
-    where R: io::Read, D: Deserialize
+    where R: io::Read, D: DeserializeOwned
 {
     let mut count = 0;
     for rec in rdr.deserializer::<D>() {
