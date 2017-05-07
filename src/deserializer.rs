@@ -18,8 +18,8 @@ use string_record::{StringRecord, StringRecordIter};
 use self::DeserializeErrorKind as DEK;
 
 pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
-    record: &StringRecord,
-    headers: Option<&StringRecord>,
+    record: &'de StringRecord,
+    headers: Option<&'de StringRecord>,
 ) -> Result<D, Error> {
     let mut deser = DeRecordWrap(DeStringRecord {
         it: record.iter().peekable(),
@@ -35,8 +35,8 @@ pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
 }
 
 pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
-    record: &ByteRecord,
-    headers: Option<&ByteRecord>,
+    record: &'de ByteRecord,
+    headers: Option<&'de ByteRecord>,
 ) -> Result<D, Error> {
     let mut deser = DeRecordWrap(DeByteRecord {
         it: record.iter().peekable(),
@@ -58,6 +58,13 @@ pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
 /// convert `StringRecord`s to `ByteRecord`s, but then the implementation
 /// would be required to redo UTF-8 validation checks in certain places.
 ///
+/// How does this work? We create a new `DeRecordWrap` type that wraps
+/// either a `StringRecord` or a `ByteRecord`. We then implement
+/// `DeRecord` for `DeRecordWrap<ByteRecord>` and `DeRecordWrap<StringRecord>`.
+/// Finally, we impl `serde::Deserialize` for `DeRecordWrap<T>` where
+/// `T: DeRecord`. That is, the `DeRecord` type corresponds to the differences
+/// between deserializing into a `ByteRecord` and deserializing into a
+/// `StringRecord`.
 ///
 /// The lifetime `'r` refers to the lifetime of the underlying record.
 trait DeRecord<'r> {
@@ -301,7 +308,9 @@ macro_rules! deserialize_int {
     }
 }
 
-impl<'de, 'a, 'r: 'a, T: DeRecord<'r>> Deserializer<'de> for &'a mut DeRecordWrap<T> {
+impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
+    for &'a mut DeRecordWrap<T>
+{
     type Error = DeserializeError;
 
     fn deserialize_any<V: Visitor<'de>>(
@@ -365,7 +374,7 @@ impl<'de, 'a, 'r: 'a, T: DeRecord<'r>> Deserializer<'de> for &'a mut DeRecordWra
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        self.next_field().and_then(|f| visitor.visit_str(f))
+        self.next_field().and_then(|f| visitor.visit_borrowed_str(f))
     }
 
     fn deserialize_string<V: Visitor<'de>>(
@@ -379,7 +388,9 @@ impl<'de, 'a, 'r: 'a, T: DeRecord<'r>> Deserializer<'de> for &'a mut DeRecordWra
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        self.next_field().and_then(|f| visitor.visit_bytes(f.as_bytes()))
+        self.next_field().and_then(|f| {
+            visitor.visit_borrowed_bytes(f.as_bytes())
+        })
     }
 
     fn deserialize_byte_buf<V: Visitor<'de>>(
@@ -503,7 +514,7 @@ impl<'de, 'a, 'r: 'a, T: DeRecord<'r>> Deserializer<'de> for &'a mut DeRecordWra
     }
 }
 
-impl<'de, 'a, 'r: 'a, T: DeRecord<'r>> EnumAccess<'de>
+impl<'a, 'de: 'a, T: DeRecord<'de>> EnumAccess<'de>
     for &'a mut DeRecordWrap<T>
 {
     type Error = DeserializeError;
@@ -518,7 +529,7 @@ impl<'de, 'a, 'r: 'a, T: DeRecord<'r>> EnumAccess<'de>
     }
 }
 
-impl<'de, 'a, 'r: 'a, T: DeRecord<'r>>
+impl<'a, 'de: 'a, T: DeRecord<'de>>
     VariantAccess<'de> for &'a mut DeRecordWrap<T>
 {
     type Error = DeserializeError;
@@ -554,7 +565,7 @@ impl<'de, 'a, 'r: 'a, T: DeRecord<'r>>
     }
 }
 
-impl<'de, 'a, 'r: 'a, T: DeRecord<'r>>
+impl<'a, 'de: 'a, T: DeRecord<'de>>
     SeqAccess<'de> for &'a mut DeRecordWrap<T>
 {
     type Error = DeserializeError;
@@ -571,7 +582,7 @@ impl<'de, 'a, 'r: 'a, T: DeRecord<'r>>
     }
 }
 
-impl<'de, 'a, 'r: 'a, T: DeRecord<'r>>
+impl<'a, 'de: 'a, T: DeRecord<'de>>
     MapAccess<'de> for &'a mut DeRecordWrap<T>
 {
     type Error = DeserializeError;
@@ -712,36 +723,27 @@ fn try_float_bytes(s: &[u8]) -> Option<f64> {
 mod tests {
     use std::collections::HashMap;
 
-    use serde::Deserialize;
+    use serde::de::DeserializeOwned;
     use serde_bytes::ByteBuf;
 
+    use error::Error;
     use string_record::StringRecord;
-    use super::{DeRecordWrap, DeStringRecord, DeserializeError};
+    use super::deserialize_string_record;
 
-    fn de<'de, D: Deserialize<'de>>(
+    fn de<D: DeserializeOwned>(
         fields: &[&str],
-    ) -> Result<D, DeserializeError> {
-        let fields = StringRecord::from(fields);
-        let deser = DeStringRecord {
-            it: fields.iter().peekable(),
-            headers: None,
-            field: 0,
-        };
-        D::deserialize(&mut DeRecordWrap(deser))
+    ) -> Result<D, Error> {
+        let record = StringRecord::from(fields);
+        deserialize_string_record(&record, None)
     }
 
-    fn de_headers<'de, D: Deserialize<'de>>(
+    fn de_headers<D: DeserializeOwned>(
         headers: &[&str],
         fields: &[&str],
-    ) -> Result<D, DeserializeError> {
+    ) -> Result<D, Error> {
         let headers = StringRecord::from(headers);
-        let fields = StringRecord::from(fields);
-        let deser = DeStringRecord {
-            it: fields.iter().peekable(),
-            headers: Some(headers.iter()),
-            field: 0,
-        };
-        D::deserialize(&mut DeRecordWrap(deser))
+        let record = StringRecord::from(fields);
+        deserialize_string_record(&record, Some(&headers))
     }
 
     #[test]
@@ -1030,5 +1032,21 @@ mod tests {
             &["", "foo", "5"],
         ).unwrap();
         assert_eq!(got, Foo { a: None, b: "foo".into(), c: Some(5) });
+    }
+
+    #[test]
+    fn borrowed() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Foo<'a, 'c> {
+            a: &'a str,
+            b: i32,
+            c: &'c str,
+        }
+
+        let headers = StringRecord::from(vec!["a", "b", "c"]);
+        let record = StringRecord::from(vec!["foo", "5", "bar"]);
+        let got: Foo = deserialize_string_record(
+            &record, Some(&headers)).unwrap();
+        assert_eq!(got, Foo { a: "foo", b: 5, c: "bar" });
     }
 }

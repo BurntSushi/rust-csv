@@ -19,7 +19,7 @@ static POP: &'static str = include_str!("../examples/data/worldcitiespop.csv");
 static MBTA: &'static str = include_str!("../examples/data/gtfs-mbta-stop-times.csv");
 
 #[derive(Debug, Deserialize, PartialEq)]
-struct NFLRow {
+struct NFLRowOwned {
     gameid: String,
     qtr: i32,
     min: Option<i32>,
@@ -36,11 +36,31 @@ struct NFLRow {
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
-struct GAMERow(String, String, String, String, i32, String);
+struct NFLRowBorrowed<'a> {
+    gameid: &'a str,
+    qtr: i32,
+    min: Option<i32>,
+    sec: Option<i32>,
+    off: &'a str,
+    def: &'a str,
+    down: Option<i32>,
+    togo: Option<i32>,
+    ydline: Option<i32>,
+    description: &'a str,
+    offscore: i32,
+    defscore: i32,
+    season: i32,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct GAMERowOwned(String, String, String, String, i32, String);
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct GAMERowBorrowed<'a>(&'a str, &'a str, &'a str, &'a str, i32, &'a str);
 
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-struct POPRow {
+struct POPRowOwned {
     country: String,
     city: String,
     accent_city: String,
@@ -51,13 +71,38 @@ struct POPRow {
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
-struct MBTARow {
+#[serde(rename_all = "PascalCase")]
+struct POPRowBorrowed<'a> {
+    country: &'a str,
+    city: &'a str,
+    accent_city: &'a str,
+    region: &'a str,
+    population: Option<i32>,
+    latitude: f64,
+    longitude: f64,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct MBTARowOwned {
     trip_id: String,
     arrival_time: String,
     departure_time: String,
     stop_id: String,
     stop_sequence: i32,
     stop_headsign: String,
+    pickup_type: i32,
+    drop_off_type: i32,
+    timepoint: i32,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct MBTARowBorrowed<'a> {
+    trip_id: &'a str,
+    arrival_time: &'a str,
+    departure_time: &'a str,
+    stop_id: &'a str,
+    stop_sequence: i32,
+    stop_headsign: &'a str,
     pickup_type: i32,
     drop_off_type: i32,
     timepoint: i32,
@@ -109,42 +154,116 @@ macro_rules! bench_serde {
     };
 }
 
+macro_rules! bench_serde_borrowed_bytes {
+    ($name:ident, $data:ident, $type:ty, $headers:expr, $result:expr) => {
+        #[bench]
+        fn $name(b: &mut Bencher) {
+            let data = $data.as_bytes();
+            b.bytes = data.len() as u64;
+            b.iter(|| {
+                let mut rdr = ReaderBuilder::new()
+                    .has_headers($headers)
+                    .from_reader(data);
+                let mut count = 0;
+                let mut rec = ByteRecord::new();
+                while !rdr.read_byte_record(&mut rec).unwrap() {
+                    let _: $type = rec.deserialize(None).unwrap();
+                    count += 1;
+                }
+                count
+            })
+        }
+    }
+}
+
+macro_rules! bench_serde_borrowed_str {
+    ($name:ident, $data:ident, $type:ty, $headers:expr, $result:expr) => {
+        #[bench]
+        fn $name(b: &mut Bencher) {
+            let data = $data.as_bytes();
+            b.bytes = data.len() as u64;
+            b.iter(|| {
+                let mut rdr = ReaderBuilder::new()
+                    .has_headers($headers)
+                    .from_reader(data);
+                let mut count = 0;
+                let mut rec = StringRecord::new();
+                while !rdr.read_record(&mut rec).unwrap() {
+                    let _: $type = rec.deserialize(None).unwrap();
+                    count += 1;
+                }
+                count
+            })
+        }
+    }
+}
+
 bench_serde!(
-    count_nfl_deserialize_bytes, NFL, count_deserialize_bytes, NFLRow, 9999);
+    count_nfl_deserialize_owned_bytes,
+    NFL, count_deserialize_owned_bytes, NFLRowOwned, 9999);
 bench_serde!(
-    count_nfl_deserialize_str, NFL, count_deserialize_str, NFLRow, 9999);
+    count_nfl_deserialize_owned_str,
+    NFL, count_deserialize_owned_str, NFLRowOwned, 9999);
+bench_serde_borrowed_bytes!(
+    count_nfl_deserialize_borrowed_bytes, NFL, NFLRowBorrowed, true, 9999);
+bench_serde_borrowed_str!(
+    count_nfl_deserialize_borrowed_str, NFL, NFLRowBorrowed, true, 9999);
 bench!(count_nfl_iter_bytes, NFL, count_iter_bytes, 1234606);
 bench!(count_nfl_iter_str, NFL, count_iter_str, 1234606);
 bench!(count_nfl_read_bytes, NFL, count_read_bytes, 1234606);
 bench!(count_nfl_read_str, NFL, count_read_str, 1234606);
 bench_serde!(
     no_headers,
-    count_game_deserialize_bytes, GAME, count_deserialize_bytes, GAMERow, 100000);
+    count_game_deserialize_owned_bytes,
+    GAME, count_deserialize_owned_bytes, GAMERowOwned, 100000);
 bench_serde!(
     no_headers,
-    count_game_deserialize_str, GAME, count_deserialize_str, GAMERow, 100000);
+    count_game_deserialize_owned_str,
+    GAME, count_deserialize_owned_str, GAMERowOwned, 100000);
+bench_serde_borrowed_bytes!(
+    count_game_deserialize_borrowed_bytes,
+    GAME, GAMERowBorrowed, true, 100000);
+bench_serde_borrowed_str!(
+    count_game_deserialize_borrowed_str,
+    GAME, GAMERowBorrowed, true, 100000);
 bench!(count_game_iter_bytes, GAME, count_iter_bytes, 1400000);
 bench!(count_game_iter_str, GAME, count_iter_str, 1400000);
 bench!(count_game_read_bytes, GAME, count_read_bytes, 1400000);
 bench!(count_game_read_str, GAME, count_read_str, 1400000);
 bench_serde!(
-    count_pop_deserialize_bytes, POP, count_deserialize_bytes, POPRow, 20000);
+    count_pop_deserialize_owned_bytes,
+    POP, count_deserialize_owned_bytes, POPRowOwned, 20000);
 bench_serde!(
-    count_pop_deserialize_str, POP, count_deserialize_str, POPRow, 20000);
+    count_pop_deserialize_owned_str,
+    POP, count_deserialize_owned_str, POPRowOwned, 20000);
+bench_serde_borrowed_bytes!(
+    count_pop_deserialize_borrowed_bytes,
+    POP, POPRowBorrowed, true, 20000);
+bench_serde_borrowed_str!(
+    count_pop_deserialize_borrowed_str,
+    POP, POPRowBorrowed, true, 20000);
 bench!(count_pop_iter_bytes, POP, count_iter_bytes, 815677);
 bench!(count_pop_iter_str, POP, count_iter_str, 815677);
 bench!(count_pop_read_bytes, POP, count_read_bytes, 815677);
 bench!(count_pop_read_str, POP, count_read_str, 815677);
 bench_serde!(
-    count_mbta_deserialize_bytes, MBTA, count_deserialize_bytes, MBTARow, 9999);
+    count_mbta_deserialize_owned_bytes,
+    MBTA, count_deserialize_owned_bytes, MBTARowOwned, 9999);
 bench_serde!(
-    count_mbta_deserialize_str, MBTA, count_deserialize_str, MBTARow, 9999);
+    count_mbta_deserialize_owned_str,
+    MBTA, count_deserialize_owned_str, MBTARowOwned, 9999);
+bench_serde_borrowed_bytes!(
+    count_mbta_deserialize_borrowed_bytes,
+    MBTA, MBTARowBorrowed, true, 9999);
+bench_serde_borrowed_str!(
+    count_mbta_deserialize_borrowed_str,
+    MBTA, MBTARowBorrowed, true, 9999);
 bench!(count_mbta_iter_bytes, MBTA, count_iter_bytes, 533496);
 bench!(count_mbta_iter_str, MBTA, count_iter_str, 533496);
 bench!(count_mbta_read_bytes, MBTA, count_read_bytes, 533496);
 bench!(count_mbta_read_str, MBTA, count_read_str, 533496);
 
-fn count_deserialize_bytes<R, D>(rdr: &mut Reader<R>) -> u64
+fn count_deserialize_owned_bytes<R, D>(rdr: &mut Reader<R>) -> u64
     where R: io::Read, D: DeserializeOwned
 {
     let mut count = 0;
@@ -156,7 +275,7 @@ fn count_deserialize_bytes<R, D>(rdr: &mut Reader<R>) -> u64
     count
 }
 
-fn count_deserialize_str<R, D>(rdr: &mut Reader<R>) -> u64
+fn count_deserialize_owned_str<R, D>(rdr: &mut Reader<R>) -> u64
     where R: io::Read, D: DeserializeOwned
 {
     let mut count = 0;

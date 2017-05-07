@@ -14,10 +14,10 @@ pub type Result<T> = result::Result<T, Error>;
 ///
 /// This error can happen when writing or reading CSV data.
 ///
-/// Note that there are some important scenarios where an error is impossible
-/// to occur. For example, if a CSV reader is used on an in-memory buffer with
-/// the `flexible` option enabled and one is reading records as raw byte
-/// strings, then no error can occur.
+/// There are some important scenarios where an error is impossible to occur.
+/// For example, if a CSV reader is used on an in-memory buffer with the
+/// `flexible` option enabled and one is reading records as raw byte strings,
+/// then no error can occur.
 #[derive(Debug)]
 pub enum Error {
     /// An I/O error that occurred while reading CSV data.

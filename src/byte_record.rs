@@ -4,7 +4,7 @@ use std::ops::{self, Range};
 use std::result;
 use std::str;
 
-use serde::Deserialize;
+use serde::de::Deserialize;
 
 use deserializer::deserialize_byte_record;
 use error::{Result, Utf8Error, new_utf8_error};
@@ -46,8 +46,6 @@ pub fn expand_ends(record: &mut ByteRecord) {
 /// Validate the given record as UTF-8.
 ///
 /// If it's not UTF-8, return an error.
-///
-/// This never modifies the contents of this record.
 #[inline]
 pub fn validate(record: &ByteRecord) -> result::Result<(), Utf8Error> {
     // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
@@ -68,10 +66,14 @@ pub fn validate(record: &ByteRecord) -> result::Result<(), Utf8Error> {
 
 /// A single CSV record stored as raw bytes.
 ///
-/// A byte record permits reading or writing CSV rows that are not UTF-8 and
-/// avoid the overhead of UTF-8 validation. In general, you should use
-/// a `StringRecord` since it is more ergonomic, but a `ByteRecord` is provided
-/// in case you need it.
+/// A byte record permits reading or writing CSV rows that are not UTF-8.
+/// In general, you should prefer using a
+/// [`StringRecord`](struct.StringRecord.html)
+/// since it is more ergonomic, but a `ByteRecord` is provided in case you need
+/// it.
+///
+/// Note that if you are using the Serde (de)serialization APIs, then you
+/// probably never need to interact with a `ByteRecord` or a `StringRecord`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ByteRecord(Box<ByteRecordInner>);
 
@@ -100,6 +102,27 @@ impl Default for ByteRecord {
 
 impl ByteRecord {
     /// Create a new empty `ByteRecord`.
+    ///
+    /// Note that you may find the `ByteRecord::from` constructor more
+    /// convenient, which is provided by an impl on the `From` trait.
+    ///
+    /// # Example: create an empty record
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// let record = ByteRecord::new();
+    /// assert_eq!(record.len(), 0);
+    /// ```
+    ///
+    /// # Example: initialize a record from a `Vec`
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// let record = ByteRecord::from(vec!["a", "b", "c"]);
+    /// assert_eq!(record.len(), 3);
+    /// ```
     #[inline]
     pub fn new() -> ByteRecord {
         ByteRecord::with_capacity(0, 0)
@@ -122,19 +145,113 @@ impl ByteRecord {
     /// Deserialize this record.
     ///
     /// The `D` type parameter refers to the type that this record should be
-    /// deserialized into.
+    /// deserialized into. The `'de` lifetime refers to the lifetime of the
+    /// `ByteRecord`. The `'de` lifetime permits deserializing into structs
+    /// that borrow field data from this record.
     ///
     /// An optional `headers` parameter permits deserializing into a struct
     /// based on its field names (corresponding to header values) rather than
     /// the order in which the fields are defined.
+    ///
+    /// # Example: without headers
+    ///
+    /// This shows how to deserialize a single row into a struct based on the
+    /// order in which fields occur. This example also shows how to borrow
+    /// fields from the `ByteRecord`, which results in zero allocation
+    /// deserialization.
+    ///
+    /// ```
+    /// extern crate csv;
+    /// #[macro_use]
+    /// extern crate serde_derive;
+    ///
+    /// use std::error::Error;
+    /// use csv::ByteRecord;
+    ///
+    /// #[derive(Deserialize)]
+    /// struct Row<'a> {
+    ///     city: &'a str,
+    ///     country: &'a str,
+    ///     population: u64,
+    /// }
+    ///
+    /// # fn main() { example().unwrap() }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let record = ByteRecord::from(vec![
+    ///         "Boston", "United States", "4628910",
+    ///     ]);
+    ///
+    ///     let row: Row = record.deserialize(None)?;
+    ///     assert_eq!(row.city, "Boston");
+    ///     assert_eq!(row.country, "United States");
+    ///     assert_eq!(row.population, 4628910);
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// # Example: with headers
+    ///
+    /// This example is like the previous one, but shows how to deserialize
+    /// into a struct based on the struct's field names. For this to work,
+    /// you must provide a header row.
+    ///
+    /// This example also shows that you can deserialize into owned data
+    /// types (e.g., `String`) instead of borrowed data types (e.g., `&str`).
+    ///
+    /// ```
+    /// extern crate csv;
+    /// #[macro_use]
+    /// extern crate serde_derive;
+    ///
+    /// use std::error::Error;
+    /// use csv::ByteRecord;
+    ///
+    /// #[derive(Deserialize)]
+    /// struct Row {
+    ///     city: String,
+    ///     country: String,
+    ///     population: u64,
+    /// }
+    ///
+    /// # fn main() { example().unwrap() }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     // Notice that the fields are not in the same order
+    ///     // as the fields in the struct!
+    ///     let header = ByteRecord::from(vec![
+    ///         "country", "city", "population",
+    ///     ]);
+    ///     let record = ByteRecord::from(vec![
+    ///         "United States", "Boston", "4628910",
+    ///     ]);
+    ///
+    ///     let row: Row = record.deserialize(Some(&header))?;
+    ///     assert_eq!(row.city, "Boston");
+    ///     assert_eq!(row.country, "United States");
+    ///     assert_eq!(row.population, 4628910);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn deserialize<'de, D: Deserialize<'de>>(
-        &self,
-        headers: Option<&ByteRecord>,
+        &'de self,
+        headers: Option<&'de ByteRecord>,
     ) -> Result<D> {
         deserialize_byte_record(self, headers)
     }
 
     /// Returns an iterator over all fields in this record.
+    ///
+    /// # Example
+    ///
+    /// This example shows how to iterate over each field in a `ByteRecord`.
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// let record = ByteRecord::from(vec!["a", "b", "c"]);
+    /// for field in record.iter() {
+    ///     assert!(field == b"a" || field == b"b" || field == b"c");
+    /// }
+    /// ```
     #[inline]
     pub fn iter(&self) -> ByteRecordIter {
         self.into_iter()
@@ -143,18 +260,45 @@ impl ByteRecord {
     /// Return the field at index `i`.
     ///
     /// If no field at index `i` exists, then this returns `None`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// let record = ByteRecord::from(vec!["a", "b", "c"]);
+    /// assert_eq!(record.get(1), Some(&b"b"[..]));
+    /// assert_eq!(record.get(3), None);
+    /// ```
     #[inline]
     pub fn get(&self, i: usize) -> Option<&[u8]> {
         self.0.bounds.get(i).map(|range| &self.0.fields[range])
     }
 
     /// Returns true if and only if this record is empty.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// assert!(ByteRecord::new().is_empty());
+    /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     /// Returns the number of fields in this record.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// let record = ByteRecord::from(vec!["a", "b", "c"]);
+    /// assert_eq!(record.len(), 3);
+    /// ```
     #[inline]
     pub fn len(&self) -> usize {
         self.0.bounds.len()
@@ -164,12 +308,33 @@ impl ByteRecord {
     ///
     /// Note that it is not necessary to clear the record to reuse it with
     /// the CSV reader.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// let mut record = ByteRecord::from(vec!["a", "b", "c"]);
+    /// assert_eq!(record.len(), 3);
+    /// record.clear();
+    /// assert_eq!(record.len(), 0);
+    /// ```
     #[inline]
     pub fn clear(&mut self) {
         self.0.bounds.len = 0;
     }
 
     /// Add a new field to this record.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// let mut record = ByteRecord::new();
+    /// record.push_field(b"foo");
+    /// assert_eq!(&record[0], b"foo");
+    /// ```
     #[inline]
     pub fn push_field(&mut self, field: &[u8]) {
         let (s, e) = (self.0.bounds.end(), self.0.bounds.end() + field.len());
@@ -181,12 +346,64 @@ impl ByteRecord {
     }
 
     /// Return the position of this record, if available.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{ByteRecord, ReaderBuilder};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut record = ByteRecord::new();
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .has_headers(false)
+    ///         .from_reader("a,b,c\nx,y,z".as_bytes());
+    ///
+    ///     assert!(!rdr.read_byte_record(&mut record)?);
+    ///     {
+    ///         let pos = record.position().expect("a record position");
+    ///         assert_eq!(pos.byte(), 0);
+    ///         assert_eq!(pos.line(), 1);
+    ///         assert_eq!(pos.record(), 0);
+    ///     }
+    ///
+    ///     assert!(!rdr.read_byte_record(&mut record)?);
+    ///     {
+    ///         let pos = record.position().expect("a record position");
+    ///         assert_eq!(pos.byte(), 6);
+    ///         assert_eq!(pos.line(), 2);
+    ///         assert_eq!(pos.record(), 1);
+    ///     }
+    ///
+    ///     // Finish the CSV reader for good measure.
+    ///     assert!(rdr.read_byte_record(&mut record)?);
+    ///     Ok(())
+    /// }
+    /// ```
     #[inline]
     pub fn position(&self) -> Option<&Position> {
         self.0.pos.as_ref()
     }
 
     /// Set the position of this record.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::{ByteRecord, Position};
+    ///
+    /// let mut record = ByteRecord::from(vec!["a", "b", "c"]);
+    /// let mut pos = Position::new();
+    /// pos.set_byte(100);
+    /// pos.set_line(4);
+    /// pos.set_record(2);
+    ///
+    /// record.set_position(Some(pos.clone()));
+    /// assert_eq!(record.position(), Some(&pos));
+    /// ```
     #[inline]
     pub fn set_position(&mut self, pos: Option<Position>) {
         self.0.pos = pos;
@@ -197,12 +414,33 @@ impl ByteRecord {
     /// If no such field exists at the given index, then return `None`.
     ///
     /// The range returned can be used with the slice returned by `as_slice`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// let record = ByteRecord::from(vec!["foo", "quux", "z"]);
+    /// let range = record.range(1).expect("a record range");
+    /// assert_eq!(&record.as_slice()[range], &b"quux"[..]);
+    /// ```
     #[inline]
     pub fn range(&self, i: usize) -> Option<Range<usize>> {
         self.0.bounds.get(i)
     }
 
-    /// Return the entire row as a single byte slice.
+    /// Return the entire row as a single byte slice. The slice returned stores
+    /// all fields contiguously. The boundaries of each field can be determined
+    /// via the `range` method.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// let record = ByteRecord::from(vec!["foo", "quux", "z"]);
+    /// assert_eq!(record.as_slice(), &b"fooquuxz"[..]);
+    /// ```
     #[inline]
     pub fn as_slice(&self) -> &[u8] {
         &self.0.fields[..self.0.bounds.end()]
@@ -213,6 +451,14 @@ impl ByteRecord {
 ///
 /// A position is used to report errors in CSV data. All positions include the
 /// byte offset, line number and record index at which the error occurred.
+///
+/// Byte offsets and record indices start at `0`. Line numbers start at `1`.
+///
+/// A CSV reader will automatically assign the position of each record. If the
+/// CSV reader is configured to read headers, then both the header record and
+/// the first non-header record have a record index of `0`. If the CSV reader
+/// is not configured to read headers, then the first and second records have
+/// record indices of `0` and `1`, respectively.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Position {
     byte: u64,
@@ -231,7 +477,7 @@ impl Position {
     #[inline] pub fn byte(&self) -> u64 { self.byte }
     /// The line number, starting at `1`, of this position.
     #[inline] pub fn line(&self) -> u64 { self.line }
-    /// The record index, starting at `0`, of this position.
+    /// The record index, starting with the first non-header record at `0`.
     #[inline] pub fn record(&self) -> u64 { self.record }
 
     /// Set the byte offset of this position.
@@ -382,10 +628,13 @@ impl<T: AsRef<[u8]>> Extend<T> for ByteRecord {
     }
 }
 
-/// An iterator over the fields in a byte record.
-pub struct ByteRecordIter<'a> {
+/// A double-ended iterator over the fields in a byte record.
+///
+/// The `'r` lifetime variable refers to the lifetime of the `ByteRecord` that
+/// is being iterated over.
+pub struct ByteRecordIter<'r> {
     /// The record we are iterating over.
-    r: &'a ByteRecord,
+    r: &'r ByteRecord,
     /// The starting index of the previous field. (For reverse iteration.)
     last_start: usize,
     /// The ending index of the previous field. (For forward iteration.)
@@ -396,12 +645,12 @@ pub struct ByteRecordIter<'a> {
     i_reverse: usize,
 }
 
-impl<'a> IntoIterator for &'a ByteRecord {
-    type IntoIter = ByteRecordIter<'a>;
-    type Item = &'a [u8];
+impl<'r> IntoIterator for &'r ByteRecord {
+    type IntoIter = ByteRecordIter<'r>;
+    type Item = &'r [u8];
 
     #[inline]
-    fn into_iter(self) -> ByteRecordIter<'a> {
+    fn into_iter(self) -> ByteRecordIter<'r> {
         ByteRecordIter {
             r: self,
             last_start: self.as_slice().len(),
@@ -412,13 +661,13 @@ impl<'a> IntoIterator for &'a ByteRecord {
     }
 }
 
-impl<'a> ExactSizeIterator for ByteRecordIter<'a> {}
+impl<'r> ExactSizeIterator for ByteRecordIter<'r> {}
 
-impl<'a> Iterator for ByteRecordIter<'a> {
-    type Item = &'a [u8];
+impl<'r> Iterator for ByteRecordIter<'r> {
+    type Item = &'r [u8];
 
     #[inline]
-    fn next(&mut self) -> Option<&'a [u8]> {
+    fn next(&mut self) -> Option<&'r [u8]> {
         if self.i_forward == self.i_reverse {
             None
         } else {
@@ -442,9 +691,9 @@ impl<'a> Iterator for ByteRecordIter<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for ByteRecordIter<'a> {
+impl<'r> DoubleEndedIterator for ByteRecordIter<'r> {
     #[inline]
-    fn next_back(&mut self) -> Option<&'a [u8]> {
+    fn next_back(&mut self) -> Option<&'r [u8]> {
         if self.i_forward == self.i_reverse {
             None
         } else {

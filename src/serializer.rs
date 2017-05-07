@@ -18,15 +18,22 @@ use writer::Writer;
 /// If `headers` is true, then the serializer will attempt to writer a header
 /// row. If it did write a header row, then `true` is returned. In all other
 /// cases, `false` is returned.
+///
+/// `did_headers` should be true if a previous call to `serialize` returned
+/// `true` while writing the same CSV data. This permits the serializer to
+/// return errors when nested composite data types are used when writing
+/// headers from a struct.
 pub fn serialize<S: Serialize, W: io::Write>(
     wtr: &mut Writer<W>,
     value: S,
     headers: bool,
+    did_headers: bool,
 ) -> Result<bool, Error> {
     let mut ser = SeRecord {
         wtr: wtr,
         header_only: headers,
-        did_headers: false,
+        did_headers: did_headers,
+        nested_struct: false,
     };
     value.serialize(&mut ser).map(|_| ser.did_headers)
 }
@@ -35,6 +42,7 @@ struct SeRecord<'w, W: 'w + io::Write> {
     wtr: &'w mut Writer<W>,
     header_only: bool,
     did_headers: bool,
+    nested_struct: bool,
 }
 
 impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
@@ -161,6 +169,9 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         self,
         _len: Option<usize>,
     ) -> Result<Self::SerializeSeq, Self::Error> {
+        if self.did_headers {
+            return Err(error_nested_seq("sequence"));
+        }
         Ok(self)
     }
 
@@ -168,14 +179,20 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         self,
         _len: usize,
     ) -> Result<Self::SerializeTuple, Self::Error> {
+        if self.did_headers {
+            return Err(error_nested_seq("tuple"));
+        }
         Ok(self)
     }
 
     fn serialize_tuple_struct(
         self,
-        _name: &'static str,
+        name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        if self.did_headers {
+            return Err(error_nested_seq(name));
+        }
         Ok(self)
     }
 
@@ -202,9 +219,12 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
 
     fn serialize_struct(
         self,
-        _name: &'static str,
+        name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
+        if self.did_headers && self.nested_struct {
+            return Err(error_nested_seq(name));
+        }
         Ok(self)
     }
 
@@ -291,18 +311,18 @@ impl<'a, 'w, W: io::Write> SerializeMap for &'a mut SeRecord<'w, W> {
         &mut self,
         _key: &T,
     ) -> Result<(), Self::Error> {
-        unimplemented!()
+        unreachable!()
     }
 
     fn serialize_value<T: ?Sized + Serialize>(
         &mut self,
         _value: &T,
     ) -> Result<(), Self::Error> {
-        unimplemented!()
+        unreachable!()
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        unreachable!()
     }
 }
 
@@ -315,6 +335,7 @@ impl<'a, 'w, W: io::Write> SerializeStruct for &'a mut SeRecord<'w, W> {
         key: &'static str,
         value: &T,
     ) -> Result<(), Self::Error> {
+        self.nested_struct = true;
         if self.header_only {
             self.did_headers = true;
             key.serialize(&mut **self)
@@ -324,6 +345,7 @@ impl<'a, 'w, W: io::Write> SerializeStruct for &'a mut SeRecord<'w, W> {
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
+        self.nested_struct = false;
         Ok(())
     }
 }
@@ -351,6 +373,11 @@ impl SerdeError for Error {
     }
 }
 
+fn error_nested_seq(got: &str) -> Error {
+    Error::custom(format!(
+        "cannot serialize {} when writing headers from structs", got))
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Serialize;
@@ -368,6 +395,7 @@ mod tests {
                 wtr: &mut wtr,
                 header_only: false,
                 did_headers: false,
+                nested_struct: false,
             };
             s.serialize(&mut ser).unwrap();
             assert!(!ser.did_headers);
@@ -383,6 +411,7 @@ mod tests {
                 wtr: &mut wtr,
                 header_only: true,
                 did_headers: false,
+                nested_struct: false,
             };
             s.serialize(&mut ser).unwrap();
             assert!(ser.did_headers);
@@ -391,12 +420,17 @@ mod tests {
         String::from_utf8(wtr.into_inner().unwrap()).unwrap()
     }
 
-    fn serialize_err<S: Serialize>(s: S) -> Error {
+    fn serialize_err<S: Serialize>(
+        header_only: bool,
+        did_headers: bool,
+        s: S,
+    ) -> Error {
         let mut wtr = Writer::from_writer(vec![]);
         let mut ser = SeRecord {
             wtr: &mut wtr,
-            header_only: false,
-            did_headers: false,
+            header_only: header_only,
+            did_headers: did_headers,
+            nested_struct: false,
         };
         s.serialize(&mut ser).unwrap_err()
     }
@@ -531,7 +565,8 @@ mod tests {
             X(bool, i32, String),
         }
 
-        let err = serialize_err(Foo::X(false, 42, "hi".to_string()));
+        let err = serialize_err(
+            false, false, Foo::X(false, 42, "hi".to_string()));
         match err {
             Error::Serialize(_) => {}
             x => panic!("expected Error::Serialize but got '{:?}'", x),
@@ -545,7 +580,8 @@ mod tests {
             X { a: bool, b: i32, c: String },
         }
 
-        let err = serialize_err(Foo::X { a: false, b: 1, c: "hi".into() });
+        let err = serialize_err(
+            false, false, Foo::X { a: false, b: 1, c: "hi".into() });
         match err {
             Error::Serialize(_) => {}
             x => panic!("expected Error::Serialize but got '{:?}'", x),
@@ -567,16 +603,66 @@ mod tests {
 
     #[test]
     fn struct_headers() {
-        #[derive(Serialize)]
+        #[derive(Clone, Serialize)]
         struct Foo {
             x: bool,
             y: i32,
             z: String,
         }
 
-        let got = serialize_header(Foo { x: true, y: 5, z: "hi".into() });
+        let row = Foo { x: true, y: 5, z: "hi".into() };
+        let got = serialize_header(row.clone());
         assert_eq!(got, "x,y,z\n");
-        let got = serialize(Foo { x: true, y: 5, z: "hi".into() });
+        let got = serialize(row.clone());
         assert_eq!(got, "true,5,hi\n");
+    }
+
+    #[test]
+    fn struct_headers_nested() {
+        #[derive(Clone, Serialize)]
+        struct Foo {
+            label: String,
+            nest: Nested,
+        }
+        #[derive(Clone, Serialize)]
+        struct Nested {
+            label2: String,
+            value: i32,
+        }
+
+        let row = Foo {
+            label: "foo".into(),
+            nest: Nested {
+                label2: "bar".into(),
+                value: 5,
+            },
+        };
+        let got = serialize_header(row.clone());
+        assert_eq!(got, "label,nest\n");
+
+        let err = serialize_err(false, true, row.clone());
+        match err {
+            Error::Serialize(_) => {}
+            x => panic!("expected Error::Serialize but got '{:?}'", x),
+        }
+    }
+
+    #[test]
+    fn struct_headers_nested_seq() {
+        #[derive(Clone, Serialize)]
+        struct Foo {
+            label: String,
+            values: Vec<i32>,
+        }
+        let row = Foo { label: "foo".into(), values: vec![1, 2, 3] };
+
+        let got = serialize_header(row.clone());
+        assert_eq!(got, "label,values\n");
+
+        let err = serialize_err(false, true, row.clone());
+        match err {
+            Error::Serialize(_) => {}
+            x => panic!("expected Error::Serialize but got '{:?}'", x),
+        }
     }
 }

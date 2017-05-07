@@ -7,7 +7,7 @@ use std::result;
 use csv_core::{
     Reader as CoreReader, ReaderBuilder as CoreReaderBuilder, Terminator,
 };
-use serde::Deserialize;
+use serde::de::DeserializeOwned;
 
 use byte_record::{self, ByteRecord, Position};
 use error::{Error, Result, Utf8Error};
@@ -277,8 +277,8 @@ impl<R: io::Read> Reader<R> {
     /// If `has_headers` is enabled, then this does not include the first
     /// record. Additionally, if `has_headers` is enabled, then deserialization
     /// uses the field names of structs.
-    pub fn deserializer<'de, D>(&mut self) -> DeserializeRecordsIter<R, D>
-            where D: Deserialize<'de>
+    pub fn deserializer<D>(&mut self) -> DeserializeRecordsIter<R, D>
+            where D: DeserializeOwned
     {
         DeserializeRecordsIter::new(self)
     }
@@ -288,8 +288,8 @@ impl<R: io::Read> Reader<R> {
     /// If `has_headers` is enabled, then this does not include the first
     /// record. Additionally, if `has_headers` is enabled, then deserialization
     /// uses the field names of structs.
-    pub fn into_deserializer<'de, D>(self) -> DeserializeRecordsIntoIter<R, D>
-            where D: Deserialize<'de>
+    pub fn into_deserializer<D>(self) -> DeserializeRecordsIntoIter<R, D>
+            where D: DeserializeOwned
     {
         DeserializeRecordsIntoIter::new(self)
     }
@@ -442,6 +442,9 @@ impl<R: io::Read> Reader<R> {
         record: &mut ByteRecord,
     ) -> Result<bool> {
         if !self.state.has_headers && !self.state.first {
+            // If the caller indicated "no headers" and we haven't yield
+            // the first record yet, then we should yield our header row
+            // if we have one.
             if let Some(ref headers) = self.state.headers {
                 self.state.first = true;
                 record.clone_from(&headers.byte_record);
@@ -456,6 +459,10 @@ impl<R: io::Read> Reader<R> {
             // never return the first row. Instead, we should attempt to
             // read and return the next one.
             if self.state.has_headers {
+                // Since we just read the first row and will treat it as the
+                // special header row, undo the record index increment.
+                let i = self.state.cur_pos.record();
+                self.state.cur_pos.set_record(i.checked_sub(1).unwrap());
                 return self.read_byte_record_impl(record);
             }
         }
@@ -595,7 +602,7 @@ pub struct DeserializeRecordsIntoIter<R, D> {
     _priv: PhantomData<D>,
 }
 
-impl<'de, R: io::Read, D: Deserialize<'de>> DeserializeRecordsIntoIter<R, D> {
+impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
     fn new(mut rdr: Reader<R>) -> DeserializeRecordsIntoIter<R, D> {
         let headers =
             if !rdr.state.has_headers {
@@ -617,7 +624,7 @@ impl<'de, R: io::Read, D: Deserialize<'de>> DeserializeRecordsIntoIter<R, D> {
     }
 }
 
-impl<'de, R: io::Read, D: Deserialize<'de>>
+impl<R: io::Read, D: DeserializeOwned>
     Iterator for DeserializeRecordsIntoIter<R, D>
 {
     type Item = Result<D>;
@@ -644,9 +651,7 @@ pub struct DeserializeRecordsIter<'r, R: 'r, D> {
     _priv: PhantomData<D>,
 }
 
-impl<'de, 'r, R: io::Read, D: Deserialize<'de>>
-    DeserializeRecordsIter<'r, R, D>
-{
+impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
     fn new(rdr: &'r mut Reader<R>) -> DeserializeRecordsIter<'r, R, D> {
         let headers =
             if !rdr.state.has_headers {
@@ -668,7 +673,7 @@ impl<'de, 'r, R: io::Read, D: Deserialize<'de>>
     }
 }
 
-impl<'de, 'r, R: io::Read, D: Deserialize<'de>>
+impl<'r, R: io::Read, D: DeserializeOwned>
     Iterator for DeserializeRecordsIter<'r, R, D>
 {
     type Item = Result<D>;
@@ -1118,5 +1123,38 @@ mod tests {
             .from_reader(io::Cursor::new(data));
         rdr.seek(&Position::new()).unwrap();
         assert_eq!("foo", &rdr.headers().unwrap()[0]);
+    }
+
+    // Test that position info is reported correctly in absence of headers.
+    #[test]
+    fn positions_no_headers() {
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader("a,b,c\nx,y,z".as_bytes())
+            .into_records();
+
+        let pos = rdr.next().unwrap().unwrap().position().unwrap().clone();
+        assert_eq!(pos.byte(), 0);
+        assert_eq!(pos.line(), 1);
+        assert_eq!(pos.record(), 0);
+
+        let pos = rdr.next().unwrap().unwrap().position().unwrap().clone();
+        assert_eq!(pos.byte(), 6);
+        assert_eq!(pos.line(), 2);
+        assert_eq!(pos.record(), 1);
+    }
+
+    // Test that position info is reported correctly with headers.
+    #[test]
+    fn positions_headers() {
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(true)
+            .from_reader("a,b,c\nx,y,z".as_bytes())
+            .into_records();
+
+        let pos = rdr.next().unwrap().unwrap().position().unwrap().clone();
+        assert_eq!(pos.byte(), 6);
+        assert_eq!(pos.line(), 2);
+        assert_eq!(pos.record(), 0);
     }
 }

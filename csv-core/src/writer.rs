@@ -20,9 +20,7 @@ pub enum QuoteStyle {
     /// writing a field that does not parse as a valid float or integer, then
     /// quotes will be used even if they aren't strictly necessary.
     NonNumeric,
-    /// This *never* writes quotes.
-    ///
-    /// If a field requires quotes, then the writer will report an error.
+    /// This *never* writes quotes, even if it would produce invalid CSV data.
     Never,
 }
 
@@ -75,6 +73,9 @@ impl WriterBuilder {
     ///
     /// By default, this is set to `QuoteStyle::Necessary`, which will only
     /// use quotes when they are necessary to preserve the integrity of data.
+    ///
+    /// Note that unless the quote style is set to `Never`, an empty field is
+    /// quoted if it is the only field in a record.
     pub fn quote_style(&mut self, style: QuoteStyle) -> &mut WriterBuilder {
         self.wtr.style = style;
         self
@@ -407,7 +408,7 @@ pub fn is_non_numeric(input: &[u8]) -> bool {
     !s.parse::<f64>().is_ok() && !s.parse::<i64>().is_ok()
 }
 
-/// Escape quotes in `input` and write the result to `output`.
+/// Escape quotes `input` and writes the result to `output`.
 ///
 /// If `input` does not have a `quote`, then the contents of `input` are
 /// copied verbatim to `output`.
