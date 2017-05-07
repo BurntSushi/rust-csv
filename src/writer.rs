@@ -15,8 +15,8 @@ use serializer::serialize;
 /// Builds a CSV writer with various configuration knobs.
 ///
 /// This builder can be used to tweak the field delimiter, record terminator
-/// and more for writing CSV. Once a CSV `Writer` is built, its configuration
-/// cannot be changed.
+/// and more. Once a CSV `Writer` is built, its configuration cannot be
+/// changed.
 #[derive(Debug)]
 pub struct WriterBuilder {
     builder: CoreWriterBuilder,
@@ -41,15 +41,53 @@ impl WriterBuilder {
     ///
     /// To convert a builder into a writer, call one of the methods starting
     /// with `from_`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new().from_writer(vec![]);
+    ///     wtr.write_record(&["a", "b", "c"])?;
+    ///     wtr.write_record(&["x", "y", "z"])?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a,b,c\nx,y,z\n");
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn new() -> WriterBuilder {
         WriterBuilder::default()
     }
 
     /// Build a CSV writer from this configuration that writes data to the
-    /// given file path.
+    /// given file path. The file is truncated if it already exists.
     ///
     /// If there was a problem opening the file at the given path, then this
     /// returns the corresponding error.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new().from_path("foo.csv")?;
+    ///     wtr.write_record(&["a", "b", "c"])?;
+    ///     wtr.write_record(&["x", "y", "z"])?;
+    ///     wtr.flush()?;
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn from_path<P: AsRef<Path>>(&self, path: P) -> Result<Writer<File>> {
         Ok(Writer::new(self, File::create(path)?))
     }
@@ -58,6 +96,26 @@ impl WriterBuilder {
     ///
     /// Note that the CSV writer is buffered automatically, so you should not
     /// wrap `wtr` in a buffered writer like `io::BufWriter`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new().from_writer(vec![]);
+    ///     wtr.write_record(&["a", "b", "c"])?;
+    ///     wtr.write_record(&["x", "y", "z"])?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a,b,c\nx,y,z\n");
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn from_writer<W: io::Write>(&self, wtr: W) -> Writer<W> {
         Writer::new(self, wtr)
     }
@@ -65,6 +123,28 @@ impl WriterBuilder {
     /// The field delimiter to use when writing CSV.
     ///
     /// The default is `b','`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new()
+    ///         .delimiter(b';')
+    ///         .from_writer(vec![]);
+    ///     wtr.write_record(&["a", "b", "c"])?;
+    ///     wtr.write_record(&["x", "y", "z"])?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a;b;c\nx;y;z\n");
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn delimiter(&mut self, delimiter: u8) -> &mut WriterBuilder {
         self.builder.delimiter(delimiter);
         self
@@ -73,13 +153,90 @@ impl WriterBuilder {
     /// Whether to write a header row before writing any other row.
     ///
     /// When this is enabled and the `serialize` method is used to write data
-    /// with something that contains field names (like a struct or a map), then
-    /// a header row is written containing the field names before any other
-    /// row is written.
+    /// with something that contains field names (i.e., a struct), then a
+    /// header row is written containing the field names before any other row
+    /// is written.
     ///
     /// This option has no effect when using other methods to write rows. That
     /// is, if you don't use `serialize`, then you must write your header row
-    /// explicitly if you want it.
+    /// explicitly if you want a header row.
+    ///
+    /// This is enabled by default.
+    ///
+    /// # Example: with headers
+    ///
+    /// This shows how the header will be automatically written from the field
+    /// names of a struct.
+    ///
+    /// ```
+    /// extern crate csv;
+    /// #[macro_use]
+    /// extern crate serde_derive;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// #[derive(Serialize)]
+    /// struct Row<'a> {
+    ///     city: &'a str,
+    ///     country: &'a str,
+    ///     // Serde allows us to name our headers exactly,
+    ///     // even if they don't match our struct field names.
+    ///     #[serde(rename = "popcount")]
+    ///     population: u64,
+    /// }
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new().from_writer(vec![]);
+    ///     wtr.serialize(Row {
+    ///         city: "Boston",
+    ///         country: "United States",
+    ///         population: 4628910,
+    ///     })?;
+    ///     wtr.serialize(Row {
+    ///         city: "Concord",
+    ///         country: "United States",
+    ///         population: 42695,
+    ///     })?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "\
+    ///city,country,popcount
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///");
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// # Example: without headers
+    ///
+    /// This shows that serializing things that aren't structs (in this case,
+    /// a tuple struct) won't result in a header row being written. This means
+    /// you usually don't need to set `has_headers(false)` unless you
+    /// explicitly want to both write custom headers and serialize structs.
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new().from_writer(vec![]);
+    ///     wtr.serialize(("Boston", "United States", 4628910))?;
+    ///     wtr.serialize(("Concord", "United States", 42695))?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "\
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///");
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn has_headers(&mut self, yes: bool) -> &mut WriterBuilder {
         self.has_headers = yes;
         self
@@ -92,6 +249,54 @@ impl WriterBuilder {
     /// number of fields written in a previous record.
     ///
     /// When enabled, this error checking is turned off.
+    ///
+    /// # Example: writing flexible records
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new()
+    ///         .flexible(true)
+    ///         .from_writer(vec![]);
+    ///     wtr.write_record(&["a", "b"])?;
+    ///     wtr.write_record(&["x", "y", "z"])?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a,b\nx,y,z\n");
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// # Example: error when `flexible` is disabled
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new()
+    ///         .flexible(false)
+    ///         .from_writer(vec![]);
+    ///     wtr.write_record(&["a", "b"])?;
+    ///     let err = wtr.write_record(&["x", "y", "z"]).unwrap_err();
+    ///     match err {
+    ///         csv::Error::UnequalLengths { expected_len, len, .. } => {
+    ///             assert_eq!(expected_len, 2);
+    ///             assert_eq!(len, 3);
+    ///         }
+    ///         wrong => panic!("expected UnequalLengths but got {:?}", wrong),
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn flexible(&mut self, yes: bool) -> &mut WriterBuilder {
         self.flexible = yes;
         self
@@ -100,8 +305,33 @@ impl WriterBuilder {
     /// The record terminator to use when writing CSV.
     ///
     /// A record terminator can be any single byte. The default is a special
-    /// value, `Terminator::CRLF`, which treats any occurrence of `\r`, `\n`
-    /// or `\r\n` as a single record terminator.
+    /// value, `Terminator::CRLF`, which uses `\r\n` as the record terminator.
+    ///
+    /// The default is `b'\n'`.
+    ///
+    /// # Example: CRLF
+    ///
+    /// This shows how to use RFC 4180 compliant record terminators.
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{Terminator, WriterBuilder};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new()
+    ///         .terminator(Terminator::CRLF)
+    ///         .from_writer(vec![]);
+    ///     wtr.write_record(&["a", "b", "c"])?;
+    ///     wtr.write_record(&["x", "y", "z"])?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a,b,c\r\nx,y,z\r\n");
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn terminator(
         &mut self,
         term: Terminator,
@@ -115,8 +345,57 @@ impl WriterBuilder {
     /// By default, this is set to `QuoteStyle::Necessary`, which will only
     /// use quotes when they are necessary to preserve the integrity of data.
     ///
-    /// Note that regardless of this setting, an empty field is quoted if it is
-    /// the only field in a record.
+    /// Note that unless the quote style is set to `Never`, an empty field is
+    /// quoted if it is the only field in a record.
+    ///
+    /// # Example: non-numeric quoting
+    ///
+    /// This shows how to quote non-numeric fields only.
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{QuoteStyle, WriterBuilder};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new()
+    ///         .quote_style(QuoteStyle::NonNumeric)
+    ///         .from_writer(vec![]);
+    ///     wtr.write_record(&["a", "5", "c"])?;
+    ///     wtr.write_record(&["3.14", "y", "z"])?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "\"a\",5,\"c\"\n3.14,\"y\",\"z\"\n");
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// # Example: never quote
+    ///
+    /// This shows how the CSV writer can be made to never write quotes, even
+    /// if it sacrifices the integrity of the data.
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{QuoteStyle, WriterBuilder};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new()
+    ///         .quote_style(QuoteStyle::Never)
+    ///         .from_writer(vec![]);
+    ///     wtr.write_record(&["a", "foo\nbar", "c"])?;
+    ///     wtr.write_record(&["g\"h\"i", "y", "z"])?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a,foo\nbar,c\ng\"h\"i,y,z\n");
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn quote_style(&mut self, style: QuoteStyle) -> &mut WriterBuilder {
         self.builder.quote_style(style);
         self
@@ -125,8 +404,61 @@ impl WriterBuilder {
     /// The quote character to use when writing CSV.
     ///
     /// The default is `b'"'`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new()
+    ///         .quote(b'\'')
+    ///         .from_writer(vec![]);
+    ///     wtr.write_record(&["a", "foo\nbar", "c"])?;
+    ///     wtr.write_record(&["g'h'i", "y\"y\"y", "z"])?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a,'foo\nbar',c\n'g''h''i',y\"y\"y,z\n");
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn quote(&mut self, quote: u8) -> &mut WriterBuilder {
         self.builder.quote(quote);
+        self
+    }
+
+    /// Enable double quote escapes.
+    ///
+    /// This is enabled by default, but it may be disabled. When disabled,
+    /// quotes in field data are escaped instead of doubled.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new()
+    ///         .double_quote(false)
+    ///         .from_writer(vec![]);
+    ///     wtr.write_record(&["a", "foo\"bar", "c"])?;
+    ///     wtr.write_record(&["x", "y", "z"])?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a,\"foo\\\"bar\",c\nx,y,z\n");
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn double_quote(&mut self, yes: bool) -> &mut WriterBuilder {
+        self.builder.double_quote(yes);
         self
     }
 
@@ -137,27 +469,60 @@ impl WriterBuilder {
     ///
     /// By default, writing these idiosyncratic escapes is disabled, and is
     /// only used when `double_quote` is disabled.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new()
+    ///         .double_quote(false)
+    ///         .escape(b'$')
+    ///         .from_writer(vec![]);
+    ///     wtr.write_record(&["a", "foo\"bar", "c"])?;
+    ///     wtr.write_record(&["x", "y", "z"])?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a,\"foo$\"bar\",c\nx,y,z\n");
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn escape(&mut self, escape: u8) -> &mut WriterBuilder {
         self.builder.escape(escape);
         self
     }
 
-    /// Enable double quote escapes.
-    ///
-    /// This is enabled by default, but it may be disabled. When disabled,
-    /// quotes in field data are escaped instead of doubled.
-    pub fn double_quote(&mut self, yes: bool) -> &mut WriterBuilder {
-        self.builder.double_quote(yes);
-        self
-    }
-
-    /// Set the capacity (in bytes) of the buffer used in the CSV writer.
+    /// Set the capacity (in bytes) of the internal buffer used in the CSV
+    /// writer. This defaults to a reasonable setting.
     pub fn buffer_capacity(&mut self, capacity: usize) -> &mut WriterBuilder {
         self.capacity = capacity;
         self
     }
 }
 
+/// A already configured CSV writer.
+///
+/// While CSV writing is considerably easier than parsing CSV, a proper writer
+/// will do a number of things for you:
+///
+/// 1. Quote fields when necessary.
+/// 2. Check that all records have the same number of fields.
+/// 3. Write records with a single empty field correctly.
+/// 4. Automatically serialize normal Rust types to CSV records. When that
+///    type is a struct, a header row is automatically written corresponding
+///    to the fields of that struct.
+/// 5. Use buffering intelligently and otherwise avoid allocation. (This means
+///    that callers should not do their own buffering.)
+///
+/// All of the above can be configured using a
+/// [`WriterBuilder`](struct.WriterBuilder.html).
+/// However, a `Writer` has a couple of convenience constructors (`from_path`
+/// and `from_writer`) that use the default configuration.
 #[derive(Debug)]
 pub struct Writer<W: io::Write> {
     core: CoreWriter,
@@ -185,11 +550,19 @@ struct WriterState {
     panicked: bool,
 }
 
+/// HeaderState encodes a small state machine for handling header writes.
 #[derive(Debug)]
 enum HeaderState {
-    None,
+    /// Indicates that we should attempt to write a header.
     Write,
-    Done,
+    /// Indicates that writing a header was attempt, and a header was written.
+    DidWrite,
+    /// Indicates that writing a header was attempted, but no headers were
+    /// written.
+    DidNotWrite,
+    /// This state is used when headers are disabled. It cannot transition
+    /// to any other state.
+    None,
 }
 
 /// A simple internal buffer for buffering writes.
@@ -209,6 +582,35 @@ impl<W: io::Write> Drop for Writer<W> {
         if self.wtr.is_some() && !self.state.panicked {
             let _ = self.flush();
         }
+    }
+}
+
+impl Writer<File> {
+    /// Build a CSV writer with a default configuration that writes data to the
+    /// given file path. The file is truncated if it already exists.
+    ///
+    /// If there was a problem opening the file at the given path, then this
+    /// returns the corresponding error.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::Writer;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = Writer::from_path("foo.csv")?;
+    ///     wtr.write_record(&["a", "b", "c"])?;
+    ///     wtr.write_record(&["x", "y", "z"])?;
+    ///     wtr.flush()?;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Writer<File>> {
+        WriterBuilder::new().from_path(path)
     }
 }
 
@@ -237,37 +639,208 @@ impl<W: io::Write> Writer<W> {
         }
     }
 
-    /// Build a CSV writer with a default configuration that writes data to the
-    /// given file path.
-    ///
-    /// If there was a problem opening the file at the given path, then this
-    /// returns the corresponding error.
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Writer<File>> {
-        WriterBuilder::new().from_path(path)
-    }
-
     /// Build a CSV writer with a default configuration that writes data to
     /// `wtr`.
     ///
     /// Note that the CSV writer is buffered automatically, so you should not
     /// wrap `wtr` in a buffered writer like `io::BufWriter`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::Writer;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = Writer::from_writer(vec![]);
+    ///     wtr.write_record(&["a", "b", "c"])?;
+    ///     wtr.write_record(&["x", "y", "z"])?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a,b,c\nx,y,z\n");
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn from_writer(wtr: W) -> Writer<W> {
         WriterBuilder::new().from_writer(wtr)
     }
 
-    /// Serialize a single record.
+    /// Serialize a single record using Serde.
+    ///
+    /// # Example
+    ///
+    /// This shows how to serialize normal Rust structs as CSV records. The
+    /// fields of the struct are used to write a header row automatically.
+    /// (Writing the header row automatically can be disabled by building the
+    /// CSV writer with a [`WriterBuilder`](struct.WriterBuilder.html) and
+    /// calling the `has_headers` method.)
+    ///
+    /// ```
+    /// extern crate csv;
+    /// #[macro_use]
+    /// extern crate serde_derive;
+    ///
+    /// use std::error::Error;
+    /// use csv::Writer;
+    ///
+    /// #[derive(Serialize)]
+    /// struct Row<'a> {
+    ///     city: &'a str,
+    ///     country: &'a str,
+    ///     // Serde allows us to name our headers exactly,
+    ///     // even if they don't match our struct field names.
+    ///     #[serde(rename = "popcount")]
+    ///     population: u64,
+    /// }
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = Writer::from_writer(vec![]);
+    ///     wtr.serialize(Row {
+    ///         city: "Boston",
+    ///         country: "United States",
+    ///         population: 4628910,
+    ///     })?;
+    ///     wtr.serialize(Row {
+    ///         city: "Concord",
+    ///         country: "United States",
+    ///         population: 42695,
+    ///     })?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "\
+    ///city,country,popcount
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///");
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// # Rules
+    ///
+    /// For the most part, any Rust type that maps straight-forwardly to a CSV
+    /// record is supported. This includes structs, tuples and tuple structs.
+    /// Other Rust types, such as `Vec`s, arrays, maps and enums have a more
+    /// complicated story. In general, when working with CSV data, one should
+    /// avoid *nested sequences* as much as possible.
+    ///
+    /// Structs, tuples and tuple structs map to CSV records in a simple way.
+    /// Tuples and tuple structs encode their fields in the order that they
+    /// are defined. Structs will do the same only if `has_headers` has been
+    /// disabled using [`WriterBuilder`](struct.WriterBuilder.html).
+    ///
+    /// Nested sequences are supported in a limited capacity. Namely, they
+    /// are flattened only when headers are not being written automatically.
+    /// For example:
+    ///
+    /// ```
+    /// extern crate csv;
+    /// #[macro_use]
+    /// extern crate serde_derive;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// #[derive(Serialize)]
+    /// struct Row {
+    ///     label: String,
+    ///     values: Vec<f64>,
+    /// }
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new()
+    ///         .has_headers(false)
+    ///         .from_writer(vec![]);
+    ///     wtr.serialize(Row {
+    ///         label: "foo".to_string(),
+    ///         values: vec![1.1234, 2.5678, 3.14],
+    ///     })?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "\
+    ///foo,1.1234,2.5678,3.14
+    ///");
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// If `has_headers` were enabled in the above example, then serialization
+    /// would return an error. This applies to all forms of nested composite
+    /// types because there's no obvious way to write headers that are in
+    /// correspondence with the records.
+    ///
+    /// Simple enums in Rust can be serialized. Namely, enums must either be
+    /// variants with no arguments or variants with a single argument. For
+    /// example, to serialize a field from either an integer or a float type,
+    /// one can do this:
+    ///
+    /// ```
+    /// extern crate csv;
+    /// #[macro_use]
+    /// extern crate serde_derive;
+    ///
+    /// use std::error::Error;
+    /// use csv::Writer;
+    ///
+    /// #[derive(Serialize)]
+    /// struct Row {
+    ///     label: String,
+    ///     value: Value,
+    /// }
+    ///
+    /// #[derive(Serialize)]
+    /// enum Value {
+    ///     Integer(i64),
+    ///     Float(f64),
+    /// }
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = Writer::from_writer(vec![]);
+    ///     wtr.serialize(Row {
+    ///         label: "foo".to_string(),
+    ///         value: Value::Integer(3),
+    ///     })?;
+    ///     wtr.serialize(Row {
+    ///         label: "bar".to_string(),
+    ///         value: Value::Float(3.14),
+    ///     })?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "\
+    ///label,value
+    ///foo,3
+    ///bar,3.14
+    ///");
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn serialize<S: Serialize>(&mut self, mut record: S) -> Result<()> {
         match self.state.header {
-            HeaderState::None | HeaderState::Done => {
-                serialize(self, record, false)?;
+            HeaderState::None | HeaderState::DidNotWrite => {
+                serialize(self, record, false, false)?;
+                self.write_terminator()?;
+            }
+            HeaderState::DidWrite => {
+                serialize(self, record, false, true)?;
                 self.write_terminator()?;
             }
             HeaderState::Write => {
-                let did = serialize(self, &mut record, true)?;
-                self.state.header = HeaderState::Done;
+                let did = serialize(self, &mut record, true, false)?;
+                self.state.header =
+                    if did {
+                        HeaderState::DidWrite
+                    } else {
+                        HeaderState::DidNotWrite
+                    };
                 self.write_terminator()?;
                 if did {
-                    serialize(self, record, false)?;
+                    serialize(self, record, false, true)?;
                     self.write_terminator()?;
                 }
             }
@@ -276,6 +849,33 @@ impl<W: io::Write> Writer<W> {
     }
 
     /// Write a single record.
+    ///
+    /// This method accepts something that can be turned into an iterator that
+    /// yields elements that can be represented by a `&[u8]`.
+    ///
+    /// This may be called with an empty iterator, which will cause a record
+    /// terminator to be written. If no fields had been written, then a single
+    /// empty field is written before the terminator.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::Writer;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = Writer::from_writer(vec![]);
+    ///     wtr.write_record(&["a", "b", "c"])?;
+    ///     wtr.write_record(&["x", "y", "z"])?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a,b,c\nx,y,z\n");
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn write_record<I, T>(&mut self, record: I) -> Result<()>
         where I: IntoIterator<Item=T>, T: AsRef<[u8]>
     {
@@ -293,6 +893,32 @@ impl<W: io::Write> Writer<W> {
     ///
     /// Note that if this API is used, `write_record` should be called with an
     /// empty iterator to write a record terminator.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::Writer;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = Writer::from_writer(vec![]);
+    ///     wtr.write_field("a")?;
+    ///     wtr.write_field("b")?;
+    ///     wtr.write_field("c")?;
+    ///     wtr.write_record(None::<&[u8]>)?;
+    ///     wtr.write_field("x")?;
+    ///     wtr.write_field("y")?;
+    ///     wtr.write_field("z")?;
+    ///     wtr.write_record(None::<&[u8]>)?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a,b,c\nx,y,z\n");
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn write_field<T: AsRef<[u8]>>(&mut self, field: T) -> Result<()> {
         if self.state.fields_written > 0 {
             self.write_delimiter()?;

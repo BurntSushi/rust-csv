@@ -21,4 +21,5 @@ mod error;
 mod reader;
 mod serializer;
 mod string_record;
+pub mod tutorial;
 mod writer;
