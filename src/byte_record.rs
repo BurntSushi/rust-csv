@@ -1,4 +1,6 @@
+use std::ascii;
 use std::cmp;
+use std::fmt;
 use std::iter::FromIterator;
 use std::ops::{self, Range};
 use std::result;
@@ -64,6 +66,25 @@ pub fn validate(record: &ByteRecord) -> result::Result<(), Utf8Error> {
     Ok(())
 }
 
+/// Compare the given byte record with the iterator of fields for equality.
+pub fn eq<I, T>(record: &ByteRecord, other: I) -> bool
+    where I: IntoIterator<Item=T>, T: AsRef<[u8]>
+{
+    let mut it_record = record.iter();
+    let mut it_other = other.into_iter();
+    loop {
+        match (it_record.next(), it_other.next()) {
+            (None, None) => return true,
+            (None, Some(_)) | (Some(_), None) => return false,
+            (Some(x), Some(y)) => {
+                if x != y.as_ref() {
+                    return false;
+                }
+            }
+        }
+    }
+}
+
 /// A single CSV record stored as raw bytes.
 ///
 /// A byte record permits reading or writing CSV rows that are not UTF-8.
@@ -72,10 +93,48 @@ pub fn validate(record: &ByteRecord) -> result::Result<(), Utf8Error> {
 /// since it is more ergonomic, but a `ByteRecord` is provided in case you need
 /// it.
 ///
-/// Note that if you are using the Serde (de)serialization APIs, then you
-/// probably never need to interact with a `ByteRecord` or a `StringRecord`.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// If you are using the Serde (de)serialization APIs, then you probably never
+/// need to interact with a `ByteRecord` or a `StringRecord`.
+///
+/// Two `ByteRecord`s are compared on the basis of their field data. Any
+/// position information associated with the records is ignored.
+#[derive(Clone, Eq)]
 pub struct ByteRecord(Box<ByteRecordInner>);
+
+impl PartialEq for ByteRecord {
+    fn eq(&self, other: &ByteRecord) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+
+impl<T: AsRef<[u8]>> PartialEq<Vec<T>> for ByteRecord {
+    fn eq(&self, other: &Vec<T>) -> bool {
+        eq(self, other)
+    }
+}
+
+impl<T: AsRef<[u8]>> PartialEq<[T]> for ByteRecord {
+    fn eq(&self, other: &[T]) -> bool {
+        eq(self, other)
+    }
+}
+
+impl fmt::Debug for ByteRecord {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut fields = vec![];
+        for field in self {
+            let escaped: Vec<u8> = field
+                .iter()
+                .flat_map(|&b| ascii::escape_default(b))
+                .collect();
+            fields.push(String::from_utf8(escaped).unwrap());
+        }
+        f.debug_struct("ByteRecord")
+         .field("position", &self.0.pos)
+         .field("fields", &fields)
+         .finish()
+    }
+}
 
 /// The inner portion of a byte record.
 ///

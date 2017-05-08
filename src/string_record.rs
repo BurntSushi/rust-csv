@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io;
 use std::iter::FromIterator;
 use std::ops::{self, Range};
@@ -55,10 +56,41 @@ pub fn read<R: io::Read>(
 /// [`ByteRecord`](struct.ByteRecord.html),
 /// since it makes no assumptions about UTF-8.
 ///
-/// Note that if you are using the Serde (de)serialization APIs, then you
-/// probably never need to interact with a `ByteRecord` or a `StringRecord`.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// If you are using the Serde (de)serialization APIs, then you probably never
+/// need to interact with a `ByteRecord` or a `StringRecord`.
+///
+/// Two `StringRecord`s are compared on the basis of their field data. Any
+/// position information associated with the records is ignored.
+#[derive(Clone, Eq)]
 pub struct StringRecord(ByteRecord);
+
+impl PartialEq for StringRecord {
+    fn eq(&self, other: &StringRecord) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+
+impl<T: AsRef<[u8]>> PartialEq<Vec<T>> for StringRecord {
+    fn eq(&self, other: &Vec<T>) -> bool {
+        byte_record::eq(&self.0, other)
+    }
+}
+
+impl<T: AsRef<[u8]>> PartialEq<[T]> for StringRecord {
+    fn eq(&self, other: &[T]) -> bool {
+        byte_record::eq(&self.0, other)
+    }
+}
+
+impl fmt::Debug for StringRecord {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let fields: Vec<&str> = self.iter().collect();
+        f.debug_struct("StringRecord")
+         .field("position", &self.position())
+         .field("fields", &fields)
+         .finish()
+    }
+}
 
 impl Default for StringRecord {
     #[inline]
