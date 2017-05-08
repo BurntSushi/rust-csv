@@ -118,7 +118,7 @@ impl ReaderBuilder {
     /// extern crate csv;
     ///
     /// use std::error::Error;
-    /// use csv::{ReaderBuilder, StringRecord};
+    /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
@@ -149,7 +149,7 @@ impl ReaderBuilder {
     /// extern crate csv;
     ///
     /// use std::error::Error;
-    /// use csv::{ReaderBuilder, StringRecord};
+    /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
@@ -194,7 +194,7 @@ impl ReaderBuilder {
     /// extern crate csv;
     ///
     /// use std::error::Error;
-    /// use csv::{ReaderBuilder, StringRecord};
+    /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
@@ -239,6 +239,80 @@ impl ReaderBuilder {
     /// number of fields in a previous record.
     ///
     /// When enabled, this error checking is turned off.
+    ///
+    /// # Example: flexible records enabled
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     // Notice that the first row is missing the population count.
+    ///     let mut data = "\
+    ///city,country,pop
+    ///Boston,United States
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .flexible(true)
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// # Example: flexible records disabled
+    ///
+    /// This shows the error that appears when records of unequal length
+    /// are found and flexible records have been disabled (which is the
+    /// default).
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     // Notice that the first row is missing the population count.
+    ///     let mut data = "\
+    ///city,country,pop
+    ///Boston,United States
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .flexible(false)
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(Err(err)) = rdr.records().next() {
+    ///         match err {
+    ///             csv::Error::UnequalLengths { expected_len, len, .. } => {
+    ///                 // The header row has 3 fields...
+    ///                 assert_eq!(expected_len, 3);
+    ///                 // ... but the first row has only 2 fields.
+    ///                 assert_eq!(len, 2);
+    ///                 Ok(())
+    ///             }
+    ///             wrong => {
+    ///                 Err(From::from(format!(
+    ///                     "expected UnequalLengths error but got {:?}",
+    ///                     wrong)))
+    ///             }
+    ///         }
+    ///     } else {
+    ///         Err(From::from(
+    ///             "expected at least one errored record but got none"))
+    ///     }
+    /// }
+    /// ```
     pub fn flexible(&mut self, yes: bool) -> &mut ReaderBuilder {
         self.flexible = yes;
         self
@@ -249,6 +323,31 @@ impl ReaderBuilder {
     /// A record terminator can be any single byte. The default is a special
     /// value, `Terminator::CRLF`, which treats any occurrence of `\r`, `\n`
     /// or `\r\n` as a single record terminator.
+    ///
+    /// # Example: `$` as a record terminator
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{ReaderBuilder, Terminator};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut data = "city,country,pop$Boston,United States,4628910";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .terminator(Terminator::Any(b'$'))
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
     pub fn terminator(
         &mut self,
         term: Terminator,
@@ -260,6 +359,34 @@ impl ReaderBuilder {
     /// The quote character to use when parsing CSV.
     ///
     /// The default is `b'"'`.
+    ///
+    /// # Example: single quotes instead of double quotes
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut data = "\
+    ///city,country,pop
+    ///Boston,'United States',4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .quote(b'\'')
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
     pub fn quote(&mut self, quote: u8) -> &mut ReaderBuilder {
         self.builder.quote(quote);
         self
@@ -271,6 +398,36 @@ impl ReaderBuilder {
     /// character like `\` (instead of escaping quotes by doubling them).
     ///
     /// By default, recognizing these idiosyncratic escapes is disabled.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut data = "\
+    ///city,country,pop
+    ///Boston,\"The \\\"United\\\" States\",4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .escape(Some(b'\\'))
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec![
+    ///             "Boston", "The \"United\" States", "4628910",
+    ///         ]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
     pub fn escape(&mut self, escape: Option<u8>) -> &mut ReaderBuilder {
         self.builder.escape(escape);
         self
@@ -280,6 +437,36 @@ impl ReaderBuilder {
     ///
     /// This is enabled by default, but it may be disabled. When disabled,
     /// doubled quotes are not interpreted as escapes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut data = "\
+    ///city,country,pop
+    ///Boston,\"The \"\"United\"\" States\",4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .double_quote(false)
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec![
+    ///             "Boston", "The \"United\"\" States\"", "4628910",
+    ///         ]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
     pub fn double_quote(&mut self, yes: bool) -> &mut ReaderBuilder {
         self.builder.double_quote(yes);
         self
@@ -291,6 +478,35 @@ impl ReaderBuilder {
     /// line is ignored by the CSV parser.
     ///
     /// This is disabled by default.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut data = "\
+    ///city,country,pop
+    ///#Concord,United States,42695
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .comment(Some(b'#'))
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
     pub fn comment(&mut self, comment: Option<u8>) -> &mut ReaderBuilder {
         self.builder.comment(comment);
         self
@@ -301,12 +517,39 @@ impl ReaderBuilder {
     ///
     /// This sets the delimiter and record terminator to the ASCII unit
     /// separator (`\x1F`) and record separator (`\x1E`), respectively.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut data = "\
+    ///city\x1Fcountry\x1Fpop\x1EBoston\x1FUnited States\x1F4628910";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .ascii()
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
     pub fn ascii(&mut self) -> &mut ReaderBuilder {
         self.builder.ascii();
         self
     }
 
     /// Set the capacity (in bytes) of the buffer used in the CSV reader.
+    /// This defaults to a reasonable setting.
     pub fn buffer_capacity(&mut self, capacity: usize) -> &mut ReaderBuilder {
         self.capacity = capacity;
         self
@@ -314,8 +557,8 @@ impl ReaderBuilder {
 
     /// Enable or disable the NFA for parsing CSV.
     ///
-    /// This is intended to be a debug option useful for debugging. The NFA
-    /// is always slower than the DFA.
+    /// This is intended to be a debug option. The NFA is always slower than
+    /// the DFA.
     #[doc(hidden)]
     pub fn nfa(&mut self, yes: bool) -> &mut ReaderBuilder {
         self.builder.nfa(yes);
