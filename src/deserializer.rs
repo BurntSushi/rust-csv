@@ -607,12 +607,14 @@ impl<'a, 'de: 'a, T: DeRecord<'de>>
     }
 }
 
+/// An Serde deserialization error.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeserializeError {
     field: Option<u64>,
     kind: DeserializeErrorKind,
 }
 
+/// The type of a Serde deserialization error.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeserializeErrorKind {
     Message(String),

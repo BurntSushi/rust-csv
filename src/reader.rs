@@ -16,28 +16,28 @@ use string_record::{self, StringRecord};
 /// Builds a CSV reader with various configuration knobs.
 ///
 /// This builder can be used to tweak the field delimiter, record terminator
-/// and more for parsing CSV. Once a CSV `Reader` is built, its configuration
-/// cannot be changed.
+/// and more. Once a CSV `Reader` is built, its configuration cannot be
+/// changed.
 #[derive(Debug)]
 pub struct ReaderBuilder {
+    capacity: usize,
+    flexible: bool,
+    has_headers: bool,
     /// The underlying CSV parser builder.
     ///
     /// We explicitly put this on the heap because CoreReaderBuilder embeds an
     /// entire DFA transition table, which along with other things, tallies up
     /// to almost 500 bytes on the stack.
     builder: Box<CoreReaderBuilder>,
-    capacity: usize,
-    flexible: bool,
-    has_headers: bool,
 }
 
 impl Default for ReaderBuilder {
     fn default() -> ReaderBuilder {
         ReaderBuilder {
-            builder: Box::new(CoreReaderBuilder::default()),
             capacity: 8 * (1<<10),
             flexible: false,
             has_headers: true,
+            builder: Box::new(CoreReaderBuilder::default()),
         }
     }
 }
@@ -47,6 +47,34 @@ impl ReaderBuilder {
     ///
     /// To convert a builder into a reader, call one of the methods starting
     /// with `from_`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{ReaderBuilder, StringRecord};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///";
+    ///     let mut rdr = ReaderBuilder::new().from_reader(data.as_bytes());
+    ///
+    ///     let records = rdr
+    ///         .records()
+    ///         .collect::<Result<Vec<StringRecord>, csv::Error>>()?;
+    ///     assert_eq!(records, vec![
+    ///         vec!["Boston", "United States", "4628910"],
+    ///         vec!["Concord", "United States", "42695"],
+    ///     ]);
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn new() -> ReaderBuilder {
         ReaderBuilder::default()
     }
@@ -56,6 +84,25 @@ impl ReaderBuilder {
     ///
     /// If there was a problem opening the file at the given path, then this
     /// returns the corresponding error.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut rdr = ReaderBuilder::new().from_path("foo.csv")?;
+    ///     for result in rdr.records() {
+    ///         let record = result?;
+    ///         println!("{:?}", record);
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn from_path<P: AsRef<Path>>(&self, path: P) -> Result<Reader<File>> {
         Ok(Reader::new(self, File::open(path)?))
     }
@@ -64,6 +111,30 @@ impl ReaderBuilder {
     ///
     /// Note that the CSV reader is buffered automatically, so you should not
     /// wrap `rdr` in a buffered reader like `io::BufReader`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{ReaderBuilder, StringRecord};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///";
+    ///     let mut rdr = ReaderBuilder::new().from_reader(data.as_bytes());
+    ///     for result in rdr.records() {
+    ///         let record = result?;
+    ///         println!("{:?}", record);
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn from_reader<R: io::Read>(&self, rdr: R) -> Reader<R> {
         Reader::new(self, rdr)
     }
@@ -71,6 +142,34 @@ impl ReaderBuilder {
     /// The field delimiter to use when parsing CSV.
     ///
     /// The default is `b','`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{ReaderBuilder, StringRecord};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut data = "\
+    ///city;country;pop
+    ///Boston;United States;4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .delimiter(b';')
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
     pub fn delimiter(&mut self, delimiter: u8) -> &mut ReaderBuilder {
         self.builder.delimiter(delimiter);
         self
@@ -85,6 +184,49 @@ impl ReaderBuilder {
     ///
     /// Note that the `headers` and `byte_headers` methods are unaffected by
     /// whether this is set. Those methods always return the first record.
+    ///
+    /// # Example
+    ///
+    /// This example shows what happens when `has_headers` is disabled.
+    /// Namely, the first row is treated just like any other row.
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{ReaderBuilder, StringRecord};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .has_headers(false)
+    ///         .from_reader(data.as_bytes());
+    ///     let mut iter = rdr.records();
+    ///
+    ///     // Read the first record.
+    ///     if let Some(result) = iter.next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["city", "country", "pop"]);
+    ///     } else {
+    ///         return Err(From::from(
+    ///             "expected at least two records but got none"));
+    ///     }
+    ///
+    ///     // Read the second record.
+    ///     if let Some(result) = iter.next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///     } else {
+    ///         return Err(From::from(
+    ///             "expected at least two records but got one"))
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn has_headers(&mut self, yes: bool) -> &mut ReaderBuilder {
         self.has_headers = yes;
         self

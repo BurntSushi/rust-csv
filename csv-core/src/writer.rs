@@ -11,8 +11,9 @@ pub enum QuoteStyle {
     Always,
     /// This puts quotes around fields only when necessary.
     ///
-    /// They are necessary when fields are empty or contain a quote, delimiter
-    /// or record terminator.
+    /// They are necessary when fields contain a quote, delimiter or record
+    /// terminator. Quotes are also necessary when writing an empty record
+    /// (which is indistinguishable from a record with one empty field).
     ///
     /// This is the default.
     Necessary,
