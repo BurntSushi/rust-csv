@@ -279,7 +279,7 @@ fn count_deserialize_owned_str<R, D>(rdr: &mut Reader<R>) -> u64
     where R: io::Read, D: DeserializeOwned
 {
     let mut count = 0;
-    for rec in rdr.deserializer::<D>() {
+    for rec in rdr.deserialize::<D>() {
         let _ = rec.unwrap();
         count += 1;
     }
