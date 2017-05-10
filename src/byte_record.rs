@@ -113,7 +113,19 @@ impl<T: AsRef<[u8]>> PartialEq<Vec<T>> for ByteRecord {
     }
 }
 
+impl<'a, T: AsRef<[u8]>> PartialEq<Vec<T>> for &'a ByteRecord {
+    fn eq(&self, other: &Vec<T>) -> bool {
+        eq(self, other)
+    }
+}
+
 impl<T: AsRef<[u8]>> PartialEq<[T]> for ByteRecord {
+    fn eq(&self, other: &[T]) -> bool {
+        eq(self, other)
+    }
+}
+
+impl<'a, T: AsRef<[u8]>> PartialEq<[T]> for &'a ByteRecord {
     fn eq(&self, other: &[T]) -> bool {
         eq(self, other)
     }

@@ -1037,6 +1037,25 @@ mod tests {
     }
 
     #[test]
+    fn option_invalid_field() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Foo {
+            #[serde(deserialize_with = "::invalid_option")]
+            a: Option<i32>,
+            #[serde(deserialize_with = "::invalid_option")]
+            b: Option<i32>,
+            #[serde(deserialize_with = "::invalid_option")]
+            c: Option<i32>,
+        }
+
+        let got: Foo = de_headers(
+            &["a", "b", "c"],
+            &["xyz", "", "5"],
+        ).unwrap();
+        assert_eq!(got, Foo { a: None, b: None, c: Some(5) });
+    }
+
+    #[test]
     fn borrowed() {
         #[derive(Deserialize, Debug, PartialEq)]
         struct Foo<'a, 'c> {

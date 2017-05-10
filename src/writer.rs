@@ -507,6 +507,9 @@ impl WriterBuilder {
 
 /// A already configured CSV writer.
 ///
+/// A CSV writer takes as input Rust values and writes those values in a valid
+/// CSV format as output.
+///
 /// While CSV writing is considerably easier than parsing CSV, a proper writer
 /// will do a number of things for you:
 ///

@@ -76,7 +76,19 @@ impl<T: AsRef<[u8]>> PartialEq<Vec<T>> for StringRecord {
     }
 }
 
+impl<'a, T: AsRef<[u8]>> PartialEq<Vec<T>> for &'a StringRecord {
+    fn eq(&self, other: &Vec<T>) -> bool {
+        byte_record::eq(&self.0, other)
+    }
+}
+
 impl<T: AsRef<[u8]>> PartialEq<[T]> for StringRecord {
+    fn eq(&self, other: &[T]) -> bool {
+        byte_record::eq(&self.0, other)
+    }
+}
+
+impl<'a, T: AsRef<[u8]>> PartialEq<[T]> for &'a StringRecord {
     fn eq(&self, other: &[T]) -> bool {
         byte_record::eq(&self.0, other)
     }
