@@ -941,13 +941,14 @@ impl Reader {
         // ~5KB. This is a lot to put on the stack, even though it probably
         // fits in the L1 cache of most modern CPUs.
         //
-        // To avoid this, we note that while our "true" alpha has 256 distinct
-        // possibilities, the DFA itself is only discriminatory on a very small
-        // subset of that alphabet. For example, assuming neither `a` nor `b`
-        // are set as special quote/comment/escape/delimiter/terminator
-        // bytes, they are otherwise indistinguishable to the DFA, so it would
-        // be OK to treat them as if they were equivalent. That is, they are
-        // in the same equivalence class.
+        // To avoid this, we note that while our "true" alphabet
+        // has 256 distinct possibilities, the DFA itself is only
+        // discriminatory on a very small subset of that alphabet. For
+        // example, assuming neither `a` nor `b` are set as special
+        // quote/comment/escape/delimiter/terminator bytes, they are otherwise
+        // indistinguishable to the DFA, so it would be OK to treat them as
+        // if they were equivalent. That is, they are in the same equivalence
+        // class.
         //
         // As it turns out, using this logic, we can shrink our effective
         // alphabet down to 7 equivalence classes:
