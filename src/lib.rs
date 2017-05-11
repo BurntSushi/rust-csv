@@ -1,3 +1,9 @@
+/*!
+Docs.
+*/
+
+#![deny(missing_docs)]
+
 extern crate csv_core;
 extern crate serde;
 #[cfg(test)]

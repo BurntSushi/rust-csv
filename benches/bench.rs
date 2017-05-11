@@ -166,7 +166,7 @@ macro_rules! bench_serde_borrowed_bytes {
                     .from_reader(data);
                 let mut count = 0;
                 let mut rec = ByteRecord::new();
-                while !rdr.read_byte_record(&mut rec).unwrap() {
+                while rdr.read_byte_record(&mut rec).unwrap() {
                     let _: $type = rec.deserialize(None).unwrap();
                     count += 1;
                 }
@@ -188,7 +188,7 @@ macro_rules! bench_serde_borrowed_str {
                     .from_reader(data);
                 let mut count = 0;
                 let mut rec = StringRecord::new();
-                while !rdr.read_record(&mut rec).unwrap() {
+                while rdr.read_record(&mut rec).unwrap() {
                     let _: $type = rec.deserialize(None).unwrap();
                     count += 1;
                 }
@@ -268,7 +268,7 @@ fn count_deserialize_owned_bytes<R, D>(rdr: &mut Reader<R>) -> u64
 {
     let mut count = 0;
     let mut rec = ByteRecord::new();
-    while !rdr.read_byte_record(&mut rec).unwrap() {
+    while rdr.read_byte_record(&mut rec).unwrap() {
         let _: D = rec.deserialize(None).unwrap();
         count += 1;
     }
@@ -305,7 +305,7 @@ fn count_iter_str<R: io::Read>(rdr: &mut Reader<R>) -> u64 {
 fn count_read_bytes<R: io::Read>(rdr: &mut Reader<R>) -> u64 {
     let mut count = 0;
     let mut rec = ByteRecord::new();
-    while !rdr.read_byte_record(&mut rec).unwrap() {
+    while rdr.read_byte_record(&mut rec).unwrap() {
         count += rec.as_slice().len() as u64;
     }
     count
@@ -314,7 +314,7 @@ fn count_read_bytes<R: io::Read>(rdr: &mut Reader<R>) -> u64 {
 fn count_read_str<R: io::Read>(rdr: &mut Reader<R>) -> u64 {
     let mut count = 0;
     let mut rec = StringRecord::new();
-    while !rdr.read_record(&mut rec).unwrap() {
+    while rdr.read_record(&mut rec).unwrap() {
         count += rec.as_slice().len() as u64;
     }
     count

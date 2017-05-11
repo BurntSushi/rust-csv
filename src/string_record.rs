@@ -458,7 +458,7 @@ impl StringRecord {
     ///         .has_headers(false)
     ///         .from_reader("a,b,c\nx,y,z".as_bytes());
     ///
-    ///     assert!(!rdr.read_record(&mut record)?);
+    ///     assert!(rdr.read_record(&mut record)?);
     ///     {
     ///         let pos = record.position().expect("a record position");
     ///         assert_eq!(pos.byte(), 0);
@@ -466,7 +466,7 @@ impl StringRecord {
     ///         assert_eq!(pos.record(), 0);
     ///     }
     ///
-    ///     assert!(!rdr.read_record(&mut record)?);
+    ///     assert!(rdr.read_record(&mut record)?);
     ///     {
     ///         let pos = record.position().expect("a record position");
     ///         assert_eq!(pos.byte(), 6);
@@ -475,7 +475,7 @@ impl StringRecord {
     ///     }
     ///
     ///     // Finish the CSV reader for good measure.
-    ///     assert!(rdr.read_record(&mut record)?);
+    ///     assert!(!rdr.read_record(&mut record)?);
     ///     Ok(())
     /// }
     /// ```
