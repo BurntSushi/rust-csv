@@ -58,7 +58,7 @@ impl ReaderBuilder {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States,4628910
     ///Concord,United States,42695
@@ -122,7 +122,7 @@ impl ReaderBuilder {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States,4628910
     ///Concord,United States,42695
@@ -153,7 +153,7 @@ impl ReaderBuilder {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city;country;pop
     ///Boston;United States;4628910
     ///";
@@ -198,7 +198,7 @@ impl ReaderBuilder {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States,4628910
     ///";
@@ -251,7 +251,7 @@ impl ReaderBuilder {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     // Notice that the first row is missing the population count.
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States
     ///";
@@ -284,7 +284,7 @@ impl ReaderBuilder {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     // Notice that the first row is missing the population count.
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States
     ///";
@@ -334,7 +334,7 @@ impl ReaderBuilder {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "city,country,pop$Boston,United States,4628910";
+    ///     let data = "city,country,pop$Boston,United States,4628910";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .terminator(Terminator::Any(b'$'))
     ///         .from_reader(data.as_bytes());
@@ -370,7 +370,7 @@ impl ReaderBuilder {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,'United States',4628910
     ///";
@@ -409,7 +409,7 @@ impl ReaderBuilder {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,\"The \\\"United\\\" States\",4628910
     ///";
@@ -448,7 +448,7 @@ impl ReaderBuilder {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,\"The \"\"United\"\" States\",4628910
     ///";
@@ -489,7 +489,7 @@ impl ReaderBuilder {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///#Concord,United States,42695
     ///Boston,United States,4628910
@@ -528,7 +528,7 @@ impl ReaderBuilder {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city\x1Fcountry\x1Fpop\x1EBoston\x1FUnited States\x1F4628910";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .ascii()
@@ -590,7 +590,7 @@ impl ReaderBuilder {
 ///
 /// # fn main() { example().unwrap(); }
 /// fn example() -> Result<(), Box<Error>> {
-///     let mut data = "\
+///     let data = "\
 ///city;country;pop
 ///Boston;United States;4628910
 ///";
@@ -759,7 +759,7 @@ impl<R: io::Read> Reader<R> {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States,4628910
     ///Concord,United States,42695
@@ -1043,7 +1043,7 @@ impl<R: io::Read> Reader<R> {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States,4628910
     ///";
@@ -1081,7 +1081,7 @@ impl<R: io::Read> Reader<R> {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States,4628910
     ///";
@@ -1116,7 +1116,7 @@ impl<R: io::Read> Reader<R> {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States,4628910
     ///";
@@ -1154,7 +1154,7 @@ impl<R: io::Read> Reader<R> {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States,4628910
     ///";
@@ -1198,7 +1198,7 @@ impl<R: io::Read> Reader<R> {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States,4628910
     ///";
@@ -1269,7 +1269,7 @@ impl<R: io::Read> Reader<R> {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States,4628910
     ///";
@@ -1326,7 +1326,7 @@ impl<R: io::Read> Reader<R> {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States,4628910
     ///";
@@ -1359,7 +1359,7 @@ impl<R: io::Read> Reader<R> {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut data = "\
+    ///     let data = "\
     ///city,country,pop
     ///Boston,United States,4628910
     ///";
@@ -1406,7 +1406,7 @@ impl<R: io::Read> Reader<R> {
     /// reader. In particular, seeking to a position returned here on the same
     /// data will result in parsing the same subsequent record.
     ///
-    /// # Example: reading the position and seeking
+    /// # Example: reading the position
     ///
     /// ```
     /// extern crate csv;
@@ -1439,18 +1439,7 @@ impl<R: io::Read> Reader<R> {
     ///     assert_eq!(pos.byte(), 51);
     ///     assert_eq!(pos.line(), 3);
     ///     assert_eq!(pos.record(), 1);
-    ///
-    ///     // Now seek the reader back to `pos`. This will let us read the
-    ///     // last record again.
-    ///     iter.reader_mut().seek(&pos)?;
-    ///     let mut iter = iter.into_reader().into_records();
-    ///     if let Some(result) = iter.next() {
-    ///         let record = result?;
-    ///         assert_eq!(record, vec!["Concord", "United States", "42695"]);
-    ///         Ok(())
-    ///     } else {
-    ///         Err(From::from("expected at least one record but got none"))
-    ///     }
+    ///     Ok(())
     /// }
     /// ```
     pub fn position(&self) -> &Position {
@@ -1461,14 +1450,112 @@ impl<R: io::Read> Reader<R> {
     ///
     /// When this returns true, no more records can be read from this reader
     /// (unless it has been seeked to another position).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use std::io;
+    /// use csv::{Reader, Position};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,popcount
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///";
+    ///     let mut rdr = Reader::from_reader(io::Cursor::new(data));
+    ///     assert!(!rdr.is_done());
+    ///     for result in rdr.records() {
+    ///         let _ = result?;
+    ///     }
+    ///     assert!(rdr.is_done());
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn is_done(&self) -> bool {
         self.state.eof
     }
 
+    /// Read a single row into the given record. Returns false when no more
+    /// records could be read.
+    ///
+    /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
+    /// default), then this will never read the first record.
+    ///
+    /// This method is useful when you want to read records as fast as
+    /// as possible. It's less ergonomic than an iterator, but it permits the
+    /// caller to reuse the `StringRecord` allocation, which usually results
+    /// in higher throughput.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{Reader, StringRecord};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///     let mut record = StringRecord::new();
+    ///
+    ///     if rdr.read_record(&mut record)? {
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
     pub fn read_record(&mut self, record: &mut StringRecord) -> Result<bool> {
         string_record::read(self, record)
     }
 
+    /// Read a single row into the given byte record. Returns false when no
+    /// more records could be read.
+    ///
+    /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
+    /// default), then this will never read the first record.
+    ///
+    /// This method is useful when you want to read records as fast as
+    /// as possible. It's less ergonomic than an iterator, but it permits the
+    /// caller to reuse the `ByteRecord` allocation, which usually results
+    /// in higher throughput.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{ByteRecord, Reader};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,United States,4628910
+    ///";
+    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///     let mut record = ByteRecord::new();
+    ///
+    ///     if rdr.read_byte_record(&mut record)? {
+    ///         assert_eq!(record, vec!["Boston", "United States", "4628910"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
     pub fn read_byte_record(
         &mut self,
         record: &mut ByteRecord,
@@ -1480,10 +1567,10 @@ impl<R: io::Read> Reader<R> {
             if let Some(ref headers) = self.state.headers {
                 self.state.first = true;
                 record.clone_from(&headers.byte_record);
-                return Ok(self.state.eof);
+                return Ok(true);
             }
         }
-        let eof = self.read_byte_record_impl(record)?;
+        let ok = self.read_byte_record_impl(record)?;
         self.state.first = true;
         if !self.state.seeked && self.state.headers.is_none() {
             self.set_headers_impl(Err(record.clone()));
@@ -1498,7 +1585,7 @@ impl<R: io::Read> Reader<R> {
                 return self.read_byte_record_impl(record);
             }
         }
-        Ok(eof)
+        Ok(ok)
     }
 
     /// Read a byte record from the underlying CSV reader, without accounting
@@ -1513,7 +1600,7 @@ impl<R: io::Read> Reader<R> {
         record.clear();
         record.set_position(Some(self.state.cur_pos.clone()));
         if self.state.eof {
-            return Ok(true);
+            return Ok(false);
         }
         let (mut outlen, mut endlen) = (0, 0);
         loop {
@@ -1542,15 +1629,14 @@ impl<R: io::Read> Reader<R> {
                 Record => {
                     byte_record::set_len(record, endlen);
                     self.state.add_record(record)?;
-                    break;
+                    return Ok(true);
                 }
                 End => {
                     self.state.eof = true;
-                    break;
+                    return Ok(false);
                 }
             }
         }
-        Ok(self.state.eof)
     }
 }
 
@@ -1569,6 +1655,48 @@ impl<R: io::Read + io::Seek> Reader<R> {
     ///
     /// If the given position has a byte offset equivalent to the current
     /// position, then no seeking is performed.
+    ///
+    /// # Example: seek to parse a record twice
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use std::io;
+    /// use csv::{Reader, Position};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,popcount
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///";
+    ///     let mut rdr = Reader::from_reader(io::Cursor::new(data));
+    ///     let mut iter = rdr.into_records();
+    ///     let mut pos = Position::new();
+    ///     loop {
+    ///         // Read the position immediately before each record.
+    ///         let next_pos = iter.reader().position().clone();
+    ///         if iter.next().is_none() {
+    ///             break;
+    ///         }
+    ///         pos = next_pos;
+    ///     }
+    ///
+    ///     // Now seek the reader back to `pos`. This will let us read the
+    ///     // last record again.
+    ///     iter.reader_mut().seek(&pos)?;
+    ///     let mut iter = iter.into_reader().into_records();
+    ///     if let Some(result) = iter.next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec!["Concord", "United States", "42695"]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
     pub fn seek(&mut self, pos: &Position) -> Result<()> {
         if pos.byte() == self.state.cur_pos.byte() {
             return Ok(());
@@ -1674,8 +1802,8 @@ impl<R: io::Read, D: DeserializeOwned>
     fn next(&mut self) -> Option<Result<D>> {
         match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
-            Ok(true) => None,
-            Ok(false) => Some(self.rec.deserialize(self.headers.as_ref())),
+            Ok(false) => None,
+            Ok(true) => Some(self.rec.deserialize(self.headers.as_ref())),
         }
     }
 }
@@ -1728,8 +1856,8 @@ impl<'r, R: io::Read, D: DeserializeOwned>
     fn next(&mut self) -> Option<Result<D>> {
         match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
-            Ok(true) => None,
-            Ok(false) => Some(self.rec.deserialize(self.headers.as_ref())),
+            Ok(false) => None,
+            Ok(true) => Some(self.rec.deserialize(self.headers.as_ref())),
         }
     }
 }
@@ -1767,8 +1895,8 @@ impl<R: io::Read> Iterator for StringRecordsIntoIter<R> {
     fn next(&mut self) -> Option<Result<StringRecord>> {
         match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
-            Ok(false) => Some(Ok(self.rec.clone())),
-            Ok(true) => None,
+            Ok(true) => Some(Ok(self.rec.clone())),
+            Ok(false) => None,
         }
     }
 }
@@ -1804,8 +1932,8 @@ impl<'r, R: io::Read> Iterator for StringRecordsIter<'r, R> {
     fn next(&mut self) -> Option<Result<StringRecord>> {
         match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
-            Ok(false) => Some(Ok(self.rec.clone())),
-            Ok(true) => None,
+            Ok(true) => Some(Ok(self.rec.clone())),
+            Ok(false) => None,
         }
     }
 }
@@ -1843,8 +1971,8 @@ impl<R: io::Read> Iterator for ByteRecordsIntoIter<R> {
     fn next(&mut self) -> Option<Result<ByteRecord>> {
         match self.rdr.read_byte_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
-            Ok(false) => Some(Ok(self.rec.clone())),
-            Ok(true) => None,
+            Ok(true) => Some(Ok(self.rec.clone())),
+            Ok(false) => None,
         }
     }
 }
@@ -1880,8 +2008,8 @@ impl<'r, R: io::Read> Iterator for ByteRecordsIter<'r, R> {
     fn next(&mut self) -> Option<Result<ByteRecord>> {
         match self.rdr.read_byte_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
-            Ok(false) => Some(Ok(self.rec.clone())),
-            Ok(true) => None,
+            Ok(true) => Some(Ok(self.rec.clone())),
+            Ok(false) => None,
         }
     }
 }
@@ -1924,19 +2052,19 @@ mod tests {
             .from_reader(data);
         let mut rec = ByteRecord::new();
 
-        assert!(!rdr.read_byte_record(&mut rec).unwrap());
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("foo", s(&rec[0]));
         assert_eq!("b,ar", s(&rec[1]));
         assert_eq!("baz", s(&rec[2]));
 
-        assert!(!rdr.read_byte_record(&mut rec).unwrap());
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("abc", s(&rec[0]));
         assert_eq!("mno", s(&rec[1]));
         assert_eq!("xyz", s(&rec[2]));
 
-        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
     }
 
     #[test]
@@ -1947,7 +2075,7 @@ mod tests {
             .from_reader(data);
         let mut rec = ByteRecord::new();
 
-        assert!(!rdr.read_byte_record(&mut rec).unwrap());
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(1, rec.len());
         assert_eq!("foo", s(&rec[0]));
 
@@ -1972,16 +2100,16 @@ mod tests {
             .from_reader(data);
         let mut rec = ByteRecord::new();
 
-        assert!(!rdr.read_byte_record(&mut rec).unwrap());
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(1, rec.len());
         assert_eq!("foo", s(&rec[0]));
 
-        assert!(!rdr.read_byte_record(&mut rec).unwrap());
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(2, rec.len());
         assert_eq!("bar", s(&rec[0]));
         assert_eq!("baz", s(&rec[1]));
 
-        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
     }
 
     // This tests that even if we get a CSV error, we can continue reading
@@ -1994,7 +2122,7 @@ mod tests {
             .from_reader(data);
         let mut rec = ByteRecord::new();
 
-        assert!(!rdr.read_byte_record(&mut rec).unwrap());
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(1, rec.len());
         assert_eq!("foo", s(&rec[0]));
 
@@ -2009,11 +2137,11 @@ mod tests {
             wrong => panic!("match failed, got {:?}", wrong),
         }
 
-        assert!(!rdr.read_byte_record(&mut rec).unwrap());
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
         assert_eq!(1, rec.len());
         assert_eq!("quux", s(&rec[0]));
 
-        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert!(!rdr.read_byte_record(&mut rec).unwrap());
     }
 
     #[test]
@@ -2022,15 +2150,15 @@ mod tests {
         let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(data);
         let mut rec = StringRecord::new();
 
-        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("a", &rec[0]);
 
-        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("d", &rec[0]);
 
-        assert!(rdr.read_record(&mut rec).unwrap());
+        assert!(!rdr.read_record(&mut rec).unwrap());
 
         {
             let headers = rdr.byte_headers().unwrap();
@@ -2054,15 +2182,15 @@ mod tests {
         let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(data);
         let mut rec = StringRecord::new();
 
-        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("a", &rec[0]);
 
-        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("d", &rec[0]);
 
-        assert!(rdr.read_record(&mut rec).unwrap());
+        assert!(!rdr.read_record(&mut rec).unwrap());
 
         // Check that we can read the headers as raw bytes, but that
         // if we read them as strings, we get an appropriate UTF-8 error.
@@ -2099,19 +2227,19 @@ mod tests {
             assert_eq!("baz", &headers[2]);
         }
 
-        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("foo", &rec[0]);
 
-        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("a", &rec[0]);
 
-        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("d", &rec[0]);
 
-        assert!(rdr.read_record(&mut rec).unwrap());
+        assert!(!rdr.read_record(&mut rec).unwrap());
     }
 
     #[test]
@@ -2122,19 +2250,19 @@ mod tests {
             .from_reader(data);
         let mut rec = StringRecord::new();
 
-        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("foo", &rec[0]);
 
-        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("a", &rec[0]);
 
-        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("d", &rec[0]);
 
-        assert!(rdr.read_record(&mut rec).unwrap());
+        assert!(!rdr.read_record(&mut rec).unwrap());
 
         let headers = rdr.headers().unwrap();
         assert_eq!(3, headers.len());
@@ -2153,18 +2281,18 @@ mod tests {
         let mut rec = StringRecord::new();
 
         assert_eq!(18, rdr.position().byte());
-        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("d", &rec[0]);
 
         assert_eq!(24, rdr.position().byte());
         assert_eq!(4, rdr.position().line());
         assert_eq!(3, rdr.position().record());
-        assert!(!rdr.read_record(&mut rec).unwrap());
+        assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(3, rec.len());
         assert_eq!("g", &rec[0]);
 
-        assert!(rdr.read_record(&mut rec).unwrap());
+        assert!(!rdr.read_record(&mut rec).unwrap());
     }
 
     // Test that asking for headers after a seek returns an error if the

@@ -143,8 +143,10 @@ impl fmt::Display for Error {
     }
 }
 
-/// A UTF-8 validation error that occurs when attempting to convert a
-/// `ByteRecord` into a `StringRecord`.
+/// A UTF-8 validation error during record conversion.
+///
+/// This occurs when attempting to convert a `ByteRecord` into a
+/// `StringRecord`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FromUtf8Error {
     record: ByteRecord,
@@ -179,8 +181,10 @@ impl StdError for FromUtf8Error {
     fn cause(&self) -> Option<&StdError> { Some(&self.err) }
 }
 
-/// A UTF-8 validation error that occurred when attempting to convert a
-/// `ByteRecord` into a `StringRecord`.
+/// A UTF-8 validation error.
+///
+/// This occurs when attempting to convert a `ByteRecord` into a
+/// `StringRecord`.
 ///
 /// The error includes the index of the field that failed validation, and the
 /// last byte at which valid UTF-8 was verified.
