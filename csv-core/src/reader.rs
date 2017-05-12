@@ -50,7 +50,7 @@ use core::fmt;
 
 /// A record terminator.
 ///
-/// Use this specify the record terminator while parsing CSV. The default is
+/// Use this to specify the record terminator while parsing CSV. The default is
 /// CRLF, which treats `\r`, `\n` or `\r\n` as a single record terminator.
 #[derive(Clone, Copy, Debug)]
 pub enum Terminator {
@@ -61,6 +61,7 @@ pub enum Terminator {
 }
 
 impl Terminator {
+    /// Checks whether the terminator is set to CRLF.
     fn is_crlf(&self) -> bool {
         match *self {
             Terminator::CRLF => true,
