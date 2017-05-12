@@ -1003,7 +1003,7 @@ impl<R: io::Read> Reader<R> {
     ///city,country,popcount
     ///Boston,United States,4628910
     ///";
-    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///     let rdr = Reader::from_reader(data.as_bytes());
     ///     let mut iter = rdr.into_deserialize();
     ///
     ///     if let Some(result) = iter.next() {
@@ -1082,7 +1082,7 @@ impl<R: io::Read> Reader<R> {
     ///city,country,pop
     ///Boston,United States,4628910
     ///";
-    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///     let rdr = Reader::from_reader(data.as_bytes());
     ///     let mut iter = rdr.into_records();
     ///
     ///     if let Some(result) = iter.next() {
@@ -1155,7 +1155,7 @@ impl<R: io::Read> Reader<R> {
     ///city,country,pop
     ///Boston,United States,4628910
     ///";
-    ///     let mut rdr = Reader::from_reader(data.as_bytes());
+    ///     let rdr = Reader::from_reader(data.as_bytes());
     ///     let mut iter = rdr.into_byte_records();
     ///
     ///     if let Some(result) = iter.next() {
@@ -1391,86 +1391,6 @@ impl<R: io::Read> Reader<R> {
         });
     }
 
-    /// Return the current position of this CSV reader.
-    ///
-    /// The byte offset in the position returned can be used to `seek` this
-    /// reader. In particular, seeking to a position returned here on the same
-    /// data will result in parsing the same subsequent record.
-    ///
-    /// # Example: reading the position
-    ///
-    /// ```
-    /// extern crate csv;
-    ///
-    /// use std::error::Error;
-    /// use std::io;
-    /// use csv::{Reader, Position};
-    ///
-    /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
-    ///     let data = "\
-    ///city,country,popcount
-    ///Boston,United States,4628910
-    ///Concord,United States,42695
-    ///";
-    ///     let mut rdr = Reader::from_reader(io::Cursor::new(data));
-    ///     let mut iter = rdr.into_records();
-    ///     let mut pos = Position::new();
-    ///     loop {
-    ///         // Read the position immediately before each record.
-    ///         let next_pos = iter.reader().position().clone();
-    ///         if iter.next().is_none() {
-    ///             break;
-    ///         }
-    ///         pos = next_pos;
-    ///     }
-    ///
-    ///     // `pos` should now be the position immediately before the last
-    ///     // record.
-    ///     assert_eq!(pos.byte(), 51);
-    ///     assert_eq!(pos.line(), 3);
-    ///     assert_eq!(pos.record(), 1);
-    ///     Ok(())
-    /// }
-    /// ```
-    pub fn position(&self) -> &Position {
-        &self.state.cur_pos
-    }
-
-    /// Returns true if and only if this reader has been exhausted.
-    ///
-    /// When this returns true, no more records can be read from this reader
-    /// (unless it has been seeked to another position).
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// extern crate csv;
-    ///
-    /// use std::error::Error;
-    /// use std::io;
-    /// use csv::{Reader, Position};
-    ///
-    /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
-    ///     let data = "\
-    ///city,country,popcount
-    ///Boston,United States,4628910
-    ///Concord,United States,42695
-    ///";
-    ///     let mut rdr = Reader::from_reader(io::Cursor::new(data));
-    ///     assert!(!rdr.is_done());
-    ///     for result in rdr.records() {
-    ///         let _ = result?;
-    ///     }
-    ///     assert!(rdr.is_done());
-    ///     Ok(())
-    /// }
-    /// ```
-    pub fn is_done(&self) -> bool {
-        self.state.eof
-    }
-
     /// Read a single row into the given record. Returns false when no more
     /// records could be read.
     ///
@@ -1481,6 +1401,9 @@ impl<R: io::Read> Reader<R> {
     /// as possible. It's less ergonomic than an iterator, but it permits the
     /// caller to reuse the `StringRecord` allocation, which usually results
     /// in higher throughput.
+    ///
+    /// Records read via this method are guaranteed to have a position set
+    /// on them, even if the reader is at EOF or if an error is returned.
     ///
     /// # Example
     ///
@@ -1522,6 +1445,9 @@ impl<R: io::Read> Reader<R> {
     /// caller to reuse the `ByteRecord` allocation, which usually results
     /// in higher throughput.
     ///
+    /// Records read via this method are guaranteed to have a position set
+    /// on them, even if the reader is at EOF or if an error is returned.
+    ///
     /// # Example
     ///
     /// ```
@@ -1552,9 +1478,9 @@ impl<R: io::Read> Reader<R> {
         record: &mut ByteRecord,
     ) -> Result<bool> {
         if !self.state.has_headers && !self.state.first {
-            // If the caller indicated "no headers" and we haven't yield
-            // the first record yet, then we should yield our header row
-            // if we have one.
+            // If the caller indicated "no headers" and we haven't yielded the
+            // first record yet, then we should yield our header row if we have
+            // one.
             if let Some(ref headers) = self.state.headers {
                 self.state.first = true;
                 record.clone_from(&headers.byte_record);
@@ -1569,10 +1495,6 @@ impl<R: io::Read> Reader<R> {
             // never return the first row. Instead, we should attempt to
             // read and return the next one.
             if self.state.has_headers {
-                // Since we just read the first row and will treat it as the
-                // special header row, undo the record index increment.
-                let i = self.state.cur_pos.record();
-                self.state.cur_pos.set_record(i.checked_sub(1).unwrap());
                 return self.read_byte_record_impl(record);
             }
         }
@@ -1629,6 +1551,92 @@ impl<R: io::Read> Reader<R> {
             }
         }
     }
+
+    /// Return the current position of this CSV reader.
+    ///
+    /// The byte offset in the position returned can be used to `seek` this
+    /// reader. In particular, seeking to a position returned here on the same
+    /// data will result in parsing the same subsequent record.
+    ///
+    /// # Example: reading the position
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use std::io;
+    /// use csv::{Reader, Position};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,popcount
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///";
+    ///     let rdr = Reader::from_reader(io::Cursor::new(data));
+    ///     let mut iter = rdr.into_records();
+    ///     let mut pos = Position::new();
+    ///     loop {
+    ///         // Read the position immediately before each record.
+    ///         let next_pos = iter.reader().position().clone();
+    ///         if iter.next().is_none() {
+    ///             break;
+    ///         }
+    ///         pos = next_pos;
+    ///     }
+    ///
+    ///     // `pos` should now be the position immediately before the last
+    ///     // record.
+    ///     assert_eq!(pos.byte(), 51);
+    ///     assert_eq!(pos.line(), 3);
+    ///     assert_eq!(pos.record(), 2);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn position(&self) -> &Position {
+        &self.state.cur_pos
+    }
+
+    /// Returns true if and only if this reader has been exhausted.
+    ///
+    /// When this returns true, no more records can be read from this reader
+    /// (unless it has been seeked to another position).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use std::io;
+    /// use csv::{Reader, Position};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,popcount
+    ///Boston,United States,4628910
+    ///Concord,United States,42695
+    ///";
+    ///     let mut rdr = Reader::from_reader(io::Cursor::new(data));
+    ///     assert!(!rdr.is_done());
+    ///     for result in rdr.records() {
+    ///         let _ = result?;
+    ///     }
+    ///     assert!(rdr.is_done());
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn is_done(&self) -> bool {
+        self.state.eof
+    }
+
+    /// Returns true if and only if this reader has been configured to
+    /// interpret the first record as a header record.
+    pub fn has_headers(&self) -> bool {
+        self.state.has_headers
+    }
 }
 
 impl<R: io::Read + io::Seek> Reader<R> {
@@ -1669,7 +1677,7 @@ impl<R: io::Read + io::Seek> Reader<R> {
     ///Boston,United States,4628910
     ///Concord,United States,42695
     ///";
-    ///     let mut rdr = Reader::from_reader(io::Cursor::new(data));
+    ///     let rdr = Reader::from_reader(io::Cursor::new(data));
     ///     let mut iter = rdr.into_records();
     ///     let mut pos = Position::new();
     ///     loop {
@@ -1683,7 +1691,7 @@ impl<R: io::Read + io::Seek> Reader<R> {
     ///
     ///     // Now seek the reader back to `pos`. This will let us read the
     ///     // last record again.
-    ///     iter.reader_mut().seek(&pos)?;
+    ///     iter.reader_mut().seek(pos)?;
     ///     let mut iter = iter.into_reader().into_records();
     ///     if let Some(result) = iter.next() {
     ///         let record = result?;
@@ -1694,11 +1702,17 @@ impl<R: io::Read + io::Seek> Reader<R> {
     ///     }
     /// }
     /// ```
-    pub fn seek(&mut self, pos: &Position) -> Result<()> {
+    pub fn seek(&mut self, pos: Position) -> Result<()> {
+        self.byte_headers()?;
         if pos.byte() == self.state.cur_pos.byte() {
             return Ok(());
         }
-        self.seek_raw(io::SeekFrom::Start(pos.byte()), pos.clone())
+        self.rdr.seek(io::SeekFrom::Start(pos.byte()))?;
+        self.core.reset();
+        self.core.set_line(pos.line());
+        self.state.cur_pos = pos;
+        self.state.eof = false;
+        Ok(())
     }
 
     /// This is like `seek`, but provides direct control over how the seeking
@@ -2277,7 +2291,7 @@ mod tests {
         let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
         let mut rdr = ReaderBuilder::new()
             .from_reader(io::Cursor::new(data));
-        rdr.seek(&newpos(18, 3, 2)).unwrap();
+        rdr.seek(newpos(18, 3, 2)).unwrap();
 
         let mut rec = StringRecord::new();
 
@@ -2303,7 +2317,7 @@ mod tests {
         let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
         let mut rdr = ReaderBuilder::new()
             .from_reader(io::Cursor::new(data));
-        rdr.seek(&newpos(18, 3, 2)).unwrap();
+        rdr.seek(newpos(18, 3, 2)).unwrap();
         assert_eq!(rdr.headers().unwrap(), vec!["foo", "bar", "baz"]);
     }
 
@@ -2315,7 +2329,7 @@ mod tests {
         let mut rdr = ReaderBuilder::new()
             .from_reader(io::Cursor::new(data));
         let headers = rdr.headers().unwrap().clone();
-        rdr.seek(&newpos(18, 3, 2)).unwrap();
+        rdr.seek(newpos(18, 3, 2)).unwrap();
         assert_eq!(&headers, rdr.headers().unwrap());
     }
 
@@ -2327,7 +2341,7 @@ mod tests {
         let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
         let mut rdr = ReaderBuilder::new()
             .from_reader(io::Cursor::new(data));
-        rdr.seek(&Position::new()).unwrap();
+        rdr.seek(Position::new()).unwrap();
         assert_eq!("foo", &rdr.headers().unwrap()[0]);
     }
 
@@ -2361,6 +2375,6 @@ mod tests {
         let pos = rdr.next().unwrap().unwrap().position().unwrap().clone();
         assert_eq!(pos.byte(), 6);
         assert_eq!(pos.line(), 2);
-        assert_eq!(pos.record(), 0);
+        assert_eq!(pos.record(), 1);
     }
 }

@@ -525,11 +525,7 @@ impl ByteRecord {
 ///
 /// Byte offsets and record indices start at `0`. Line numbers start at `1`.
 ///
-/// A CSV reader will automatically assign the position of each record. If the
-/// CSV reader is configured to read headers, then both the header record and
-/// the first non-header record have a record index of `0`. If the CSV reader
-/// is not configured to read headers, then the first and second records have
-/// record indices of `0` and `1`, respectively.
+/// A CSV reader will automatically assign the position of each record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Position {
     byte: u64,
@@ -548,7 +544,7 @@ impl Position {
     #[inline] pub fn byte(&self) -> u64 { self.byte }
     /// The line number, starting at `1`, of this position.
     #[inline] pub fn line(&self) -> u64 { self.line }
-    /// The record index, starting with the first non-header record at `0`.
+    /// The record index, starting with the first record at `0`.
     #[inline] pub fn record(&self) -> u64 { self.record }
 
     /// Set the byte offset of this position.

@@ -11,10 +11,11 @@ keywords = ["csv", "comma", "parser", "delimited", "index"]
 license = "Unlicense/MIT"
 
 [lib]
-name = "csv-index"
+name = "csvindex"
 bench = false
 
 [dependencies]
+byteorder = "1"
 csv = { path = "..", version = "0.15.0" }
 csv-core = { path = "../csv-core", version = "0.1.0" }
 
