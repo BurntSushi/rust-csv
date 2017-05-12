@@ -1,0 +1,25 @@
+[package]
+name = "csv-index"
+version = "0.1.0"  #:version
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+description = "On disk CSV indexing data structures."
+documentation = "https://docs.rs/csv-index"
+homepage = "https://github.com/BurntSushi/rust-csv"
+repository = "https://github.com/BurntSushi/rust-csv"
+readme = "README.md"
+keywords = ["csv", "comma", "parser", "delimited", "index"]
+license = "Unlicense/MIT"
+
+[lib]
+name = "csv-index"
+bench = false
+
+[dependencies]
+csv = { path = "..", version = "0.15.0" }
+csv-core = { path = "../csv-core", version = "0.1.0" }
+
+[profile.release]
+debug = true
+
+[profile.bench]
+debug = true
