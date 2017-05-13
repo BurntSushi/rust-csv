@@ -1,5 +1,3 @@
-CSV indexing data structures designed to be read from disk.
-
 csv-index
 =========
 A collection of data structures for indexing CSV data, with a focus on data
