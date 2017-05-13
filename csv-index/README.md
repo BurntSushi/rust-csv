@@ -35,7 +35,7 @@ indices to the byte offset corresponding to the start of that record in CSV
 data. This example shows how to save this index to disk for a particular CSV
 file.
 
-```no_run
+```rust
 extern crate csv;
 extern crate csv_index;
 
