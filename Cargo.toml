@@ -11,12 +11,7 @@ keywords = ["csv", "comma", "parser", "delimited", "serde"]
 license = "Unlicense/MIT"
 
 [lib]
-name = "csv"
 bench = false
-
-# [[test]]
-# path = "src/lib.rs"
-# name = "wat"
 
 [dependencies]
 csv-core = { path = "csv-core", version = "0.1.0" }

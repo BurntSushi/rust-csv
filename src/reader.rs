@@ -1525,8 +1525,9 @@ impl<R: io::Read> Reader<R> {
             };
             self.rdr.consume(nin);
             let byte = self.state.cur_pos.byte();
-            self.state.cur_pos.set_byte(byte + nin as u64);
-            self.state.cur_pos.set_line(self.core.line());
+            self.state.cur_pos
+                .set_byte(byte + nin as u64)
+                .set_line(self.core.line());
             outlen += nout;
             endlen += nend;
             match res {
@@ -2044,9 +2045,7 @@ mod tests {
 
     fn newpos(byte: u64, line: u64, record: u64) -> Position {
         let mut p = Position::new();
-        p.set_byte(byte);
-        p.set_line(line);
-        p.set_record(record);
+        p.set_byte(byte).set_line(line).set_record(record);
         p
     }
 

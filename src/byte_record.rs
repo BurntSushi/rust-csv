@@ -549,23 +549,26 @@ impl Position {
 
     /// Set the byte offset of this position.
     #[inline]
-    pub fn set_byte(&mut self, byte: u64) {
+    pub fn set_byte(&mut self, byte: u64) -> &mut Position {
         self.byte = byte;
+        self
     }
 
     /// Set the line number of this position.
     ///
     /// If the line number is less than `1`, then this method panics.
     #[inline]
-    pub fn set_line(&mut self, line: u64) {
+    pub fn set_line(&mut self, line: u64) -> &mut Position {
         assert!(line > 0);
         self.line = line;
+        self
     }
 
     /// Set the record index of this position.
     #[inline]
-    pub fn set_record(&mut self, record: u64) {
+    pub fn set_record(&mut self, record: u64) -> &mut Position {
         self.record = record;
+        self
     }
 }
 
