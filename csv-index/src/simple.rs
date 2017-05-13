@@ -24,7 +24,7 @@ pub struct RandomAccessSimple<R> {
     len: u64,
 }
 
-impl<R: io::Read + io::Seek> RandomAccessSimple<R> {
+impl RandomAccessSimple<()> {
     /// Write a simple index to the given writer.
     ///
     /// If there was a problem reading CSV records or writing to the given
@@ -58,7 +58,9 @@ impl<R: io::Read + io::Seek> RandomAccessSimple<R> {
         wtr.write_u64::<BigEndian>(len)?;
         Ok(())
     }
+}
 
+impl<R: io::Read + io::Seek> RandomAccessSimple<R> {
     /// Open an existing simple CSV index.
     ///
     /// The reader given must be seekable and should contain an index written
@@ -95,5 +97,48 @@ impl<R: io::Read + io::Seek> RandomAccessSimple<R> {
     /// index.
     pub fn len(&self) -> u64 {
         self.len
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use csv;
+
+    use super::RandomAccessSimple;
+
+    fn read_nth<R1: io::Read + io::Seek, R2: io::Read + io::Seek>(
+        csv_rdr: &mut csv::Reader<R1>,
+        idx_rdr: &mut RandomAccessSimple<R2>,
+        n: u64,
+    ) -> csv::StringRecord {
+        let offset = idx_rdr.get(n).unwrap();
+        let mut pos = csv::Position::new();
+        pos.set_byte(offset);
+        csv_rdr.seek(pos).unwrap();
+        csv_rdr.records().next().unwrap().unwrap()
+    }
+
+    #[test]
+    fn headers_one_field() {
+        let data = "\
+h1
+a
+b
+c
+";
+        let mut rdr = csv::Reader::from_reader(io::Cursor::new(data));
+        let mut idxbuf = io::Cursor::new(vec![]);
+        {
+            RandomAccessSimple::create(&mut rdr, &mut idxbuf).unwrap();
+        }
+
+        let mut idx = RandomAccessSimple::open(idxbuf).unwrap();
+        assert_eq!(idx.len(), 4);
+        assert_eq!(read_nth(&mut rdr, &mut idx, 0), vec!["h1"]);
+        assert_eq!(read_nth(&mut rdr, &mut idx, 1), vec!["a"]);
+        assert_eq!(read_nth(&mut rdr, &mut idx, 2), vec!["b"]);
+        assert_eq!(read_nth(&mut rdr, &mut idx, 3), vec!["c"]);
     }
 }
