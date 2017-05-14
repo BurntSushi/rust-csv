@@ -29,7 +29,7 @@ and this to your crate root:
 extern crate csv;
 ```
 
-# Simple example
+### Simple example
 
 This example shows how to read CSV data from a file and print each record to
 stdout.
