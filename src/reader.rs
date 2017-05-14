@@ -571,8 +571,9 @@ impl ReaderBuilder {
 /// A CSV reader takes as input CSV data and transforms that into standard Rust
 /// values. The most flexible way to read CSV data is as a sequence of records,
 /// where a record is a sequence of fields and each field is a string. However,
-/// a reader can also deserialize CSV into Rust types like `i64` or `(String,
-/// f64, f64, f64)` or even a custom struct automatically using Serde.
+/// a reader can also deserialize CSV data into Rust types like `i64` or
+/// `(String, f64, f64, f64)` or even a custom struct automatically using
+/// Serde.
 ///
 /// # Configuration
 ///
@@ -778,6 +779,10 @@ impl<R: io::Read> Reader<R> {
 
     /// Returns a borrowed iterator over deserialized records.
     ///
+    /// Each item yielded by this iterator is a `Result<D, Error>`.
+    /// Therefore, in order to access the record, callers must handle the
+    /// possibility of error (typically with `try!` or `?`).
+    ///
     /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
     /// default), then this does not include the first record. Additionally,
     /// if `has_headers` is enabled, then deserializing into a struct will
@@ -970,6 +975,10 @@ impl<R: io::Read> Reader<R> {
 
     /// Returns an owned iterator over deserialized records.
     ///
+    /// Each item yielded by this iterator is a `Result<D, Error>`.
+    /// Therefore, in order to access the record, callers must handle the
+    /// possibility of error (typically with `try!` or `?`).
+    ///
     /// This is mostly useful when you want to return a CSV iterator or store
     /// it somewhere.
     ///
@@ -1030,6 +1039,10 @@ impl<R: io::Read> Reader<R> {
 
     /// Returns a borrowed iterator over all records as strings.
     ///
+    /// Each item yielded by this iterator is a `Result<StringRecord, Error>`.
+    /// Therefore, in order to access the record, callers must handle the
+    /// possibility of error (typically with `try!` or `?`).
+    ///
     /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
     /// default), then this does not include the first record.
     ///
@@ -1064,6 +1077,10 @@ impl<R: io::Read> Reader<R> {
     }
 
     /// Returns an owned iterator over all records as strings.
+    ///
+    /// Each item yielded by this iterator is a `Result<StringRecord, Error>`.
+    /// Therefore, in order to access the record, callers must handle the
+    /// possibility of error (typically with `try!` or `?`).
     ///
     /// This is mostly useful when you want to return a CSV iterator or store
     /// it somewhere.
@@ -1103,6 +1120,10 @@ impl<R: io::Read> Reader<R> {
 
     /// Returns a borrowed iterator over all records as raw bytes.
     ///
+    /// Each item yielded by this iterator is a `Result<ByteRecord, Error>`.
+    /// Therefore, in order to access the record, callers must handle the
+    /// possibility of error (typically with `try!` or `?`).
+    ///
     /// If `has_headers` was enabled via a `ReaderBuilder` (which is the
     /// default), then this does not include the first record.
     ///
@@ -1137,6 +1158,10 @@ impl<R: io::Read> Reader<R> {
     }
 
     /// Returns an owned iterator over all records as raw bytes.
+    ///
+    /// Each item yielded by this iterator is a `Result<ByteRecord, Error>`.
+    /// Therefore, in order to access the record, callers must handle the
+    /// possibility of error (typically with `try!` or `?`).
     ///
     /// This is mostly useful when you want to return a CSV iterator or store
     /// it somewhere.
@@ -1646,6 +1671,24 @@ impl<R: io::Read> Reader<R> {
     /// interpret the first record as a header record.
     pub fn has_headers(&self) -> bool {
         self.state.has_headers
+    }
+
+    /// Returns a reference to the underlying reader.
+    pub fn get_ref(&self) -> &R {
+        self.rdr.get_ref()
+    }
+
+    /// Returns a mutable reference to the underlying reader.
+    pub fn get_mut(&mut self) -> &mut R {
+        self.rdr.get_mut()
+    }
+
+    /// Unwraps this CSV reader, returning the underlying reader.
+    ///
+    /// Note that any leftover data inside this reader's internal buffer is
+    /// lost.
+    pub fn into_inner(self) -> R {
+        self.rdr.into_inner()
     }
 }
 
