@@ -1,6 +1,8 @@
 /*!
 A tutorial.
 
+https://raw.githubusercontent.com/BurntSushi/rust-csv/rewrite/examples/data/uspop.csv
+
 # Outline
 
 1. Overview

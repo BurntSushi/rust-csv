@@ -15,7 +15,7 @@ bench = false
 
 [dependencies]
 byteorder = "1"
-csv = { path = "..", version = "0.15.0" }
+csv = { path = "..", version = "1.0.0-beta.1" }
 csv-core = { path = "../csv-core", version = "0.1.0" }
 
 [profile.release]
