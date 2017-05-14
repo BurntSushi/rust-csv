@@ -37,7 +37,7 @@ stdout.
 There are more examples in the
 [cookbook](https://docs.rs/csv/1.0.0-beta.1/csv/examples/index.html).
 
-```no_run
+```rust
 extern crate csv;
 
 use std::env;
