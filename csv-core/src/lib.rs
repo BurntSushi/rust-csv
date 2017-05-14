@@ -74,10 +74,10 @@ let (_, n) = wtr.delimiter(&mut out[nout..]);
 nout += n;
 let (_, _, n) = wtr.field(&b"bar,baz"[..], &mut out[nout..]);
 nout += n;
-
-// Now write another record.
 let (_, n) = wtr.terminator(&mut out[nout..]);
 nout += n;
+
+// Now write another record.
 let (_, _, n) = wtr.field(&b"a \"b\" c"[..], &mut out[nout..]);
 nout += n;
 let (_, n) = wtr.delimiter(&mut out[nout..]);
