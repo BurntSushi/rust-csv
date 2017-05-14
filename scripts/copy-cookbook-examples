@@ -1,0 +1,29 @@
+#!/usr/bin/env python
+
+from __future__ import absolute_import, division, print_function
+import argparse
+import codecs
+import os.path
+import re
+
+RE_EACH_CODE_BLOCK = re.compile(r'(?s)```[^\n]*\n(.*?)```')
+RE_MARKER = re.compile(r'^# //(.+)$')
+
+if __name__ == '__main__':
+    p = argparse.ArgumentParser()
+    p.add_argument('--cookbook-file', default='src/cookbook.rs')
+    p.add_argument('--example-dir', default='examples')
+    args = p.parse_args()
+
+    with codecs.open(args.cookbook_file, encoding='utf-8') as f:
+        cookbook = f.read()
+    for m in RE_EACH_CODE_BLOCK.finditer(cookbook):
+        lines = m.group(1).splitlines()
+        marker, code = lines[0], '\n'.join(lines[1:])
+        m = RE_MARKER.search(marker)
+        if m is None:
+            continue
+
+        fpath = os.path.join(args.example_dir, m.group(1))
+        with codecs.open(fpath, mode='w+', encoding='utf-8') as f:
+            print(code, file=f)

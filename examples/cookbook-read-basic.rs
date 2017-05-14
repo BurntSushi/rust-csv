@@ -1,8 +1,3 @@
-// To run this example:
-//
-//   $ git clone git://github.com/BurntSushi/rust-csv
-//   $ cd rust-csv
-//   $ cargo run --example cookbook-read-basic examples/data/smallpop.csv
 extern crate csv;
 
 use std::env;

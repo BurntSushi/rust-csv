@@ -30,6 +30,7 @@ This example shows how to read CSV data from a file and print each record to
 stdout.
 
 ```no_run
+# //cookbook-read-basic.rs
 extern crate csv;
 
 use std::env;
@@ -83,6 +84,7 @@ For more examples and details on how Serde deserialization works, see the
 method.
 
 ```no_run
+# //cookbook-read-serde.rs
 extern crate csv;
 #[macro_use]
 extern crate serde_derive;
@@ -144,6 +146,7 @@ This example shows how to read CSV data from a file where fields are separated
 by `:` instead of `,`.
 
 ```no_run
+# //cookbook-read-colon.rs
 extern crate csv;
 
 use std::env;
@@ -152,11 +155,7 @@ use std::ffi::OsString;
 use std::process;
 
 fn example() -> Result<(), Box<Error>> {
-    let file_path = match env::args_os().nth(1) {
-        None => return Err(From::from("expected 1 argument, but got none")),
-        Some(file_path) => file_path,
-    };
-
+    let file_path = get_first_arg()?;
     let mut rdr = csv::ReaderBuilder::new()
         .delimiter(b':')
         .from_path(&file_path)?;
@@ -198,6 +197,7 @@ CSV data in interpreted as the header record and is skipped. When disabled, the
 first record is not skipped. This example shows how to disable that setting.
 
 ```no_run
+# //cookbook-read-no-headers.rs
 extern crate csv;
 
 use std::env;
@@ -245,6 +245,7 @@ $ cargo run --example cookbook-read-no-headers examples/data/smallpop-no-headers
 This example shows how to write CSV data to a file.
 
 ```no_run
+# //cookbook-write-basic.rs
 extern crate csv;
 
 use std::env;
@@ -296,6 +297,7 @@ represent each record using a custom struct that we define. In this example,
 headers are written automatically.
 
 ```no_run
+# //cookbook-write-serde.rs
 extern crate csv;
 #[macro_use]
 extern crate serde_derive;
