@@ -8,14 +8,23 @@ This is a list of examples that follow. Each of them can be found in the
 [`rust-csv`](https://github.com/BurntSushi/rust-csv)
 repository.
 
-1. [Simple example.](#simple-example)
-2. [Simple example with Serde.](#simple-example-with-serde)
-3. [Example with a different delimiter.](#example-with-a-different-delimiter)
-4. [Example without headers.](#example-without-headers)
-5. [Simple example writing CSV data.](#simple-example-writing-csv-data)
-6. [Simple example writing CSV data with Serde.](#simple-example-writing-csv-data-with-serde)
+For **reading** CSV:
 
-# Simple example
+1. [Basic](#reading-basic)
+2. [With Serde](#reading-with-serde)
+3. [Setting a different delimiter](#reading-setting-a-different-delimiter)
+4. [Without headers](#reading-without-headers)
+
+For **writing** CSV:
+
+5. [Basic](#writing-basic)
+6. [With Serde](#writing-with-serde)
+
+Please
+[submit a pull request](https://github.com/BurntSushi/rust-csv/pulls)
+if you're interested in adding an example to this list!
+
+# Reading: basic
 
 This example shows how to read CSV data from a file and print each record to
 stdout.
@@ -61,10 +70,10 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example simple examples/data/simplepop.csv
+$ cargo run --example cookbook-read-basic examples/data/smallpop.csv
 ```
 
-# Simple example with Serde
+# Reading: with Serde
 
 This is like the previous example, except it shows how to deserialize each
 record into a struct type that you define.
@@ -126,13 +135,13 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example simple-serde examples/data/simplepop.csv
+$ cargo run --example cookbook-read-serde examples/data/smallpop.csv
 ```
 
-# Example with a different delimiter
+# Reading: setting a different delimiter
 
 This example shows how to read CSV data from a file where fields are separated
-by `;` instead of `,`.
+by `:` instead of `,`.
 
 ```no_run
 extern crate csv;
@@ -149,7 +158,7 @@ fn example() -> Result<(), Box<Error>> {
     };
 
     let mut rdr = csv::ReaderBuilder::new()
-        .delimiter(b';')
+        .delimiter(b':')
         .from_path(&file_path)?;
     for result in rdr.records() {
         let record = result?;
@@ -178,10 +187,10 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example simple-delim examples/data/simplepop-delim.csv
+$ cargo run --example cookbook-read-colon examples/data/smallpop-colon.csv
 ```
 
-# Example without headers
+# Reading: without headers
 
 The CSV reader in this crate assumes that CSV data has a header record by
 default, but the setting can be toggled. When enabled, the first record in
@@ -228,10 +237,10 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example simple-no-headers examples/data/simplepop-no-headers.csv
+$ cargo run --example cookbook-read-no-headers examples/data/smallpop-no-headers.csv
 ```
 
-# Simple example writing CSV data
+# Writing: basic
 
 This example shows how to write CSV data to a file.
 
@@ -277,10 +286,10 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example simple-write /tmp/simplepop.csv
+$ cargo run --example cookbook-write-basic /tmp/simplepop.csv
 ```
 
-# Simple example writing CSV data with Serde
+# Writing: with Serde
 
 This example shows how to write CSV data to a file with Serde. Namely, we
 represent each record using a custom struct that we define. In this example,
@@ -309,8 +318,8 @@ fn example() -> Result<(), Box<Error>> {
     let file_path = get_first_arg()?;
     let mut wtr = csv::Writer::from_path(&file_path)?;
 
-    // When writing records without Serde, the header row must be written
-    // explicitly.
+    // When writing records with Serde using structs, the header row is written
+    // automatically.
     wtr.serialize(Record {
         city: "Southborough".to_string(),
         region: "MA".to_string(),
@@ -347,6 +356,6 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example simple-write-serde /tmp/simplepop.csv
+$ cargo run --example cookbook-write-serde /tmp/simplepop.csv
 ```
 */

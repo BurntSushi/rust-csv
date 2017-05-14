@@ -2,7 +2,7 @@
 //
 //   $ git clone git://github.com/BurntSushi/rust-csv
 //   $ cd rust-csv
-//   $ cargo run --example simple-serde examples/data/simplepop.csv
+//   $ cargo run --example cookbook-write-serde /tmp/simplepop.csv
 extern crate csv;
 #[macro_use]
 extern crate serde_derive;
@@ -12,9 +12,7 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::process;
 
-// By default, struct field names are deserialized based on the position of
-// a corresponding field in the CSV data's header record.
-#[derive(Debug,Deserialize)]
+#[derive(Debug, Serialize)]
 struct Record {
     city: String,
     region: String,
@@ -23,15 +21,25 @@ struct Record {
 }
 
 fn example() -> Result<(), Box<Error>> {
-    // Build the CSV reader and iterate over each record.
+    // Build the CSV writer and write a few records.
     let file_path = get_first_arg()?;
-    let mut rdr = csv::Reader::from_path(&file_path)?;
-    for result in rdr.deserialize() {
-        // Notice that we need to provide a type hint for automatic
-        // deserialization.
-        let record: Record = result?;
-        println!("{:?}", record);
-    }
+    let mut wtr = csv::Writer::from_path(&file_path)?;
+
+    // When writing records with Serde using structs, the header row is written
+    // automatically.
+    wtr.serialize(Record {
+        city: "Southborough".to_string(),
+        region: "MA".to_string(),
+        country: "United States".to_string(),
+        population: Some(9686),
+    })?;
+    wtr.serialize(Record {
+        city: "Northbridge".to_string(),
+        region: "MA".to_string(),
+        country: "United States".to_string(),
+        population: Some(14061),
+    })?;
+    wtr.flush()?;
     Ok(())
 }
 

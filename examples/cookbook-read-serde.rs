@@ -2,21 +2,34 @@
 //
 //   $ git clone git://github.com/BurntSushi/rust-csv
 //   $ cd rust-csv
-//   $ cargo run --example simple-no-headers examples/data/simplepop-no-headers.csv
+//   $ cargo run --example cookbook-read-serde examples/data/smallpop.csv
 extern crate csv;
+#[macro_use]
+extern crate serde_derive;
 
 use std::env;
 use std::error::Error;
 use std::ffi::OsString;
 use std::process;
 
+// By default, struct field names are deserialized based on the position of
+// a corresponding field in the CSV data's header record.
+#[derive(Debug,Deserialize)]
+struct Record {
+    city: String,
+    region: String,
+    country: String,
+    population: Option<u64>,
+}
+
 fn example() -> Result<(), Box<Error>> {
+    // Build the CSV reader and iterate over each record.
     let file_path = get_first_arg()?;
-    let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(false)
-        .from_path(&file_path)?;
-    for result in rdr.records() {
-        let record = result?;
+    let mut rdr = csv::Reader::from_path(&file_path)?;
+    for result in rdr.deserialize() {
+        // Notice that we need to provide a type hint for automatic
+        // deserialization.
+        let record: Record = result?;
         println!("{:?}", record);
     }
     Ok(())

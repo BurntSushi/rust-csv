@@ -13,10 +13,14 @@ use test::Bencher;
 
 use csv::{ByteRecord, Reader, ReaderBuilder, StringRecord};
 
-static NFL: &'static str = include_str!("../examples/data/nfl.csv");
-static GAME: &'static str = include_str!("../examples/data/game.csv");
-static POP: &'static str = include_str!("../examples/data/worldcitiespop.csv");
-static MBTA: &'static str = include_str!("../examples/data/gtfs-mbta-stop-times.csv");
+static NFL: &'static str =
+    include_str!("../examples/data/bench/nfl.csv");
+static GAME: &'static str =
+    include_str!("../examples/data/bench/game.csv");
+static POP: &'static str =
+    include_str!("../examples/data/bench/worldcitiespop.csv");
+static MBTA: &'static str =
+    include_str!("../examples/data/bench/gtfs-mbta-stop-times.csv");
 
 #[derive(Debug, Deserialize, PartialEq)]
 struct NFLRowOwned {

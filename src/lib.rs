@@ -5,7 +5,7 @@ support for Serde.
 The [tutorial](tutorial/index.html) is a good place to start if you're new to
 Rust.
 
-The [examples](examples/index.html) will give you a variety of complete Rust
+The [cookbook](cookbook/index.html) will give you a variety of complete Rust
 programs that do CSV reading and writing.
 
 # Brief overview
@@ -60,7 +60,7 @@ extern crate csv;
 This example shows how to read CSV data from a file and print each record to
 stdout.
 
-There are more examples in the [cookbook](examples/index.html).
+There are more examples in the [cookbook](cookbook/index.html).
 
 ```no_run
 extern crate csv;
@@ -137,7 +137,7 @@ pub use writer::{Writer, WriterBuilder};
 mod byte_record;
 mod deserializer;
 mod error;
-pub mod examples;
+pub mod cookbook;
 mod reader;
 mod serializer;
 mod string_record;

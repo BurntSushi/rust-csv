@@ -2,7 +2,7 @@
 //
 //   $ git clone git://github.com/BurntSushi/rust-csv
 //   $ cd rust-csv
-//   $ cargo run --example simple-write /tmp/simplepop.csv
+//   $ cargo run --example cookbook-read-basic examples/data/smallpop.csv
 extern crate csv;
 
 use std::env;
@@ -11,16 +11,15 @@ use std::ffi::OsString;
 use std::process;
 
 fn example() -> Result<(), Box<Error>> {
-    // Build the CSV writer and write a few records.
+    // Build the CSV reader and iterate over each record.
     let file_path = get_first_arg()?;
-    let mut wtr = csv::Writer::from_path(&file_path)?;
-
-    // When writing records without Serde, the header record is written just
-    // like any other record.
-    wtr.write_record(&["city", "region", "country", "population"][..])?;
-    wtr.write_record(&["Southborough", "MA", "United States", "9686"][..])?;
-    wtr.write_record(&["Northbridge", "MA", "United States", "14061"][..])?;
-    wtr.flush()?;
+    let mut rdr = csv::Reader::from_path(&file_path)?;
+    for result in rdr.records() {
+        // The iterator yields Result<StringRecord, Error>, so we check the
+        // error here..
+        let record = result?;
+        println!("{:?}", record);
+    }
     Ok(())
 }
 

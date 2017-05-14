@@ -2,7 +2,7 @@
 //
 //   $ git clone git://github.com/BurntSushi/rust-csv
 //   $ cd rust-csv
-//   $ cargo run --example simple examples/data/simplepop.csv
+//   $ cargo run --example cookbook-read-no-headers examples/data/smallpop-no-headers.csv
 extern crate csv;
 
 use std::env;
@@ -11,12 +11,11 @@ use std::ffi::OsString;
 use std::process;
 
 fn example() -> Result<(), Box<Error>> {
-    // Build the CSV reader and iterate over each record.
     let file_path = get_first_arg()?;
-    let mut rdr = csv::Reader::from_path(&file_path)?;
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_path(&file_path)?;
     for result in rdr.records() {
-        // The iterator yields Result<StringRecord, Error>, so we check the
-        // error here..
         let record = result?;
         println!("{:?}", record);
     }
