@@ -109,9 +109,11 @@ impl<W: io::Write> RandomAccessSimple<W> {
         let mut len = 0;
         if rdr.has_headers() {
             let header = rdr.byte_headers()?;
-            let pos = header.position().expect("position on header row");
-            wtr.write_u64::<BigEndian>(pos.byte())?;
-            len += 1;
+            if !header.is_empty() {
+                let pos = header.position().expect("position on header row");
+                wtr.write_u64::<BigEndian>(pos.byte())?;
+                len += 1;
+            }
         }
         let mut record = csv::ByteRecord::new();
         while rdr.read_byte_record(&mut record)? {
@@ -280,6 +282,12 @@ mod tests {
             self.csv.seek(pos).unwrap();
             self.csv.records().next().unwrap().unwrap()
         }
+    }
+
+    #[test]
+    fn headers_empty() {
+        let idx = Indexed::new(true, "");
+        assert_eq!(idx.idx.len(), 0);
     }
 
     #[test]

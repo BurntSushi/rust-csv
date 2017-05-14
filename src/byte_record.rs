@@ -375,7 +375,32 @@ impl ByteRecord {
         self.0.bounds.len()
     }
 
+    /// Truncate this record to `n` fields.
+    ///
+    /// If `n` is greater than the number of fields in this record, then this
+    /// has no effect.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// let mut record = ByteRecord::from(vec!["a", "b", "c"]);
+    /// assert_eq!(record.len(), 3);
+    /// record.truncate(1);
+    /// assert_eq!(record.len(), 1);
+    /// assert_eq!(record, vec!["a"]);
+    /// ```
+    #[inline]
+    pub fn truncate(&mut self, n: usize) {
+        if n <= self.len() {
+            self.0.bounds.len = n;
+        }
+    }
+
     /// Clear this record so that it has zero fields.
+    ///
+    /// This is equivalent to calling `truncate(0)`.
     ///
     /// Note that it is not necessary to clear the record to reuse it with
     /// the CSV reader.
@@ -392,7 +417,7 @@ impl ByteRecord {
     /// ```
     #[inline]
     pub fn clear(&mut self) {
-        self.0.bounds.len = 0;
+        self.truncate(0);
     }
 
     /// Add a new field to this record.

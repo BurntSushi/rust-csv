@@ -93,6 +93,7 @@ nout += n;
 assert_eq!(&out[..nout], &b"\
 foo,\"bar,baz\"
 \"a \"\"b\"\" c\",quux"[..]);
+```
 */
 
 #![deny(missing_docs)]

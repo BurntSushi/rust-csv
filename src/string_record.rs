@@ -405,6 +405,27 @@ impl StringRecord {
         self.0.len()
     }
 
+    /// Truncate this record to `n` fields.
+    ///
+    /// If `n` is greater than the number of fields in this record, then this
+    /// has no effect.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::StringRecord;
+    ///
+    /// let mut record = StringRecord::from(vec!["a", "b", "c"]);
+    /// assert_eq!(record.len(), 3);
+    /// record.truncate(1);
+    /// assert_eq!(record.len(), 1);
+    /// assert_eq!(record, vec!["a"]);
+    /// ```
+    #[inline]
+    pub fn truncate(&mut self, n: usize) {
+        self.0.truncate(n);
+    }
+
     /// Clear this record so that it has zero fields.
     ///
     /// Note that it is not necessary to clear the record to reuse it with

@@ -1075,6 +1075,23 @@ mod tests {
     }
 
     #[test]
+    fn one_empty_record() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.write_record(vec![""]).unwrap();
+
+        assert_eq!(wtr_as_string(wtr), "\"\"\n");
+    }
+
+    #[test]
+    fn two_empty_records() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.write_record(vec![""]).unwrap();
+        wtr.write_record(vec![""]).unwrap();
+
+        assert_eq!(wtr_as_string(wtr), "\"\"\n\"\"\n");
+    }
+
+    #[test]
     fn unequal_records_bad() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.write_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();

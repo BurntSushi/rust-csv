@@ -678,6 +678,8 @@ struct ReaderState {
     cur_pos: Position,
     /// Whether the first record has been read or not.
     first: bool,
+    /// Whether the reader has been seeked or not.
+    seeked: bool,
     /// Whether EOF of the underlying reader has been reached or not.
     eof: bool,
 }
@@ -736,6 +738,7 @@ impl<R: io::Read> Reader<R> {
                 first_field_count: None,
                 cur_pos: Position::new(),
                 first: false,
+                seeked: false,
                 eof: false,
             },
         }
@@ -1179,6 +1182,9 @@ impl<R: io::Read> Reader<R> {
     /// If there was a problem parsing the row or if it wasn't valid UTF-8,
     /// then this returns an error.
     ///
+    /// If the underlying reader emits EOF before any data, then this returns
+    /// an empty record.
+    ///
     /// Note that this method may be used regardless of whether `has_headers`
     /// was enabled (but it is enabled by default).
     ///
@@ -1246,6 +1252,9 @@ impl<R: io::Read> Reader<R> {
     /// row.
     ///
     /// If there was a problem parsing the row then this returns an error.
+    ///
+    /// If the underlying reader emits EOF before any data, then this returns
+    /// an empty record.
     ///
     /// Note that this method may be used regardless of whether `has_headers`
     /// was enabled (but it is enabled by default).
@@ -1477,19 +1486,19 @@ impl<R: io::Read> Reader<R> {
         &mut self,
         record: &mut ByteRecord,
     ) -> Result<bool> {
-        if !self.state.has_headers && !self.state.first {
+        if !self.state.seeked && !self.state.has_headers && !self.state.first {
             // If the caller indicated "no headers" and we haven't yielded the
             // first record yet, then we should yield our header row if we have
             // one.
             if let Some(ref headers) = self.state.headers {
                 self.state.first = true;
                 record.clone_from(&headers.byte_record);
-                return Ok(true);
+                return Ok(!record.is_empty());
             }
         }
         let ok = self.read_byte_record_impl(record)?;
         self.state.first = true;
-        if self.state.headers.is_none() {
+        if !self.state.seeked && self.state.headers.is_none() {
             self.set_headers_impl(Err(record.clone()));
             // If the end user indicated that we have headers, then we should
             // never return the first row. Instead, we should attempt to
@@ -1649,6 +1658,8 @@ impl<R: io::Read + io::Seek> Reader<R> {
     /// * If the given position does not correspond to a position immediately
     ///   before the start of a record, then the behavior of this reader is
     ///   unspecified.
+    /// * Any special logic that skips the first record in the CSV reader
+    ///   when reading or iterating over records is disabled.
     ///
     /// If the given position has a byte offset equivalent to the current
     /// position, then no seeking is performed.
@@ -1705,6 +1716,7 @@ impl<R: io::Read + io::Seek> Reader<R> {
     /// ```
     pub fn seek(&mut self, pos: Position) -> Result<()> {
         self.byte_headers()?;
+        self.state.seeked = true;
         if pos.byte() == self.state.cur_pos.byte() {
             return Ok(());
         }
@@ -1735,6 +1747,7 @@ impl<R: io::Read + io::Seek> Reader<R> {
         pos: Position,
     ) -> Result<()> {
         self.byte_headers()?;
+        self.state.seeked = true;
         self.rdr.seek(seek_from)?;
         self.core.reset();
         self.core.set_line(pos.line());
@@ -2375,5 +2388,33 @@ mod tests {
         assert_eq!(pos.byte(), 6);
         assert_eq!(pos.line(), 2);
         assert_eq!(pos.record(), 1);
+    }
+
+    // Test that reading headers on empty data yields an empty record.
+    #[test]
+    fn headers_on_empty_data() {
+        let mut rdr = ReaderBuilder::new().from_reader("".as_bytes());
+        let r = rdr.byte_headers().unwrap();
+        assert_eq!(r.len(), 0);
+    }
+
+    // Test that reading the first record on empty data works.
+    #[test]
+    fn no_headers_on_empty_data() {
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader("".as_bytes());
+        assert_eq!(rdr.records().count(), 0);
+    }
+
+    // Test that reading the first record on empty data works, even if
+    // we've tried to read headers before hand.
+    #[test]
+    fn no_headers_on_empty_data_after_headers() {
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader("".as_bytes());
+        assert_eq!(rdr.headers().unwrap().len(), 0);
+        assert_eq!(rdr.records().count(), 0);
     }
 }
