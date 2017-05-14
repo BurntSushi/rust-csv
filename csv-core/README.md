@@ -71,7 +71,7 @@ assert_eq!(9, count_fields);
 This example shows how to use the `Writer` API to write valid CSV data. Proper
 quoting is handled automatically.
 
-```
+```rust
 use csv_core::Writer;
 
 // This is where we'll write out CSV data.
