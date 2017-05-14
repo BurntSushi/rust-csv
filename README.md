@@ -11,7 +11,7 @@ Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
 
 ### Documentation
 
-https://docs.rs/csv-index
+https://docs.rs/csv
 
 
 ### Usage
