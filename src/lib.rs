@@ -1,5 +1,110 @@
 /*!
-Docs.
+The `csv` crate provides a fast and flexible CSV reader and writer, with
+support for Serde.
+
+The [tutorial](tutorial/index.html) is a good place to start if you're new to
+Rust.
+
+The [examples](examples/index.html) will give you a variety of complete Rust
+programs that do CSV reading and writing.
+
+# Brief overview
+
+**If you're new to Rust**, you might find the
+[tutorial](tutorial/index.html)
+to be a good place to start.
+
+The primary types in this crate are
+[`Reader`](struct.Reader.html)
+and
+[`Writer`](struct.Writer.html),
+for reading and writing CSV data respectively.
+Correspondingly, to support CSV data with custom field or record delimiters
+(among many other things), you should use either a
+[`ReaderBuilder`](struct.ReaderBuilder.html)
+or a
+[`WriterBuilder`](struct.WriterBuilder.html),
+depending on whether you're reading or writing CSV data.
+
+Unless you're using Serde, the standard CSV record types are
+[`StringRecord`](struct.StringRecord.html)
+and
+[`ByteRecord`](struct.ByteRecord.html).
+`StringRecord` should be used when you know your data to be valid UTF-8.
+For data that may be invalid UTF-8, `ByteRecord` is suitable.
+
+Finally, the set of errors is described by the
+[`Error`](enum.Error.html)
+type.
+
+The rest of the types in this crate mostly correspond to more detailed errors,
+position information, configuration knobs or iterator types.
+
+# Setup
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+csv = "1.0.0-beta.1"
+```
+
+and this to your crate root:
+
+```rust
+extern crate csv;
+```
+
+# Simple example
+
+This example shows how to read CSV data from a file and print each record to
+stdout.
+
+There are more examples in the [cookbook](examples/index.html).
+
+```no_run
+extern crate csv;
+
+use std::env;
+use std::error::Error;
+use std::ffi::OsString;
+use std::process;
+
+fn example() -> Result<(), Box<Error>> {
+    // Build the CSV reader and iterate over each record.
+    let file_path = get_first_arg()?;
+    let mut rdr = csv::Reader::from_path(&file_path)?;
+    for result in rdr.records() {
+        // The iterator yields Result<StringRecord, Error>, so we check the
+        // error here..
+        let record = result?;
+        println!("{:?}", record);
+    }
+    Ok(())
+}
+
+fn get_first_arg() -> Result<OsString, Box<Error>> {
+    match env::args_os().nth(1) {
+        Some(file_path) => Ok(file_path),
+        None => Err(From::from("expected 1 argument, but got none")),
+    }
+}
+
+fn main() {
+    if let Err(err) = example() {
+        println!("error running example: {}", err);
+        process::exit(1);
+    }
+}
+```
+
+The above example can be run like so:
+
+```ignore
+$ git clone git://github.com/BurntSushi/rust-csv
+$ cd rust-csv
+$ cargo run --example simple examples/data/simplepop.csv
+```
 */
 
 #![deny(missing_docs)]
@@ -32,6 +137,7 @@ pub use writer::{Writer, WriterBuilder};
 mod byte_record;
 mod deserializer;
 mod error;
+pub mod examples;
 mod reader;
 mod serializer;
 mod string_record;
@@ -99,8 +205,5 @@ mod writer;
 pub fn invalid_option<'de, D, T>(de: D) -> result::Result<Option<T>, D::Error>
     where D: Deserializer<'de>, Option<T>: Deserialize<'de>
 {
-    match Option::<T>::deserialize(de) {
-        Ok(some_t) => Ok(some_t),
-        Err(_) => Ok(None),
-    }
+    Option::<T>::deserialize(de).or_else(|_| Ok(None))
 }

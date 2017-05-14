@@ -1,18 +1,9 @@
-This crate provides a *fast* streaming CSV (comma separated values) writer and
-reader that works with the `serialize` crate to do type based encoding
-and decoding. There are two primary goals of this project:
+csv
+===
+A fast and flexible CSV reader and writer for Rust, with support for Serde.
 
-1. The default mode of parsing should *just work*. This means the parser
-   will bias toward providing *a* parse over a *correct* parse (with
-   respect to [RFC 4180](http://tools.ietf.org/html/rfc4180)).
-2. Convenient to use by default, but when performance is needed, the
-   API will provide an escape hatch.
-
-There is evidence of this parser's performance at the bottom of this README.
-You can also see how it compares to other parsers in
-[ewanhiggs' CSV game](https://bitbucket.org/ewanhiggs/csv-game).
-
-[![Build status](https://api.travis-ci.org/BurntSushi/rust-csv.png)](https://travis-ci.org/BurntSushi/rust-csv)
+[![Linux build status](https://api.travis-ci.org/BurntSushi/rust-csv.png)](https://travis-ci.org/BurntSushi/rust-csv)
+[![Windows build status](https://ci.appveyor.com/api/projects/status/github/BurntSushi/rust-csv?svg=true)](https://ci.appveyor.com/project/BurntSushi/rust-csv)
 [![](http://meritbadge.herokuapp.com/csv)](https://crates.io/crates/csv)
 
 Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
@@ -20,9 +11,23 @@ Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
 
 ### Documentation
 
-The API is fully documented with lots of examples:
-[http://burntsushi.net/rustdoc/csv/](http://burntsushi.net/rustdoc/csv/).
+https://docs.rs/csv-index
 
+
+### Usage
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+csv = "1.0.0-beta.1"
+```
+
+and this to your crate root:
+
+```rust
+extern crate csv;
+```
 
 ### Simple examples
 
