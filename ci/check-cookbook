@@ -12,7 +12,7 @@ TMPDIR="$(mktemp -d)"
   --example-dir "$TMPDIR"
 for new in "$TMPDIR"/*.rs; do
   name="$(basename "$new")"
-  old="$(realpath "$REPO"/examples/"$name")"
+  old="$(readlink -e "$REPO"/examples/"$name")"
   if ! diff "$old" "$new"; then
     echo "ERROR: examples/$name differs from ${name%%.rs} in src/cookbook.rs" >&2
     echo "HINT: please run scripts/copy-cookbook-examples" >&2
