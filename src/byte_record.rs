@@ -141,10 +141,7 @@ impl fmt::Debug for ByteRecord {
                 .collect();
             fields.push(String::from_utf8(escaped).unwrap());
         }
-        f.debug_struct("ByteRecord")
-         .field("position", &self.0.pos)
-         .field("fields", &fields)
-         .finish()
+        write!(f, "ByteRecord({:?})", fields)
     }
 }
 

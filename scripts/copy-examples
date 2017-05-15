@@ -7,17 +7,17 @@ import os.path
 import re
 
 RE_EACH_CODE_BLOCK = re.compile(r'(?s)```[^\n]*\n(.*?)```')
-RE_MARKER = re.compile(r'^# //(.+)$')
+RE_MARKER = re.compile(r'^(?:# )?//(.+)$')
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('--cookbook-file', default='src/cookbook.rs')
+    p.add_argument('--rust-file', default='src/cookbook.rs')
     p.add_argument('--example-dir', default='examples')
     args = p.parse_args()
 
-    with codecs.open(args.cookbook_file, encoding='utf-8') as f:
-        cookbook = f.read()
-    for m in RE_EACH_CODE_BLOCK.finditer(cookbook):
+    with codecs.open(args.rust_file, encoding='utf-8') as f:
+        rustcode = f.read()
+    for m in RE_EACH_CODE_BLOCK.finditer(rustcode):
         lines = m.group(1).splitlines()
         marker, code = lines[0], '\n'.join(lines[1:])
         m = RE_MARKER.search(marker)

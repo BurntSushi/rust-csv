@@ -97,10 +97,7 @@ impl<'a, T: AsRef<[u8]>> PartialEq<[T]> for &'a StringRecord {
 impl fmt::Debug for StringRecord {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let fields: Vec<&str> = self.iter().collect();
-        f.debug_struct("StringRecord")
-         .field("position", &self.position())
-         .field("fields", &fields)
-         .finish()
+        write!(f, "StringRecord({:?})", fields)
     }
 }
 

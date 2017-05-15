@@ -6,7 +6,8 @@ rust:
   - beta
   - nightly
 script:
-  - ./ci/check-cookbook
+  - ./ci/check cookbook
+  - ./ci/check tutorial
   - cargo build --verbose
   - cargo test --verbose
   - cargo test --verbose --manifest-path csv-core/Cargo.toml
