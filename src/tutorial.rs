@@ -410,8 +410,8 @@ will endeavor to show idiomatic code.
 Now that we've got you setup and covered basic error handling, it's time to do
 what we came here to do: handle CSV data. We've already seen how to read
 CSV data from `stdin`, but this section will cover how to read CSV data from
-files and how to configure our CSV reader to read one of the many variants
-of CSV data like TSV (tab separated values).
+files and how to configure our CSV reader to data formatted with different
+delimiters and quoting strategies.
 
 First up, let's adapt the example we've been working with to accept a file
 path argument instead of stdin.
@@ -571,14 +571,106 @@ StringRecord(["Oakman", "AL", "", "33.7133333", "-87.3886111"])
 
 ## Delimiters, quotes and variable length records
 
-In this section we'll temporarily depart from out `uspop.csv` data set and
+In this section we'll temporarily depart from our `uspop.csv` data set and
 show how to read some CSV data that is a little less clean. This CSV data
 uses `;` as a delimiter, escapes quotes with `\"` (instead of `""`) and has
-records of varying length. Here's the data:
+records of varying length. Here's the data, which contains a list of WWE
+wrestlers and the year they started, if it's known:
 
 ```text
 $ cat strange.csv
+"\"Hacksaw\" Jim Duggan";1987
+"Bret \"Hit Man\" Hart";1984
+# We're not sure when Rafael started, so omit the year.
+Rafael Halperin
+"\"Big Cat\" Ernie Ladd";1964
+"\"Macho Man\" Randy Savage";1985
+"Jake \"The Snake\" Roberts";1986
 ```
+
+To read this CSV data, we'll want to do the following:
+
+1. Disable headers, since this data has none.
+2. Change the delimiter from `,` to `;`.
+3. Change the quote strategy from doubled (e.g., `""`) to escaped (e.g., `\"`).
+4. Permit flexible length records, since some omit the year.
+5. Ignore lines beginning with a `#`.
+
+All of this (and more!) can be configured with a
+[`ReaderBuilder`](../struct.ReaderBuilder.html),
+as seen in the following example:
+
+```no_run
+//tutorial-read-03.rs
+extern crate csv;
+
+use std::env;
+use std::error::Error;
+use std::ffi::OsString;
+use std::process;
+
+fn run() -> Result<(), Box<Error>> {
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .delimiter(b';')
+        .double_quote(false)
+        .escape(Some(b'\\'))
+        .flexible(true)
+        .comment(Some(b'#'))
+        .from_path(get_first_arg()?)?;
+    for result in rdr.records() {
+        let record = result?;
+        println!("{:?}", record);
+    }
+    Ok(())
+}
+
+fn get_first_arg() -> Result<OsString, Box<Error>> {
+    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
+Now re-compile your project and try running the program on `strange.csv`:
+
+```text
+$ cargo build
+$ ./target/debug/csvtutor strange.csv
+StringRecord(["\"Hacksaw\" Jim Duggan", "1987"])
+StringRecord(["Bret \"Hit Man\" Hart", "1984"])
+StringRecord(["Rafael Halperin"])
+StringRecord(["\"Big Cat\" Ernie Ladd", "1964"])
+StringRecord(["\"Macho Man\" Randy Savage", "1985"])
+StringRecord(["Jake \"The Snake\" Roberts", "1986"])
+```
+
+You should feel encouraged to play around with the settings. Some interesting
+things you might try:
+
+1. If you remove the `escape` setting, notice that no CSV errors are reported.
+   Instead, records are still parsed. This is a feature of the CSV parser. Even
+   though it gets the data slightly wrong, it still provides a parse that you
+   might be able to work with. This is a useful property given the messiness
+   of real world CSV data.
+2. If you remove the `delimiter` setting, parsing still succeeds, although
+   every record has exactly one field.
+3. If you remove the `flexible` setting, the reader will print the first two
+   records (since they both have the same number of fields), but will return a
+   parse error on the third record, since it has only one field.
+
+This covers most of the things you might want to configure on your CSV reader,
+although there are a few other knobs. For example, you can change the record
+terminator from a new line to any other character. (By default, the terminator
+is `CRLF`, which treats each of `\r\n`, `\r` and `\n` as single record
+terminators.) For more details, see the documentation and examples for each of
+the methods on
+[`ReaderBuilder`](../struct.ReaderBuilder.html).
 
 ## Reading with Serde
 

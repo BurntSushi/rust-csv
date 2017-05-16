@@ -106,6 +106,14 @@ fn tutorial_read_02() {
     assert_eq!(out.stdout().lines().count(), 101);
 }
 
+#[test]
+fn tutorial_read_03() {
+    let mut cmd = cmd_for_example("tutorial-read-03");
+    cmd.arg(data_dir().join("strange.csv"));
+    let out = cmd_output(&mut cmd);
+    assert_eq!(out.stdout().lines().count(), 6);
+}
+
 // Helper functions follow.
 
 /// Return the target/debug directory path.
