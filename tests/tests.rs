@@ -114,6 +114,15 @@ fn tutorial_read_03() {
     assert_eq!(out.stdout().lines().count(), 6);
 }
 
+#[test]
+fn tutorial_serde_01() {
+    let mut cmd = cmd_for_example("tutorial-serde-01");
+    cmd.arg(data_dir().join("uspop.csv"));
+    let out = cmd_output(&mut cmd);
+    assert_eq!(out.stdout().lines().count(), 100);
+    assert!(out.stdout().lines().all(|x| x.contains("pop:")));
+}
+
 // Helper functions follow.
 
 /// Return the target/debug directory path.

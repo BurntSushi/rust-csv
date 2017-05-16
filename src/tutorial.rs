@@ -674,6 +674,71 @@ the methods on
 
 ## Reading with Serde
 
+One of the coolest features of this crate is its support for
+[Serde](https://serde.rs/).
+Serde is a framework for automatically serializing and deserializing data into
+Rust types. In simpler terms, that means instead of iterating over records
+as an array of string fields, we can iterate over records of a specific type
+of our choosing.
+
+For example, let's take a look at some data from our `uspop.csv` file:
+
+```text
+City,State,Population,Latitude,Longitude
+Davidsons Landing,AK,,65.2419444,-165.2716667
+Kenai,AK,7610,60.5544444,-151.2583333
+```
+
+While some of these fields make sense as strings (`City`, `State`), other
+fields look more like numbers. For example, `Population` looks like it contains
+integers while `Latitude` and `Longitude` appear to contain decimals. If we
+wanted to convert these fields to their "proper" types, then we need to do
+a lot of manual work. This next example shows how.
+
+```no_run
+//tutorial-serde-01.rs
+extern crate csv;
+
+use std::env;
+use std::error::Error;
+use std::ffi::OsString;
+use std::process;
+
+fn run() -> Result<(), Box<Error>> {
+    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    for result in rdr.records() {
+        let record = result?;
+
+        let city = &record[0];
+        let state = &record[1];
+        // Some records are missing population counts, so if we can't
+        // parse a number, treat the population count as missing instead
+        // of returning an error.
+        let pop: Option<u64> = record[2].parse().ok();
+        // Lucky us! Latitudes and longitudes are available for every record.
+        let latitude: f64 = record[3].parse()?;
+        let longitude: f64 = record[4].parse()?;
+
+        println!(
+            "city: {:?}, state: {:?}, \
+             pop: {:?}, latitude: {:?}, longitude: {:?}",
+            city, state, pop, latitude, longitude);
+    }
+    Ok(())
+}
+
+fn get_first_arg() -> Result<OsString, Box<Error>> {
+    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
 # Writing CSV files
 
 Blah.
