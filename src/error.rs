@@ -108,8 +108,8 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "CSV parse error: record {} \
-                     (byte {}, line {}, field: {}): {}",
-                    pos.record(), pos.byte(), pos.line(), err.field(), err)
+                     (line {}, field: {}, byte: {}): {}",
+                    pos.record(), pos.line(), err.field(), pos.byte(), err)
             }
             Error::UnequalLengths { pos: None, expected_len, len } => {
                 write!(
@@ -122,10 +122,10 @@ impl fmt::Display for Error {
                 pos: Some(ref pos), expected_len, len
             } => {
                 write!(
-                    f, "CSV error: record {} (byte {}, line {}): \
+                    f, "CSV error: record {} (line: {}, byte: {}): \
                         found record with {} fields, but the previous record \
                         has {} fields",
-                    pos.record(), pos.byte(), pos.line(), len, expected_len)
+                    pos.record(), pos.line(), pos.byte(), len, expected_len)
             }
             Error::Seek => {
                 write!(f, "CSV error: cannot access headers of CSV data \
@@ -142,8 +142,8 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "CSV deserialize error: record {} \
-                     (byte {}, line {}): {}",
-                    pos.record(), pos.byte(), pos.line(), err)
+                     (line: {}, byte: {}): {}",
+                    pos.record(), pos.line(), pos.byte(), err)
             }
         }
     }

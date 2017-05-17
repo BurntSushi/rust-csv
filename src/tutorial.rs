@@ -21,6 +21,7 @@ the book first.
     * [Reading headers](#reading-headers)
     * [Delimiters, quotes and variable length records](#delimiters-quotes-and-variable-length-records)
     * [Reading with Serde](#reading-with-serde)
+    * [Handling invalid data with Serde](#handling-invalid-data-with-serde)
 1. [Writing CSV](#writing-csv)
 1. Combine reading and writing CSV into pipeline.
 1. Talk about headers.
@@ -309,7 +310,7 @@ foo,bar
 quux,baz,foobar
 $ ./target/debug/csvtutor < invalid
 StringRecord { position: Some(Position { byte: 16, line: 2, record: 1 }), fields: ["foo", "bar"] }
-error reading CSV from <stdin>: CSV error: record 2 (byte 24, line 3): found record with 3 fields, but the previous record has 2 fields
+error reading CSV from <stdin>: CSV error: record 2 (line: 3, byte: 24): found record with 3 fields, but the previous record has 2 fields
 ```
 
 The second step for moving to recoverable errors is to put our CSV record loop
@@ -526,7 +527,7 @@ to build a CSV reader with our desired configuration. Here's an example that
 does just that.
 
 ```no_run
-//tutorial-read-02.rs
+//tutorial-read-headers-01.rs
 extern crate csv;
 
 use std::env;
@@ -569,6 +570,67 @@ StringRecord(["Kenai", "AK", "7610", "60.5544444", "-151.2583333"])
 StringRecord(["Oakman", "AL", "", "33.7133333", "-87.3886111"])
 ```
 
+If you ever need to access the header record directly, then you can use the
+[`Reader::header`](../struct.Reader.html#method.headers)
+method like so:
+
+```no_run
+//tutorial-read-headers-02.rs
+extern crate csv;
+
+use std::env;
+use std::error::Error;
+use std::ffi::OsString;
+use std::process;
+
+fn run() -> Result<(), Box<Error>> {
+    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    {
+        // We nest this call in its own scope because of lifetimes.
+        let headers = rdr.headers()?;
+        println!("{:?}", headers);
+    }
+    for result in rdr.records() {
+        let record = result?;
+        println!("{:?}", record);
+    }
+    // We can ask for the headers at any time. There's no need to nest this
+    // call in its own scope because we never try to borrow the reader again.
+    let headers = rdr.headers()?;
+    println!("{:?}", headers);
+    Ok(())
+}
+
+fn get_first_arg() -> Result<OsString, Box<Error>> {
+    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
+One interesting thing to note in this example is that we put the call to
+`rdr.headers()` in its own scope. We do this because `rdr.headers()` returns
+a *borrow* of the reader's internal header state. The nested scope in this
+code allows the borrow to end before we try to iterate over the records. If
+we didn't nest the call to `rdr.headers()` in its own scope, then the code
+wouldn't compile because we cannot borrow the reader's headers at the same time
+that we try to borrow the reader to iterate over its records.
+
+Another way of solving this problem is to *clone* the header record:
+
+```ignore
+let headers = rdr.headers()?.clone();
+```
+
+This converts it from a borrow of the CSV reader to a new owned value. This
+makes the code a bit easier to read, but at the cost of copying the header
+record into a new allocation.
+
 ## Delimiters, quotes and variable length records
 
 In this section we'll temporarily depart from our `uspop.csv` data set and
@@ -601,7 +663,7 @@ All of this (and more!) can be configured with a
 as seen in the following example:
 
 ```no_run
-//tutorial-read-03.rs
+//tutorial-read-delimiter-01.rs
 extern crate csv;
 
 use std::env;
@@ -696,7 +758,7 @@ wanted to convert these fields to their "proper" types, then we need to do
 a lot of manual work. This next example shows how.
 
 ```no_run
-//tutorial-serde-01.rs
+//tutorial-read-serde-01.rs
 extern crate csv;
 
 use std::env;
@@ -746,7 +808,7 @@ automatic. For example, we can ask to deserialize every record into a tuple
 type: `(String, String, Option<u64>, f64, f64)`.
 
 ```no_run
-//tutorial-serde-02.rs
+//tutorial-read-serde-02.rs
 extern crate csv;
 
 use std::env;
@@ -792,6 +854,375 @@ $ ./target/debug/csvtutor uspop.csv
 ("Oakman", "AL", None, 33.7133333, -87.3886111)
 # ... and much more
 ```
+
+One of the downsides of using Serde this way is that the type you use must
+match the order of fields as they appear in each record. This can be a pain
+if your CSV data has a header record, since you might tend to think about each
+field as a value of a particular named field rather than as a numbered field.
+One way we might achieve this is to deserialize our record into a map type like
+[`HashMap`](https://doc.rust-lang.org/std/collections/struct.HashMap.html)
+or
+[`BTreeMap`](https://doc.rust-lang.org/std/collections/struct.BTreeMap.html).
+The next example shows how, and in particular, notice that the only thing that
+changed from the last example is the definition of the `Record` type alias and
+a new `use` statement that imports `HashMap` from the standard library:
+
+```no_run
+//tutorial-read-serde-03.rs
+extern crate csv;
+
+use std::collections::HashMap;
+use std::env;
+use std::error::Error;
+use std::ffi::OsString;
+use std::process;
+
+// This introduces a type alias so that we can conveniently reference our
+// record type.
+type Record = HashMap<String, String>;
+
+fn run() -> Result<(), Box<Error>> {
+    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    for result in rdr.deserialize() {
+        let record: Record = result?;
+        println!("{:?}", record);
+    }
+    Ok(())
+}
+
+fn get_first_arg() -> Result<OsString, Box<Error>> {
+    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
+Running this program shows similar results as before, but each record is
+printed as a map:
+
+```text
+$ cargo build
+$ ./target/debug/csvtutor uspop.csv
+{"City": "Davidsons Landing", "Latitude": "65.2419444", "State": "AK", "Population": "", "Longitude": "-165.2716667"}
+{"City": "Kenai", "Population": "7610", "State": "AK", "Longitude": "-151.2583333", "Latitude": "60.5544444"}
+{"State": "AL", "City": "Oakman", "Longitude": "-87.3886111", "Population": "", "Latitude": "33.7133333"}
+```
+
+This method works especially well if you need to read CSV data with header
+records, but whose exact structure isn't known until your program runs.
+However, in our case, we know the structure of the data in `uspop.csv`.
+In particular, with the `HashMap` approach, we've lost the specific types
+we had for each field when we deserialized each record into a
+`(String, String, Option<u64>, f64, f64)`. Is there a way to identify fields
+by their corresponding header name *and* assign each field its own unique type?
+The answer is yes, but we'll need to bring in a new crate called `serde_derive`
+first. You can do that by adding this to the `[dependencies]` section of your
+`Cargo.toml` file:
+
+```text
+serde_derive = "1"
+```
+
+With this crate added to our project, we can now define our own custom struct
+that represents our record. We then ask Serde to automatically write the glue
+code required to populate our struct from a CSV record. The next example
+shows how. Don't miss the new `extern crate` line!
+
+```no_run
+//tutorial-read-serde-04.rs
+extern crate csv;
+// This lets us write `#[derive(Deserialize)]`.
+#[macro_use]
+extern crate serde_derive;
+
+use std::env;
+use std::error::Error;
+use std::ffi::OsString;
+use std::process;
+
+// We don't need to derive `Debug` (which doesn't require Serde), but it's a
+// good habit to do it for all your types.
+//
+// Notice that the field names in this struct are NOT in the same order as
+// the fields in the CSV data!
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct Record {
+    latitude: f64,
+    longitude: f64,
+    population: Option<u64>,
+    city: String,
+    state: String,
+}
+
+fn run() -> Result<(), Box<Error>> {
+    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    for result in rdr.deserialize() {
+        let record: Record = result?;
+        println!("{:?}", record);
+        // Try this if you don't like each record smushed on one line:
+        // println!("{:#?}", record);
+    }
+    Ok(())
+}
+
+fn get_first_arg() -> Result<OsString, Box<Error>> {
+    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
+Compile and run this program to see similar output as before:
+
+```text
+$ cargo build
+$ ./target/debug/csvtutor
+Record { latitude: 65.2419444, longitude: -165.2716667, population: None, city: "Davidsons Landing", state: "AK" }
+Record { latitude: 60.5544444, longitude: -151.2583333, population: Some(7610), city: "Kenai", state: "AK" }
+Record { latitude: 33.7133333, longitude: -87.3886111, population: None, city: "Oakman", state: "AL" }
+```
+
+Once again, we didn't need to change our `run` function at all: we're still
+iterating over records using the `deserialize` iterator that we started with
+in the beginning of this section. The only thing that changed in this example
+was the definition of the `Record` type and a new `extern crate serde_derive;`
+statement. Our `Record` type is now a custom struct that we defined instead
+of a type alias, and as a result, Serde doesn't know how to deserialize it by
+default. However, a special compiler plugin called `serde_derive` is available,
+which will read your struct definition at compile time and generate code that
+will deserialize a CSV record into a `Record` value. To see what happens if you
+leave out the automatic derive, change `#[derive(Debug, Deserialize)]` to
+`#[derive(Debug)]`.
+
+One other thing worth mentioning in this example is the use of
+`#[serde(rename_all = "PascalCase")]`. This directive helps Serde map your
+struct's field names to the header names in the CSV data. If you recall, our
+header record is:
+
+```text
+City,State,Population,Latitude,Longitude
+```
+
+Notice that each name is capitalized, but the fields in our struct are not. The
+`#[serde(rename_all = "PascalCase")]` directive fixes that by interpreting each
+field in `PascalCase`, where the first letter of the field is capitalized. If
+we didn't tell Serde about the name remapping, then the program will quit with
+an error:
+
+```text
+$ ./target/debug/csvtutor uspop.csv
+CSV deserialize error: record 1 (line: 2, byte: 41): missing field `latitude`
+```
+
+We could have fixed this through other means. For example, we could have used
+capital letters in our field names:
+
+```ignore
+#[derive(Debug, Deserialize)]
+struct Record {
+    Latitude: f64,
+    Longitude: f64,
+    Population: Option<u64>,
+    City: String,
+    State: String,
+}
+```
+
+However, this violates Rust naming style. (In fact, the Rust compiler
+will even warn you that the names do not follow convention!)
+
+Another way to fix this is to ask Serde to rename each field individually. This
+is useful when there is no consistent name mapping from fields to header names:
+
+```ignore
+#[derive(Debug, Deserialize)]
+struct Record {
+    #[serde(rename = "Latitude")]
+    latitude: f64,
+    #[serde(rename = "Longitude")]
+    longitude: f64,
+    #[serde(rename = "Population")]
+    population: Option<u64>,
+    #[serde(rename = "City")]
+    city: String,
+    #[serde(rename = "State")]
+    state: String,
+}
+```
+
+To read more about renaming fields and about other Serde directives, please
+consult the
+[Serde documentation on attributes](https://serde.rs/attributes.html).
+
+## Handling invalid data with Serde
+
+In this section we will see a brief example of how to deal with data that isn't
+clean. To do this exercise, we'll work with a slightly tweaked version of the
+US population data we've been using throughout this tutorial. This version of
+the data is slightly messier than what we've been using. You can get it like
+so:
+
+```text
+$ curl -LO 'https://raw.githubusercontent.com/BurntSushi/rust-csv/rewrite/examples/data/uspop-null.csv'
+```
+
+Let's start by running our program from the previous section on Serde:
+
+```no_run
+//tutorial-read-serde-invalid-01.rs
+extern crate csv;
+#[macro_use]
+extern crate serde_derive;
+
+use std::env;
+use std::error::Error;
+use std::ffi::OsString;
+use std::process;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct Record {
+    latitude: f64,
+    longitude: f64,
+    population: Option<u64>,
+    city: String,
+    state: String,
+}
+
+fn run() -> Result<(), Box<Error>> {
+    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    for result in rdr.deserialize() {
+        let record: Record = result?;
+        println!("{:?}", record);
+    }
+    Ok(())
+}
+
+fn get_first_arg() -> Result<OsString, Box<Error>> {
+    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
+Compile and run it on our messier data:
+
+```text
+$ cargo build
+$ ./target/debug/csvtutor uspop-null.csv
+Record { latitude: 65.2419444, longitude: -165.2716667, population: None, city: "Davidsons Landing", state: "AK" }
+Record { latitude: 60.5544444, longitude: -151.2583333, population: Some(7610), city: "Kenai", state: "AK" }
+Record { latitude: 33.7133333, longitude: -87.3886111, population: None, city: "Oakman", state: "AL" }
+# ... more records
+CSV deserialize error: record 42 (line: 43, byte: 1710): field 2: invalid digit found in string
+```
+
+Oops! What happened? The program printed several records, but stopped when it
+tripped over a deserialization problem. The error message says that it found
+an invalid digit in the field at index `2` (which is the `Population` field)
+on line 43. What does line 43 look like?
+
+```text
+$ head -n 43 uspop-null.csv | tail -n1
+Flint Springs,KY,NULL,37.3433333,-86.7136111
+```
+
+Ah! The third field (index `2`) is supposed to either be empty or contain a
+population count. However, in this data, it seems that `NULL` sometimes appears
+as a value, presumably to indicate that there is no count available.
+
+The problem with our current program is that it fails to read this record
+because it doesn't know how to deserialize a `NULL` string into an
+`Option<u64>`. That is, a `Option<u64>` either corresponds to an empty field
+or an integer.
+
+To fix this, we tell Serde to convert any deserialization errors on this field
+to a `None` value, as shown in this next example:
+
+```no_run
+//tutorial-read-serde-invalid-02.rs
+extern crate csv;
+#[macro_use]
+extern crate serde_derive;
+
+use std::env;
+use std::error::Error;
+use std::ffi::OsString;
+use std::process;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct Record {
+    latitude: f64,
+    longitude: f64,
+    #[serde(deserialize_with = "csv::invalid_option")]
+    population: Option<u64>,
+    city: String,
+    state: String,
+}
+
+fn run() -> Result<(), Box<Error>> {
+    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    for result in rdr.deserialize() {
+        let record: Record = result?;
+        println!("{:?}", record);
+    }
+    Ok(())
+}
+
+fn get_first_arg() -> Result<OsString, Box<Error>> {
+    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
+If you compile and run this example, then it should run to completion just
+like the other examples:
+
+```text
+$ cargo build
+$ ./target/debug/csvtutor uspop-null.csv
+Record { latitude: 65.2419444, longitude: -165.2716667, population: None, city: "Davidsons Landing", state: "AK" }
+Record { latitude: 60.5544444, longitude: -151.2583333, population: Some(7610), city: "Kenai", state: "AK" }
+Record { latitude: 33.7133333, longitude: -87.3886111, population: None, city: "Oakman", state: "AL" }
+# ... and more
+```
+
+The only change in this example was adding this attribute to the `population`
+field in our `Record` type:
+
+```ignore
+#[serde(deserialize_with = "csv::invalid_option")]
+```
+
+The
+[`invalid_option`](../fn.invalid_option.html)
+function is a generic helper function that does one very simple thing: when
+applied to `Option` fields, it will convert any deserialization error into a
+`None` value. This makes it very useful if you need to work with messy CSV
+data.
 
 # Writing CSV files
 
