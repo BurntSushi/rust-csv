@@ -17,6 +17,7 @@ fn run() -> Result<(), Box<Error>> {
         // of returning an error.
         let pop: Option<u64> = record[2].parse().ok();
         // Lucky us! Latitudes and longitudes are available for every record.
+        // Therefore, if one couldn't be parsed, return an error.
         let latitude: f64 = record[3].parse()?;
         let longitude: f64 = record[4].parse()?;
 

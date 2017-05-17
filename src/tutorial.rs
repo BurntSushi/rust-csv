@@ -674,7 +674,7 @@ the methods on
 
 ## Reading with Serde
 
-One of the coolest features of this crate is its support for
+One of the most convenient features of this crate is its support for
 [Serde](https://serde.rs/).
 Serde is a framework for automatically serializing and deserializing data into
 Rust types. In simpler terms, that means instead of iterating over records
@@ -716,6 +716,7 @@ fn run() -> Result<(), Box<Error>> {
         // of returning an error.
         let pop: Option<u64> = record[2].parse().ok();
         // Lucky us! Latitudes and longitudes are available for every record.
+        // Therefore, if one couldn't be parsed, return an error.
         let latitude: f64 = record[3].parse()?;
         let longitude: f64 = record[4].parse()?;
 
@@ -737,6 +738,59 @@ fn main() {
         process::exit(1);
     }
 }
+```
+
+The problem here is that we need to parse each individual field manually, which
+can be labor intensive and repetitive. Serde, however, makes this process
+automatic. For example, we can ask to deserialize every record into a tuple
+type: `(String, String, Option<u64>, f64, f64)`.
+
+```no_run
+//tutorial-serde-02.rs
+extern crate csv;
+
+use std::env;
+use std::error::Error;
+use std::ffi::OsString;
+use std::process;
+
+// This introduces a type alias so that we can conveniently reference our
+// record type.
+type Record = (String, String, Option<u64>, f64, f64);
+
+fn run() -> Result<(), Box<Error>> {
+    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    // Instead of creating an iterator with the `records` method, we create
+    // an iterator with the `deserialize` method.
+    for result in rdr.deserialize() {
+        // We must tell Serde what type we want to deserialize into.
+        let record: Record = result?;
+        println!("{:?}", record);
+    }
+    Ok(())
+}
+
+fn get_first_arg() -> Result<OsString, Box<Error>> {
+    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
+Running this code should show similar output as previous examples:
+
+```text
+$ cargo build
+$ ./target/debug/csvtutor uspop.csv
+("Davidsons Landing", "AK", None, 65.2419444, -165.2716667)
+("Kenai", "AK", Some(7610), 60.5544444, -151.2583333)
+("Oakman", "AL", None, 33.7133333, -87.3886111)
+# ... and much more
 ```
 
 # Writing CSV files
