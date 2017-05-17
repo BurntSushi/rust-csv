@@ -159,8 +159,8 @@ fn tutorial_read_serde_04() {
 }
 
 #[test]
-fn tutorial_read_serde_05() {
-    let mut cmd = cmd_for_example("tutorial-read-serde-05");
+fn tutorial_read_serde_05_invalid() {
+    let mut cmd = cmd_for_example("tutorial-read-serde-invalid-01");
     cmd.arg(data_dir().join("uspop.csv"));
     let out = cmd_output(&mut cmd);
     assert_eq!(out.stdout().lines().count(), 100);
@@ -168,7 +168,7 @@ fn tutorial_read_serde_05() {
 }
 
 #[test]
-fn tutorial_read_serde_05_errored() {
+fn tutorial_read_serde_05_invalid_errored() {
     let mut cmd = cmd_for_example("tutorial-read-serde-invalid-01");
     cmd.arg(data_dir().join("uspop-null.csv"));
     let out = cmd_output(&mut cmd);
@@ -176,7 +176,7 @@ fn tutorial_read_serde_05_errored() {
 }
 
 #[test]
-fn tutorial_read_serde_06() {
+fn tutorial_read_serde_invalid_06() {
     let mut cmd = cmd_for_example("tutorial-read-serde-invalid-02");
     cmd.arg(data_dir().join("uspop-null.csv"));
     let out = cmd_output(&mut cmd);
