@@ -1,8 +1,7 @@
 extern crate csv;
 
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
+use std::io;
 use std::process;
 
 fn run() -> Result<(), Box<Error>> {
@@ -13,7 +12,7 @@ fn run() -> Result<(), Box<Error>> {
         .escape(Some(b'\\'))
         .flexible(true)
         .comment(Some(b'#'))
-        .from_path(get_first_arg()?)?;
+        .from_reader(io::stdin());
     for result in rdr.records() {
         let record = result?;
         println!("{:?}", record);
@@ -21,13 +20,9 @@ fn run() -> Result<(), Box<Error>> {
     Ok(())
 }
 
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
-}
-
 fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
-    }
+if let Err(err) = run() {
+println!("{}", err);
+process::exit(1);
+}
 }

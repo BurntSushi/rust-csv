@@ -6,6 +6,8 @@ use std::path::PathBuf;
 use std::process::{self, Command};
 
 static USPOP: &'static str = include_str!("../examples/data/uspop.csv");
+static USPOP_NULL: &'static str = include_str!("../examples/data/uspop-null.csv");
+static STRANGE: &'static str = include_str!("../examples/data/strange.csv");
 
 #[test]
 fn tutorial_setup_01() {
@@ -115,16 +117,14 @@ fn tutorial_read_headers_02() {
 #[test]
 fn tutorial_read_delimiter_01() {
     let mut cmd = cmd_for_example("tutorial-read-delimiter-01");
-    cmd.arg(data_dir().join("strange.csv"));
-    let out = cmd_output(&mut cmd);
+    let out = cmd_output_with(&mut cmd, STRANGE.as_bytes());
     assert_eq!(out.stdout().lines().count(), 6);
 }
 
 #[test]
 fn tutorial_read_serde_01() {
     let mut cmd = cmd_for_example("tutorial-read-serde-01");
-    cmd.arg(data_dir().join("uspop.csv"));
-    let out = cmd_output(&mut cmd);
+    let out = cmd_output_with(&mut cmd, USPOP.as_bytes());
     assert_eq!(out.stdout().lines().count(), 100);
     assert!(out.stdout().lines().all(|x| x.contains("pop:")));
 }
@@ -132,8 +132,7 @@ fn tutorial_read_serde_01() {
 #[test]
 fn tutorial_read_serde_02() {
     let mut cmd = cmd_for_example("tutorial-read-serde-02");
-    cmd.arg(data_dir().join("uspop.csv"));
-    let out = cmd_output(&mut cmd);
+    let out = cmd_output_with(&mut cmd, USPOP.as_bytes());
     assert_eq!(out.stdout().lines().count(), 100);
     assert!(out.stdout().lines().all(|x| x.starts_with("(")));
 }
@@ -141,8 +140,7 @@ fn tutorial_read_serde_02() {
 #[test]
 fn tutorial_read_serde_03() {
     let mut cmd = cmd_for_example("tutorial-read-serde-03");
-    cmd.arg(data_dir().join("uspop.csv"));
-    let out = cmd_output(&mut cmd);
+    let out = cmd_output_with(&mut cmd, USPOP.as_bytes());
     assert_eq!(out.stdout().lines().count(), 100);
     assert!(out.stdout().lines().all(|x| x.contains("\"City\":")));
 }
@@ -150,8 +148,7 @@ fn tutorial_read_serde_03() {
 #[test]
 fn tutorial_read_serde_04() {
     let mut cmd = cmd_for_example("tutorial-read-serde-04");
-    cmd.arg(data_dir().join("uspop.csv"));
-    let out = cmd_output(&mut cmd);
+    let out = cmd_output_with(&mut cmd, USPOP.as_bytes());
     assert_eq!(out.stdout().lines().count(), 100);
     assert!(out.stdout().lines().all(|x| x.starts_with("Record { latitude:")));
 }
@@ -159,8 +156,7 @@ fn tutorial_read_serde_04() {
 #[test]
 fn tutorial_read_serde_05_invalid() {
     let mut cmd = cmd_for_example("tutorial-read-serde-invalid-01");
-    cmd.arg(data_dir().join("uspop.csv"));
-    let out = cmd_output(&mut cmd);
+    let out = cmd_output_with(&mut cmd, USPOP.as_bytes());
     assert_eq!(out.stdout().lines().count(), 100);
     assert!(out.stdout().lines().all(|x| x.starts_with("Record { latitude:")));
 }
@@ -168,16 +164,14 @@ fn tutorial_read_serde_05_invalid() {
 #[test]
 fn tutorial_read_serde_05_invalid_errored() {
     let mut cmd = cmd_for_example("tutorial-read-serde-invalid-01");
-    cmd.arg(data_dir().join("uspop-null.csv"));
-    let out = cmd_output(&mut cmd);
+    let out = cmd_output_with(&mut cmd, USPOP_NULL.as_bytes());
     assert!(out.stdout_failed().contains("CSV deserialize error:"));
 }
 
 #[test]
 fn tutorial_read_serde_invalid_06() {
     let mut cmd = cmd_for_example("tutorial-read-serde-invalid-02");
-    cmd.arg(data_dir().join("uspop-null.csv"));
-    let out = cmd_output(&mut cmd);
+    let out = cmd_output_with(&mut cmd, USPOP_NULL.as_bytes());
     assert_eq!(out.stdout().lines().count(), 100);
     assert!(out.stdout().lines().all(|x| x.starts_with("Record { latitude:")));
 }

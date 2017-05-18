@@ -655,13 +655,12 @@ as seen in the following example:
 
 ```no_run
 //tutorial-read-delimiter-01.rs
-extern crate csv;
-
-use std::env;
-use std::error::Error;
-use std::ffi::OsString;
-use std::process;
-
+# extern crate csv;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
 fn run() -> Result<(), Box<Error>> {
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false)
@@ -670,31 +669,27 @@ fn run() -> Result<(), Box<Error>> {
         .escape(Some(b'\\'))
         .flexible(true)
         .comment(Some(b'#'))
-        .from_path(get_first_arg()?)?;
+        .from_reader(io::stdin());
     for result in rdr.records() {
         let record = result?;
         println!("{:?}", record);
     }
     Ok(())
 }
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
-}
-
-fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
-    }
-}
+#
+# fn main() {
+#     if let Err(err) = run() {
+#         println!("{}", err);
+#         process::exit(1);
+#     }
+# }
 ```
 
 Now re-compile your project and try running the program on `strange.csv`:
 
 ```text
 $ cargo build
-$ ./target/debug/csvtutor strange.csv
+$ ./target/debug/csvtutor < strange.csv
 StringRecord(["\"Hacksaw\" Jim Duggan", "1987"])
 StringRecord(["Bret \"Hit Man\" Hart", "1984"])
 StringRecord(["Rafael Halperin"])
@@ -750,15 +745,14 @@ a lot of manual work. This next example shows how.
 
 ```no_run
 //tutorial-read-serde-01.rs
-extern crate csv;
-
-use std::env;
-use std::error::Error;
-use std::ffi::OsString;
-use std::process;
-
+# extern crate csv;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
 fn run() -> Result<(), Box<Error>> {
-    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.records() {
         let record = result?;
 
@@ -780,17 +774,13 @@ fn run() -> Result<(), Box<Error>> {
     }
     Ok(())
 }
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
-}
-
-fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
-    }
-}
+#
+# fn main() {
+#     if let Err(err) = run() {
+#         println!("{}", err);
+#         process::exit(1);
+#     }
+# }
 ```
 
 The problem here is that we need to parse each individual field manually, which
@@ -800,19 +790,18 @@ type: `(String, String, Option<u64>, f64, f64)`.
 
 ```no_run
 //tutorial-read-serde-02.rs
-extern crate csv;
-
-use std::env;
-use std::error::Error;
-use std::ffi::OsString;
-use std::process;
-
+# extern crate csv;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
 // This introduces a type alias so that we can conveniently reference our
 // record type.
 type Record = (String, String, Option<u64>, f64, f64);
 
 fn run() -> Result<(), Box<Error>> {
-    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    let mut rdr = csv::Reader::from_reader(io::stdin());
     // Instead of creating an iterator with the `records` method, we create
     // an iterator with the `deserialize` method.
     for result in rdr.deserialize() {
@@ -822,24 +811,20 @@ fn run() -> Result<(), Box<Error>> {
     }
     Ok(())
 }
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
-}
-
-fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
-    }
-}
+#
+# fn main() {
+#     if let Err(err) = run() {
+#         println!("{}", err);
+#         process::exit(1);
+#     }
+# }
 ```
 
 Running this code should show similar output as previous examples:
 
 ```text
 $ cargo build
-$ ./target/debug/csvtutor uspop.csv
+$ ./target/debug/csvtutor < uspop.csv
 ("Davidsons Landing", "AK", None, 65.2419444, -165.2716667)
 ("Kenai", "AK", Some(7610), 60.5544444, -151.2583333)
 ("Oakman", "AL", None, 33.7133333, -87.3886111)
@@ -860,37 +845,32 @@ a new `use` statement that imports `HashMap` from the standard library:
 
 ```no_run
 //tutorial-read-serde-03.rs
-extern crate csv;
-
-use std::collections::HashMap;
-use std::env;
-use std::error::Error;
-use std::ffi::OsString;
-use std::process;
-
+# extern crate csv;
+#
+# use std::collections::HashMap;
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
 // This introduces a type alias so that we can conveniently reference our
 // record type.
 type Record = HashMap<String, String>;
 
 fn run() -> Result<(), Box<Error>> {
-    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         let record: Record = result?;
         println!("{:?}", record);
     }
     Ok(())
 }
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
-}
-
-fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
-    }
-}
+#
+# fn main() {
+#     if let Err(err) = run() {
+#         println!("{}", err);
+#         process::exit(1);
+#     }
+# }
 ```
 
 Running this program shows similar results as before, but each record is
@@ -898,7 +878,7 @@ printed as a map:
 
 ```text
 $ cargo build
-$ ./target/debug/csvtutor uspop.csv
+$ ./target/debug/csvtutor < uspop.csv
 {"City": "Davidsons Landing", "Latitude": "65.2419444", "State": "AK", "Population": "", "Longitude": "-165.2716667"}
 {"City": "Kenai", "Population": "7610", "State": "AK", "Longitude": "-151.2583333", "Latitude": "60.5544444"}
 {"State": "AL", "City": "Oakman", "Longitude": "-87.3886111", "Population": "", "Latitude": "33.7133333"}
@@ -931,9 +911,8 @@ extern crate csv;
 #[macro_use]
 extern crate serde_derive;
 
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
+use std::io;
 use std::process;
 
 // We don't need to derive `Debug` (which doesn't require Serde), but it's a
@@ -952,7 +931,7 @@ struct Record {
 }
 
 fn run() -> Result<(), Box<Error>> {
-    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         let record: Record = result?;
         println!("{:?}", record);
@@ -960,10 +939,6 @@ fn run() -> Result<(), Box<Error>> {
         // println!("{:#?}", record);
     }
     Ok(())
-}
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
 }
 
 fn main() {
@@ -978,7 +953,7 @@ Compile and run this program to see similar output as before:
 
 ```text
 $ cargo build
-$ ./target/debug/csvtutor
+$ ./target/debug/csvtutor < uspop.csv
 Record { latitude: 65.2419444, longitude: -165.2716667, population: None, city: "Davidsons Landing", state: "AK" }
 Record { latitude: 60.5544444, longitude: -151.2583333, population: Some(7610), city: "Kenai", state: "AK" }
 Record { latitude: 33.7133333, longitude: -87.3886111, population: None, city: "Oakman", state: "AL" }
@@ -1012,7 +987,7 @@ we didn't tell Serde about the name remapping, then the program will quit with
 an error:
 
 ```text
-$ ./target/debug/csvtutor uspop.csv
+$ ./target/debug/csvtutor < uspop.csv
 CSV deserialize error: record 1 (line: 2, byte: 41): missing field `latitude`
 ```
 
@@ -1072,15 +1047,14 @@ Let's start by running our program from the previous section on Serde:
 
 ```no_run
 //tutorial-read-serde-invalid-01.rs
-extern crate csv;
-#[macro_use]
-extern crate serde_derive;
-
-use std::env;
-use std::error::Error;
-use std::ffi::OsString;
-use std::process;
-
+# extern crate csv;
+# #[macro_use]
+# extern crate serde_derive;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record {
@@ -1092,31 +1066,27 @@ struct Record {
 }
 
 fn run() -> Result<(), Box<Error>> {
-    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         let record: Record = result?;
         println!("{:?}", record);
     }
     Ok(())
 }
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
-}
-
-fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
-    }
-}
+#
+# fn main() {
+#     if let Err(err) = run() {
+#         println!("{}", err);
+#         process::exit(1);
+#     }
+# }
 ```
 
 Compile and run it on our messier data:
 
 ```text
 $ cargo build
-$ ./target/debug/csvtutor uspop-null.csv
+$ ./target/debug/csvtutor < uspop-null.csv
 Record { latitude: 65.2419444, longitude: -165.2716667, population: None, city: "Davidsons Landing", state: "AK" }
 Record { latitude: 60.5544444, longitude: -151.2583333, population: Some(7610), city: "Kenai", state: "AK" }
 Record { latitude: 33.7133333, longitude: -87.3886111, population: None, city: "Oakman", state: "AL" }
@@ -1148,15 +1118,14 @@ to a `None` value, as shown in this next example:
 
 ```no_run
 //tutorial-read-serde-invalid-02.rs
-extern crate csv;
-#[macro_use]
-extern crate serde_derive;
-
-use std::env;
-use std::error::Error;
-use std::ffi::OsString;
-use std::process;
-
+# extern crate csv;
+# #[macro_use]
+# extern crate serde_derive;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record {
@@ -1169,24 +1138,20 @@ struct Record {
 }
 
 fn run() -> Result<(), Box<Error>> {
-    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         let record: Record = result?;
         println!("{:?}", record);
     }
     Ok(())
 }
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
-}
-
-fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
-    }
-}
+#
+# fn main() {
+#     if let Err(err) = run() {
+#         println!("{}", err);
+#         process::exit(1);
+#     }
+# }
 ```
 
 If you compile and run this example, then it should run to completion just
@@ -1194,7 +1159,7 @@ like the other examples:
 
 ```text
 $ cargo build
-$ ./target/debug/csvtutor uspop-null.csv
+$ ./target/debug/csvtutor < uspop-null.csv
 Record { latitude: 65.2419444, longitude: -165.2716667, population: None, city: "Davidsons Landing", state: "AK" }
 Record { latitude: 60.5544444, longitude: -151.2583333, population: Some(7610), city: "Kenai", state: "AK" }
 Record { latitude: 33.7133333, longitude: -87.3886111, population: None, city: "Oakman", state: "AL" }
