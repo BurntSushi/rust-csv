@@ -101,16 +101,14 @@ fn tutorial_read_01() {
 #[test]
 fn tutorial_read_headers_01() {
     let mut cmd = cmd_for_example("tutorial-read-headers-01");
-    cmd.arg(data_dir().join("uspop.csv"));
-    let out = cmd_output(&mut cmd);
+    let out = cmd_output_with(&mut cmd, USPOP.as_bytes());
     assert_eq!(out.stdout().lines().count(), 101);
 }
 
 #[test]
 fn tutorial_read_headers_02() {
     let mut cmd = cmd_for_example("tutorial-read-headers-02");
-    cmd.arg(data_dir().join("uspop.csv"));
-    let out = cmd_output(&mut cmd);
+    let out = cmd_output_with(&mut cmd, USPOP.as_bytes());
     assert_eq!(out.stdout().lines().count(), 102);
 }
 

@@ -8,6 +8,7 @@ import re
 
 RE_EACH_CODE_BLOCK = re.compile(r'(?s)```[^\n]*\n(.*?)```')
 RE_MARKER = re.compile(r'^(?:# )?//(.+)$')
+RE_STRIP_COMMENT = re.compile(r'^#($| +)')
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
@@ -19,11 +20,12 @@ if __name__ == '__main__':
         rustcode = f.read()
     for m in RE_EACH_CODE_BLOCK.finditer(rustcode):
         lines = m.group(1).splitlines()
-        marker, code = lines[0], '\n'.join(lines[1:])
+        marker, codelines = lines[0], lines[1:]
         m = RE_MARKER.search(marker)
         if m is None:
             continue
 
+        code = '\n'.join(RE_STRIP_COMMENT.sub('', line) for line in codelines)
         fpath = os.path.join(args.example_dir, m.group(1))
         with codecs.open(fpath, mode='w+', encoding='utf-8') as f:
             print(code, file=f)

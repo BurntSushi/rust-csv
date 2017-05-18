@@ -524,38 +524,34 @@ as a header, you'll need to tell the CSV reader that there are no headers.
 To configure a CSV reader to do this, we'll need to use a
 [`ReaderBuilder`](../struct.ReaderBuilder.html)
 to build a CSV reader with our desired configuration. Here's an example that
-does just that.
+does just that. (Note that we've moved back to reading from `stdin`, since it
+produces terser examples.)
 
 ```no_run
 //tutorial-read-headers-01.rs
-extern crate csv;
-
-use std::env;
-use std::error::Error;
-use std::ffi::OsString;
-use std::process;
-
+# extern crate csv;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
 fn run() -> Result<(), Box<Error>> {
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false)
-        .from_path(get_first_arg()?)?;
+        .from_reader(io::stdin());
     for result in rdr.records() {
         let record = result?;
         println!("{:?}", record);
     }
     Ok(())
 }
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
-}
-
-fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
-    }
-}
+#
+# fn main() {
+#     if let Err(err) = run() {
+#         println!("{}", err);
+#         process::exit(1);
+#     }
+# }
 ```
 
 If you compile and run this program with our `uspop.csv` data, then you'll see
@@ -563,7 +559,7 @@ that the header record is now printed:
 
 ```text
 $ cargo build
-$ ./target/debug/csvtutor uspop.csv
+$ ./target/debug/csvtutor < uspop.csv
 StringRecord(["City", "State", "Population", "Latitude", "Longitude"])
 StringRecord(["Davidsons Landing", "AK", "", "65.2419444", "-165.2716667"])
 StringRecord(["Kenai", "AK", "7610", "60.5544444", "-151.2583333"])
@@ -576,15 +572,14 @@ method like so:
 
 ```no_run
 //tutorial-read-headers-02.rs
-extern crate csv;
-
-use std::env;
-use std::error::Error;
-use std::ffi::OsString;
-use std::process;
-
+# extern crate csv;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
 fn run() -> Result<(), Box<Error>> {
-    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    let mut rdr = csv::Reader::from_reader(io::stdin());
     {
         // We nest this call in its own scope because of lifetimes.
         let headers = rdr.headers()?;
@@ -600,17 +595,13 @@ fn run() -> Result<(), Box<Error>> {
     println!("{:?}", headers);
     Ok(())
 }
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
-}
-
-fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
-    }
-}
+#
+# fn main() {
+#     if let Err(err) = run() {
+#         println!("{}", err);
+#         process::exit(1);
+#     }
+# }
 ```
 
 One interesting thing to note in this example is that we put the call to
@@ -1226,5 +1217,6 @@ data.
 
 # Writing CSV files
 
-Blah.
+In this section we'll show a few examples that write CSV data. Writing CSV data
+tends to be a bit more straight-forward than reading CSV data.
 */

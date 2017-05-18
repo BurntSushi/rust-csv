@@ -1,12 +1,11 @@
 extern crate csv;
 
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
+use std::io;
 use std::process;
 
 fn run() -> Result<(), Box<Error>> {
-    let mut rdr = csv::Reader::from_path(get_first_arg()?)?;
+    let mut rdr = csv::Reader::from_reader(io::stdin());
     {
         // We nest this call in its own scope because of lifetimes.
         let headers = rdr.headers()?;
@@ -23,13 +22,9 @@ fn run() -> Result<(), Box<Error>> {
     Ok(())
 }
 
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    env::args_os().nth(1).ok_or_else(|| From::from("expected at least 1 arg"))
-}
-
 fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
-    }
+if let Err(err) = run() {
+println!("{}", err);
+process::exit(1);
+}
 }
