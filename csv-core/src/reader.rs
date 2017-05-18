@@ -744,6 +744,10 @@ impl Reader {
                     break;
                 }
             }
+            if state == self.dfa.in_field || state == self.dfa.in_quoted {
+                self.dfa.classes.scan_and_copy(
+                    input, &mut nin, output, &mut nout);
+            }
         }
         let res = self.dfa.new_read_record_result(
             state, false,
@@ -1291,6 +1295,10 @@ struct Dfa {
     /// This is responsible for reducing the effective alphabet size from
     /// 256 to `TRANS_CLASSES`.
     classes: DfaClasses,
+    /// The DFA state corresponding to being inside an unquoted field.
+    in_field: DfaState,
+    /// The DFA state corresponding to being inside an quoted field.
+    in_quoted: DfaState,
     /// The minimum DFA state that indicates a field has been parsed. All DFA
     /// states greater than this are also final-field states.
     final_field: DfaState,
@@ -1305,6 +1313,8 @@ impl Dfa {
             trans: [DfaState(0); TRANS_SIZE],
             has_output: [false; TRANS_SIZE],
             classes: DfaClasses::new(),
+            in_field: DfaState(0),
+            in_quoted: DfaState(0),
             final_field: DfaState(0),
             final_record: DfaState(0),
         }
@@ -1344,6 +1354,8 @@ impl Dfa {
     }
 
     fn finish(&mut self) {
+        self.in_field = self.new_state(NfaState::InField);
+        self.in_quoted = self.new_state(NfaState::InQuotedField);
         self.final_field = self.new_state(NfaState::EndFieldDelim);
         self.final_record = self.new_state(NfaState::EndRecord);
     }
@@ -1449,6 +1461,35 @@ impl DfaClasses {
 
     fn num_classes(&self) -> usize {
         self.next_class as usize
+    }
+
+    /// Scan and copy the input bytes to the output buffer quickly.
+    ///
+    /// This assumes that the current state of the DFA is either `InField` or
+    /// `InQuotedField`. In this case, all bytes corresponding to the first
+    /// equivalence class (i.e., not a delimiter/quote/escape/etc.) are
+    /// guaranteed to never result in a state transition out of the current
+    /// state. This function takes advantage of that copies every byte from
+    /// `input` in the first equivalence class to `output`. Once a byte is seen
+    /// outside the first equivalence class, we quit and should fall back to
+    /// the main DFA loop.
+    #[inline(always)]
+    fn scan_and_copy(
+        &self,
+        input: &[u8],
+        nin: &mut usize,
+        output: &mut [u8],
+        nout: &mut usize,
+    ) {
+        while
+            *nin < input.len()
+            && *nout < output.len()
+            && self.classes[input[*nin] as usize] == 0
+        {
+            output[*nout] = input[*nin];
+            *nin += 1;
+            *nout += 1;
+        }
     }
 }
 

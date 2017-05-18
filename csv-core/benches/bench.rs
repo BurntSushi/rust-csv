@@ -7,9 +7,10 @@ use test::Bencher;
 
 use csv_core::{Reader, ReaderBuilder};
 
-static NFL: &'static str = include_str!("../../examples/data/nfl.csv");
-static GAME: &'static str = include_str!("../../examples/data/game.csv");
-static POP: &'static str = include_str!("../../examples/data/worldcitiespop.csv");
+static NFL: &'static str = include_str!("../../examples/data/bench/nfl.csv");
+static GAME: &'static str = include_str!("../../examples/data/bench/game.csv");
+static POP: &'static str = include_str!("../../examples/data/bench/worldcitiespop.csv");
+static MBTA: &'static str = include_str!("../../examples/data/bench/gtfs-mbta-stop-times.csv");
 
 macro_rules! bench {
     ($name:ident, $data:ident, $counter:ident, $result:expr) => {
@@ -52,6 +53,13 @@ bench!(count_pop_field_copy_nfa, POP, count_fields, 140007, NFA);
 bench!(count_pop_record_nocopy_dfa, POP, count_records_nocopy, 20001);
 bench!(count_pop_record_copy_dfa, POP, count_records, 20001);
 bench!(count_pop_record_copy_nfa, POP, count_records, 20001, NFA);
+
+bench!(count_mbta_field_nocopy_dfa, MBTA, count_fields_nocopy, 90000);
+bench!(count_mbta_field_copy_dfa, MBTA, count_fields, 90000);
+bench!(count_mbta_field_copy_nfa, MBTA, count_fields, 90000, NFA);
+bench!(count_mbta_record_nocopy_dfa, MBTA, count_records_nocopy, 10000);
+bench!(count_mbta_record_copy_dfa, MBTA, count_records, 10000);
+bench!(count_mbta_record_copy_nfa, MBTA, count_records, 10000, NFA);
 
 fn count_fields(rdr: &mut Reader, mut data: &[u8]) -> u64 {
     use csv_core::ReadFieldResult::*;
