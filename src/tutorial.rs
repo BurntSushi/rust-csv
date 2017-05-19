@@ -23,12 +23,15 @@ the book first.
     * [Reading with Serde](#reading-with-serde)
     * [Handling invalid data with Serde](#handling-invalid-data-with-serde)
 1. [Writing CSV](#writing-csv)
-1. Combine reading and writing CSV into pipeline.
-1. Talk about headers.
-1. Filter: omit column.
-1. Filter: only show records that contain a certain substring.
-1. Introduce Serde.
-1. Performance.
+    * [Writing tab separated values](#writing-tab-separated-values)
+    * [Writing with Serde](#writing-with-serde)
+1. [Pipelining](#pipelining)
+1. [Project: concatenate CSV data](#project-concatenate-csv-data)
+1. [Performance](#performance)
+    * [Amortizing allocations](#amortizing-allocations)
+    * [Serde and zero allocation](#serde-and-zero-allocation)
+    * [CSV parsing without the standard library](#csv-parsing-without-the-standard-library)
+1. [Closing thoughts](#closing-thoughts)
 
 # Setup
 
@@ -847,11 +850,11 @@ a new `use` statement that imports `HashMap` from the standard library:
 //tutorial-read-serde-03.rs
 # extern crate csv;
 #
-# use std::collections::HashMap;
+use std::collections::HashMap;
 # use std::error::Error;
 # use std::io;
 # use std::process;
-#
+
 // This introduces a type alias so that we can conveniently reference our
 // record type.
 type Record = HashMap<String, String>;
@@ -888,12 +891,12 @@ This method works especially well if you need to read CSV data with header
 records, but whose exact structure isn't known until your program runs.
 However, in our case, we know the structure of the data in `uspop.csv`.
 In particular, with the `HashMap` approach, we've lost the specific types
-we had for each field when we deserialized each record into a
-`(String, String, Option<u64>, f64, f64)`. Is there a way to identify fields
-by their corresponding header name *and* assign each field its own unique type?
-The answer is yes, but we'll need to bring in a new crate called `serde_derive`
-first. You can do that by adding this to the `[dependencies]` section of your
-`Cargo.toml` file:
+we had for each field in the previous example when we deserialized each record
+into a `(String, String, Option<u64>, f64, f64)`. Is there a way to identify
+fields by their corresponding header name *and* assign each field its own
+unique type? The answer is yes, but we'll need to bring in a new crate called
+`serde_derive` first. You can do that by adding this to the `[dependencies]`
+section of your `Cargo.toml` file:
 
 ```text
 serde_derive = "1"
@@ -1043,7 +1046,7 @@ so:
 $ curl -LO 'https://raw.githubusercontent.com/BurntSushi/rust-csv/rewrite/examples/data/uspop-null.csv'
 ```
 
-Let's start by running our program from the previous section on Serde:
+Let's start by running our program from the previous section:
 
 ```no_run
 //tutorial-read-serde-invalid-01.rs
@@ -1177,11 +1180,253 @@ The
 [`invalid_option`](../fn.invalid_option.html)
 function is a generic helper function that does one very simple thing: when
 applied to `Option` fields, it will convert any deserialization error into a
-`None` value. This makes it very useful if you need to work with messy CSV
-data.
+`None` value. This is useful when you need to work with messy CSV data.
 
-# Writing CSV files
+# Writing CSV
 
 In this section we'll show a few examples that write CSV data. Writing CSV data
-tends to be a bit more straight-forward than reading CSV data.
+tends to be a bit more straight-forward than reading CSV data, since you get to
+control the output format.
+
+Let's start with the most basic example: writing a few CSV records to `stdout`.
+
+```no_run
+//tutorial-write-01.rs
+extern crate csv;
+
+use std::error::Error;
+use std::io;
+use std::process;
+
+fn run() -> Result<(), Box<Error>> {
+    let mut wtr = csv::Writer::from_writer(io::stdout());
+    // Since we're writing records manually, we must explicitly write our
+    // header record. A header record is written the same way that other
+    // records are written.
+    wtr.write_record(&["City", "State", "Population", "Latitude", "Longitude"])?;
+    wtr.write_record(&["Davidsons Landing", "AK", "", "65.2419444", "-165.2716667"])?;
+    wtr.write_record(&["Kenai", "AK", "7610", "60.5544444", "-151.2583333"])?;
+    wtr.write_record(&["Oakman", "AL", "", "33.7133333", "-87.3886111"])?;
+
+    // A CSV writer maintains an internal buffer, so it's important
+    // to flush the buffer when you're done.
+    wtr.flush()?;
+    Ok(())
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
+Compiling and running this example results in CSV data being printed:
+
+```text
+$ cargo build
+$ ./target/debug/csvtutor
+City,State,Population,Latitude,Longitude
+Davidsons Landing,AK,,65.2419444,-165.2716667
+Kenai,AK,7610,60.5544444,-151.2583333
+Oakman,AL,,33.7133333,-87.3886111
+```
+
+Before moving on, it's worth taking a closer look at the `write_record`
+method. In this example, it looks rather simple, but if you're new to Rust then
+its type signature might look a little daunting:
+
+```ignore
+pub fn write_record<I, T>(&mut self, record: I) -> csv::Result<()>
+    where I: IntoIterator<Item=T>, T: AsRef<[u8]>
+{
+    // implementation elided
+}
+```
+
+To understand the type signature, we can break it down piece by piece.
+
+1. The method takes two parameters: `self` and `record`.
+2. `self` is a special parameter that corresponds to the `Writer` itself.
+3. `record` is the CSV record we'd like to write. Its type is `I`, which is
+   a generic type.
+4. In the method's `where` clause, the `I` type is contrained by the
+   `IntoIterator<Item=T>` bound. What that means is that `I` must satisfy the
+   `IntoIterator` trait. If you look at the documentation of the
+   [`IntoIterator` trait](https://doc.rust-lang.org/std/iter/trait.IntoIterator.html),
+   then we can see that it describes types that can build iterators. In this
+   case, we want an iterator that yields *another* generic type `T`, where
+   `T` is the type of each field we want to write.
+5. `T` also appears in the method's `where` clause, but its constraint is the
+   `AsRef<[u8]>` bound. The `AsRef` trait is a way to describe zero cost
+   conversions between types in Rust. In this case, the `[u8]` in `AsRef<[u8]>`
+   means that we want to be able to *borrow* a slice of bytes from `T`.
+   The CSV writer will take these bytes and write them as a single field.
+   The `AsRef<[u8]>` bound is useful because types like `String`, `&str`,
+   `Vec<u8>` and `&[u8]` all satisfy it.
+6. Finally, the method returns a `csv::Result<()>`, which is short-hand for
+   `Result<(), csv::Error>`. That means `write_record` either returns nothing
+   on success or returns a `csv::Error` on failure.
+
+Now, let's apply our new found understanding of the type signature of
+`write_record`. If you recall, in our previous example, we used it like so:
+
+```ignore
+wtr.write_record(&["field 1", "field 2", "etc"])?;
+```
+
+So how do the types match up? Well, the type of each of our fields in this
+code is `&'static str` (which is the type of a string literal in Rust). Since
+we put them in a slice literal, the type of our parameter is
+`&'static [&'static str]`, or more succinctly written as `&[&str]` without the
+lifetime annotations. Since slices satisfy the `IntoIterator` bound and
+strings satisfy the `AsRef<[u8]>` bound, this ends up being a legal call.
+
+Here are a few more examples of ways you can call `write_record`:
+
+```no_run
+# use csv;
+# let mut wtr = csv::Writer::from_writer(vec![]);
+// A slice of byte strings.
+wtr.write_record(&[b"a", b"b", b"c"]);
+// A vector.
+wtr.write_record(vec!["a", "b", "c"]);
+// A string record.
+wtr.write_record(&csv::StringRecord::from(vec!["a", "b", "c"]));
+// A byte record.
+wtr.write_record(&csv::ByteRecord::from(vec!["a", "b", "c"]));
+```
+
+Finally, the example above can be easily adapted to write to a file instead
+of `stdout`:
+
+```no_run
+//tutorial-write-02.rs
+extern crate csv;
+
+use std::env;
+use std::error::Error;
+use std::ffi::OsString;
+use std::process;
+
+fn run() -> Result<(), Box<Error>> {
+    let file_path = get_first_arg()?;
+    let mut wtr = csv::Writer::from_path(file_path)?;
+
+    wtr.write_record(&["City", "State", "Population", "Latitude", "Longitude"])?;
+    wtr.write_record(&["Davidsons Landing", "AK", "", "65.2419444", "-165.2716667"])?;
+    wtr.write_record(&["Kenai", "AK", "7610", "60.5544444", "-151.2583333"])?;
+    wtr.write_record(&["Oakman", "AL", "", "33.7133333", "-87.3886111"])?;
+
+    wtr.flush()?;
+    Ok(())
+}
+
+/// Returns the first positional argument sent to this process. If there are no
+/// positional arguments, then this returns an error.
+fn get_first_arg() -> Result<OsString, Box<Error>> {
+    match env::args_os().nth(1) {
+        None => Err(From::from("expected 1 argument, but got none")),
+        Some(file_path) => Ok(file_path),
+    }
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
+## Writing tab separated values
+
+In the previous section, we saw how to write some simple CSV data to `stdout`
+that looked like this:
+
+```text
+City,State,Population,Latitude,Longitude
+Davidsons Landing,AK,,65.2419444,-165.2716667
+Kenai,AK,7610,60.5544444,-151.2583333
+Oakman,AL,,33.7133333,-87.3886111
+```
+
+You might wonder to yourself: what's the point of using a CSV writer if the
+data is so simple? Well, the benefit of a CSV writer is that it can handle all
+types of data without sacrificing the integrity of your data. That is, it knows
+when to quote fields that contain special CSV characters (like commas or new
+lines) or escape literal quotes that appear in your data. The CSV writer can
+also be easily configured to use different delimiters or quoting strategies.
+
+In this section, we'll take a look a look at how to tweak some of the settings
+on a CSV writer. In particular, we'll write TSV ("tab separated values")
+instead of CSV, and we'll ask the CSV writer to quote all non-numeric fields.
+Here's an example:
+
+```no_run
+//tutorial-write-delimiter-01.rs
+# extern crate csv;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
+fn run() -> Result<(), Box<Error>> {
+    let mut wtr = csv::WriterBuilder::new()
+        .delimiter(b'\t')
+        .quote_style(csv::QuoteStyle::NonNumeric)
+        .from_writer(io::stdout());
+
+    wtr.write_record(&["City", "State", "Population", "Latitude", "Longitude"])?;
+    wtr.write_record(&["Davidsons Landing", "AK", "", "65.2419444", "-165.2716667"])?;
+    wtr.write_record(&["Kenai", "AK", "7610", "60.5544444", "-151.2583333"])?;
+    wtr.write_record(&["Oakman", "AL", "", "33.7133333", "-87.3886111"])?;
+
+    wtr.flush()?;
+    Ok(())
+}
+#
+# fn main() {
+#     if let Err(err) = run() {
+#         println!("{}", err);
+#         process::exit(1);
+#     }
+# }
+```
+
+Compiling and running this example gives:
+
+```text
+$ cargo build
+$ ./target/debug/csvtutor
+"City"  "State" "Population"    "Latitude"      "Longitude"
+"Davidsons Landing"     "AK"    ""      65.2419444      -165.2716667
+"Kenai" "AK"    7610    60.5544444      -151.2583333
+"Oakman"        "AL"    ""      33.7133333      -87.3886111
+```
+
+In this example, we used a new type
+[`QuoteStyle`](../enum.QuoteStyle.html).
+The `QuoteStyle` type represents the different quoting strategies available
+to you. The default is to add quotes to fields only when necessary. This
+probably works for most use cases, but you can also ask for quotes to always
+be put around fields, to never be put around fields or to always be put around
+non-numeric fields.
+
+## Writing with Serde
+
+# Pipelining
+
+# Project: concatenate CSV data
+
+# Performance
+
+## Amortizing allocations
+
+## Serde and zero allocation
+
+## CSV parsing without the standard library
+
+# Closing thoughts
 */

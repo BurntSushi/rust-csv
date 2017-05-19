@@ -1053,7 +1053,7 @@ mod tests {
     #[test]
     fn one_record() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
-        wtr.write_record(vec!["a", "b", "c"]).unwrap();
+        wtr.write_record(&["a", "b", "c"]).unwrap();
 
         assert_eq!(wtr_as_string(wtr), "a,b,c\n");
     }
@@ -1077,7 +1077,7 @@ mod tests {
     #[test]
     fn one_empty_record() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
-        wtr.write_record(vec![""]).unwrap();
+        wtr.write_record(&[""]).unwrap();
 
         assert_eq!(wtr_as_string(wtr), "\"\"\n");
     }
@@ -1085,8 +1085,8 @@ mod tests {
     #[test]
     fn two_empty_records() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
-        wtr.write_record(vec![""]).unwrap();
-        wtr.write_record(vec![""]).unwrap();
+        wtr.write_record(&[""]).unwrap();
+        wtr.write_record(&[""]).unwrap();
 
         assert_eq!(wtr_as_string(wtr), "\"\"\n\"\"\n");
     }

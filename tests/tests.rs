@@ -176,6 +176,21 @@ fn tutorial_read_serde_invalid_06() {
     assert!(out.stdout().lines().all(|x| x.starts_with("Record { latitude:")));
 }
 
+#[test]
+fn tutorial_write_01() {
+    let mut cmd = cmd_for_example("tutorial-write-01");
+    let out = cmd_output(&mut cmd);
+    assert_eq!(out.stdout().lines().count(), 4);
+}
+
+#[test]
+fn tutorial_write_delimiter_01() {
+    let mut cmd = cmd_for_example("tutorial-write-delimiter-01");
+    let out = cmd_output(&mut cmd);
+    assert_eq!(out.stdout().lines().count(), 4);
+    assert!(out.stdout().lines().all(|x| x.contains('\t')));
+}
+
 // Helper functions follow.
 
 /// Return the target/debug directory path.

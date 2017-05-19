@@ -23,6 +23,13 @@ pub enum QuoteStyle {
     NonNumeric,
     /// This *never* writes quotes, even if it would produce invalid CSV data.
     Never,
+    /// Hints that destructuring should not be exhaustive.
+    ///
+    /// This enum may grow additional variants, so this makes sure clients
+    /// don't count on exhaustive matching. (Otherwise, adding a new variant
+    /// could break existing code.)
+    #[doc(hidden)]
+    __Nonexhaustive,
 }
 
 impl Default for QuoteStyle {
@@ -360,6 +367,7 @@ impl Writer {
             QuoteStyle::Never => false,
             QuoteStyle::NonNumeric => is_non_numeric(input),
             QuoteStyle::Necessary => self.needs_quotes(input),
+            _ => unreachable!(),
         }
     }
 
