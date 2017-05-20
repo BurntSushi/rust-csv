@@ -5,11 +5,11 @@ use std::num;
 use std::str;
 
 use serde::de::{
-    Deserializer, DeserializeSeed, Deserialize,
+    Deserializer, DeserializeSeed, Deserialize, IntoDeserializer,
     Error as SerdeError, Unexpected,
     Visitor, EnumAccess, VariantAccess, MapAccess, SeqAccess,
 };
-use serde::de::IntoDeserializer;
+use serde::de::value::BorrowedBytesDeserializer;
 
 use byte_record::{ByteRecord, ByteRecordIter};
 use error::Error;
@@ -592,11 +592,11 @@ impl<'a, 'de: 'a, T: DeRecord<'de>>
         seed: K,
     ) -> Result<Option<K::Value>, Self::Error> {
         assert!(self.has_headers());
-        let field = match self.next_header()? {
+        let field = match self.next_header_bytes()? {
             None => return Ok(None),
             Some(field) => field,
         };
-        seed.deserialize(field.into_deserializer()).map(Some)
+        seed.deserialize(BorrowedBytesDeserializer::new(field)).map(Some)
     }
 
     fn next_value_seed<K: DeserializeSeed<'de>>(
@@ -738,9 +738,10 @@ mod tests {
     use serde::de::DeserializeOwned;
     use serde_bytes::ByteBuf;
 
+    use byte_record::ByteRecord;
     use error::Error;
     use string_record::StringRecord;
-    use super::deserialize_string_record;
+    use super::{deserialize_byte_record, deserialize_string_record};
 
     fn de<D: DeserializeOwned>(
         fields: &[&str],
@@ -1079,5 +1080,37 @@ mod tests {
         let got: Foo = deserialize_string_record(
             &record, Some(&headers)).unwrap();
         assert_eq!(got, Foo { a: "foo", b: 5, c: "bar" });
+    }
+
+    #[test]
+    fn borrowed_map() {
+        use std::collections::HashMap;
+
+        let headers = StringRecord::from(vec!["a", "b", "c"]);
+        let record = StringRecord::from(vec!["aardvark", "bee", "cat"]);
+        let got: HashMap<&str, &str> = deserialize_string_record(
+            &record, Some(&headers)).unwrap();
+
+        let expected: HashMap<&str, &str> = headers
+            .iter()
+            .zip(&record)
+            .collect();
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn borrowed_map_bytes() {
+        use std::collections::HashMap;
+
+        let headers = ByteRecord::from(vec![b"a", b"\xFF", b"c"]);
+        let record = ByteRecord::from(vec!["aardvark", "bee", "cat"]);
+        let got: HashMap<&[u8], &[u8]> = deserialize_byte_record(
+            &record, Some(&headers)).unwrap();
+
+        let expected: HashMap<&[u8], &[u8]> = headers
+            .iter()
+            .zip(&record)
+            .collect();
+        assert_eq!(got, expected);
     }
 }
