@@ -7,6 +7,7 @@ use std::process::{self, Command};
 
 static USPOP: &'static str = include_str!("../examples/data/uspop.csv");
 static USPOP_NULL: &'static str = include_str!("../examples/data/uspop-null.csv");
+static USPOP_LATIN1: &'static [u8] = include_bytes!("../examples/data/uspop-latin1.csv");
 static STRANGE: &'static str = include_str!("../examples/data/strange.csv");
 
 #[test]
@@ -189,6 +190,44 @@ fn tutorial_write_delimiter_01() {
     let out = cmd_output(&mut cmd);
     assert_eq!(out.stdout().lines().count(), 4);
     assert!(out.stdout().lines().all(|x| x.contains('\t')));
+}
+
+#[test]
+fn tutorial_write_serde_01() {
+    let mut cmd = cmd_for_example("tutorial-write-serde-01");
+    let out = cmd_output(&mut cmd);
+    assert_eq!(out.stdout().lines().count(), 4);
+}
+
+#[test]
+fn tutorial_write_serde_02() {
+    let mut cmd = cmd_for_example("tutorial-write-serde-02");
+    let out = cmd_output(&mut cmd);
+    assert_eq!(out.stdout().lines().count(), 4);
+}
+
+#[test]
+fn tutorial_pipeline_search_01() {
+    let mut cmd = cmd_for_example("tutorial-pipeline-search-01");
+    cmd.arg("MA");
+    let out = cmd_output_with(&mut cmd, USPOP.as_bytes());
+    assert_eq!(out.stdout().lines().count(), 2);
+}
+
+#[test]
+fn tutorial_pipeline_search_01_errored() {
+    let mut cmd = cmd_for_example("tutorial-pipeline-search-01");
+    cmd.arg("MA");
+    let out = cmd_output_with(&mut cmd, USPOP_LATIN1);
+    assert!(out.stdout_failed().contains("invalid utf-8"));
+}
+
+#[test]
+fn tutorial_pipeline_search_02() {
+    let mut cmd = cmd_for_example("tutorial-pipeline-search-02");
+    cmd.arg("MA");
+    let out = cmd_output_with(&mut cmd, USPOP_LATIN1);
+    assert_eq!(out.stdout().lines().count(), 2);
 }
 
 // Helper functions follow.

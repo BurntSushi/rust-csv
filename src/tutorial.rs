@@ -26,6 +26,8 @@ the book first.
     * [Writing tab separated values](#writing-tab-separated-values)
     * [Writing with Serde](#writing-with-serde)
 1. [Pipelining](#pipelining)
+    * [Filter by search](#filter-by-search)
+    * [Filter by population count](#filter-by-population-count)
 1. [Project: concatenate CSV data](#project-concatenate-csv-data)
 1. [Performance](#performance)
     * [Amortizing allocations](#amortizing-allocations)
@@ -899,17 +901,19 @@ unique type? The answer is yes, but we'll need to bring in a new crate called
 section of your `Cargo.toml` file:
 
 ```text
+serde = "1"
 serde_derive = "1"
 ```
 
-With this crate added to our project, we can now define our own custom struct
+With these crates added to our project, we can now define our own custom struct
 that represents our record. We then ask Serde to automatically write the glue
-code required to populate our struct from a CSV record. The next example
-shows how. Don't miss the new `extern crate` line!
+code required to populate our struct from a CSV record. The next example shows
+how. Don't miss the new `extern crate` lines!
 
 ```no_run
 //tutorial-read-serde-04.rs
 extern crate csv;
+extern crate serde;
 // This lets us write `#[derive(Deserialize)]`.
 #[macro_use]
 extern crate serde_derive;
@@ -965,8 +969,8 @@ Record { latitude: 33.7133333, longitude: -87.3886111, population: None, city: "
 Once again, we didn't need to change our `run` function at all: we're still
 iterating over records using the `deserialize` iterator that we started with
 in the beginning of this section. The only thing that changed in this example
-was the definition of the `Record` type and a new `extern crate serde_derive;`
-statement. Our `Record` type is now a custom struct that we defined instead
+was the definition of the `Record` type and a couple new `extern crate`
+statements. Our `Record` type is now a custom struct that we defined instead
 of a type alias, and as a result, Serde doesn't know how to deserialize it by
 default. However, a special compiler plugin called `serde_derive` is available,
 which will read your struct definition at compile time and generate code that
@@ -1416,9 +1420,395 @@ non-numeric fields.
 
 ## Writing with Serde
 
+Just like the CSV reader supports automatic deserialization into Rust types
+with Serde, the CSV writer supports automatic serialization from Rust types
+into CSV records using Serde. In this section, we'll learn how to use it.
+
+As with reading, let's start by seeing how we can serialize a Rust tuple.
+
+```no_run
+//tutorial-write-serde-01.rs
+# extern crate csv;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
+fn run() -> Result<(), Box<Error>> {
+    let mut wtr = csv::Writer::from_writer(io::stdout());
+
+    // We still need to write headers manually.
+    wtr.write_record(&["City", "State", "Population", "Latitude", "Longitude"])?;
+
+    // But now we can write records by providing a normal Rust value.
+    //
+    // Note that the odd `None::<u64>` syntax is required because `None` on
+    // its own doesn't have a concrete type, but Serde needs a concrete type
+    // in order to serialize it. That is, `None` has type `Option<T>` but
+    // `None::<u64>` has type `Option<u64>`.
+    wtr.serialize(("Davidsons Landing", "AK", None::<u64>, 65.2419444, -165.2716667))?;
+    wtr.serialize(("Kenai", "AK", Some(7610), 60.5544444, -151.2583333))?;
+    wtr.serialize(("Oakman", "AL", None::<u64>, 33.7133333, -87.3886111))?;
+
+    wtr.flush()?;
+    Ok(())
+}
+#
+# fn main() {
+#     if let Err(err) = run() {
+#         println!("{}", err);
+#         process::exit(1);
+#     }
+# }
+```
+
+Compiling and running this program gives the expected output:
+
+```text
+$ cargo build
+$ ./target/debug/csvtutor
+City,State,Population,Latitude,Longitude
+Davidsons Landing,AK,,65.2419444,-165.2716667
+Kenai,AK,7610,60.5544444,-151.2583333
+Oakman,AL,,33.7133333,-87.3886111
+```
+
+The key thing to note in the above example is the use of `serialize` instead
+of `write_record` to write our data. In particular, `write_record` is used
+when writing a simple record that contains string-like data only. On the other
+hand, `serialize` is used when your data consists of more complex values like
+numbers, floats or optional values. Of course, you could always convert the
+complex values to strings and then use `write_record`, but Serde can do it for
+you automatically.
+
+As with reading, we can also serialize custom structs as CSV records. As a
+bonus, the fields in a struct will automatically be written as a header
+record!
+
+To write custom structs as CSV records, we'll need to make use of the
+`serde_derive` crate again. As in the
+[previous section on reading with Serde](#reading-with-serde),
+we'll need to add a couple crates to our `[dependencies]` section in our
+`Cargo.toml` (if they aren't already there):
+
+```text
+serde = "1"
+serde_derive = "1"
+```
+
+And we'll also need to add a couple extra `extern crate` statements to our
+code, as shown in the example:
+
+```no_run
+//tutorial-write-serde-02.rs
+extern crate csv;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+
+use std::error::Error;
+use std::io;
+use std::process;
+
+// Note that structs can derive both Serialize and Deserialize!
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct Record<'a> {
+    city: &'a str,
+    state: &'a str,
+    population: Option<u64>,
+    latitude: f64,
+    longitude: f64,
+}
+
+fn run() -> Result<(), Box<Error>> {
+    let mut wtr = csv::Writer::from_writer(io::stdout());
+
+    wtr.serialize(Record {
+        city: "Davidsons Landing",
+        state: "AK",
+        population: None,
+        latitude: 65.2419444,
+        longitude: -165.2716667,
+    })?;
+    wtr.serialize(Record {
+        city: "Kenai",
+        state: "AK",
+        population: Some(7610),
+        latitude: 60.5544444,
+        longitude: -151.2583333,
+    })?;
+    wtr.serialize(Record {
+        city: "Oakman",
+        state: "AL",
+        population: None,
+        latitude: 33.7133333,
+        longitude: -87.3886111,
+    })?;
+
+    wtr.flush()?;
+    Ok(())
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
+Compiling and running this example has the same output as last time, even
+though we didn't explicitly write a header record:
+
+```text
+$ cargo build
+$ ./target/debug/csvtutor
+City,State,Population,Latitude,Longitude
+Davidsons Landing,AK,,65.2419444,-165.2716667
+Kenai,AK,7610,60.5544444,-151.2583333
+Oakman,AL,,33.7133333,-87.3886111
+```
+
+In this case, the `serialize` method noticed that we were writing a struct
+with field names. When this happens, `serialize` will automatically write a
+header record (only if no other records have been written) that consists of
+the fields in the struct in the order in which they are defined. Note that
+this behavior can be disabled with the
+[`WriterBuilder::has_headers`](../struct.WriterBuilder.html#method.has_headers)
+method.
+
+It's also worth pointing out the use of a *lifetime parameter* in our `Record`
+struct:
+
+```ignore
+struct Record<'a> {
+    city: &'a str,
+    state: &'a str,
+    population: Option<u64>,
+    latitude: f64,
+    longitude: f64,
+}
+```
+
+The `'a` lifetime parameter corresponds to the lifetime of the `city` and
+`state` string slices. This says that the `Record` struct contains *borrowed*
+data. We could have written our struct without borrowing any data, and
+therefore, without any lifetime parameters:
+
+```ignore
+struct Record {
+    city: String,
+    state: String,
+    population: Option<u64>,
+    latitude: f64,
+    longitude: f64,
+}
+```
+
+However, since we had to replace our borrowed `&str` types with owned `String`
+types, we're now forced to allocate a new `String` value for both of `city`
+and `state` for every record that we write. There's no intrinsic problem with
+doing that, but it might be a bit wasteful.
+
+For more examples and more details on the rules for serialization, please see
+the
+[`Writer::serialize`](../struct.Writer.html#method.serialize)
+method.
+
 # Pipelining
 
-# Project: concatenate CSV data
+In this section, we're going to cover a few examples that demonstrate programs
+that take CSV data as input, and produce possibly transformed or filtered CSV
+data as output. This shows how to write a complete program that efficiently
+reads and writes CSV data. Rust is well positioned to perform this task, since
+you'll get great performance with the convenience of a high level CSV library.
+
+## Filter by search
+
+The first example of CSV pipelining we'll look at is a simple filter. It takes
+as input some CSV data on stdin and a single string query as its only
+positional argument, and it will produce as output CSV data that only contains
+rows with a field that matches the query.
+
+```no_run
+//tutorial-pipeline-search-01.rs
+extern crate csv;
+
+use std::env;
+use std::error::Error;
+use std::io;
+use std::process;
+
+fn run() -> Result<(), Box<Error>> {
+    // Get the query from the positional arguments.
+    // If one doesn't exist, return an error.
+    let query = match env::args().nth(1) {
+        None => return Err(From::from("expected 1 argument, but got none")),
+        Some(query) => query,
+    };
+
+    // Build CSV readers and writers to stdin and stdout, respectively.
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+    let mut wtr = csv::Writer::from_writer(io::stdout());
+
+    // Before reading our data records, we should write the header record.
+    wtr.write_record(rdr.headers()?)?;
+
+    // Iterate over all the records in `rdr`, and write only records containing
+    // `query` to `wtr`.
+    for result in rdr.records() {
+        let record = result?;
+        if record.iter().any(|field| field == &query) {
+            wtr.write_record(&record)?;
+        }
+    }
+
+    // CSV writers use an internal buffer, so we should always flush when done.
+    wtr.flush()?;
+    Ok(())
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
+If we compile and run this program with a query of `MA` on `uspop.csv`, we'll
+see that only one record matches:
+
+```text
+$ cargo build
+$ ./csvtutor MA < uspop.csv
+City,State,Population,Latitude,Longitude
+Reading,MA,23441,42.5255556,-71.0958333
+```
+
+This example doesn't actually introduce anything new. It merely combines what
+you've already learned about CSV readers and writers from previous sections.
+
+Let's add a twist to this example. In the real world, you're often faced with
+messy CSV data that might not be encoded correctly. One example you might come
+across is CSV data encoded in
+[Latin-1](https://en.wikipedia.org/wiki/ISO/IEC_8859-1).
+Unfortunately, for the examples we've seen so far, our CSV reader assumes that
+all of the data is UTF-8. Since all of the data we've worked on has been
+ASCII---which is a subset of both Latin-1 and UTF-8---we haven't had any
+problems. But let's introduce a slightly tweaked version of our `uspop.csv`
+file that contains an encoding of a Latin-1 character that is invalid UTF-8.
+You can get the data like so:
+
+```text
+$ curl -LO 'https://raw.githubusercontent.com/BurntSushi/rust-csv/rewrite/examples/data/uspop-latin1.csv'
+```
+
+Even though I've already given away the problem, let's see what happen when
+we try to run our previous example on this new data:
+
+```text
+$ ./csvtutor MA < uspop-latin1.csv
+City,State,Population,Latitude,Longitude
+CSV parse error: record 3 (line 4, field: 0, byte: 125): invalid utf-8: invalid UTF-8 in field 0 near byte index 0
+```
+
+The error message tells us exactly what's wrong. Let's take a look at line 4
+to see what we're dealing with:
+
+```text
+$ head -n4 uspop-latin1.csv | tail -n1
+Õakman,AL,,33.7133333,-87.3886111
+```
+
+In this case, the very first character is the Latin-1 `Õ`, which is encoded as
+the byte `0xD5`, which is in turn invalid UTF-8. So what do we do now that our
+CSV parser has choked on our data? You have two choices. The first is to go in
+and fix up your CSV data so that it's valid UTF-8. This is probably a good
+idea anyway, and tools like `iconv` can help with the task of transcoding.
+But if you can't or don't want to do that, then you can instead read CSV data
+in a way that is mostly encoding agnostic (so long as ASCII is still a valid
+subset). The trick is to use *byte records* instead of *string records*.
+
+Thus far, we haven't actually talked much about the type of a record in this
+library, but now is a good time to introduce them. There are two of them,
+[`StringRecord`](../struct.StringRecord.html)
+and
+[`ByteRecord`](../struct.ByteRecord.html).
+Each them represent a single record in CSV data, where a record is a sequence
+of an arbitrary number of fields. The only difference between `StringRecord`
+and `ByteRecord` is that `StringRecord` is guaranteed to be valid UTF-8, where
+as `ByteRecord` contains arbitrary bytes.
+
+Armed with that knowledge, we can now begin to understand why we saw an error
+when we ran the last example on data that wasn't UTF-8. Namely, when we call
+`records`, we get back an iterator of `StringRecord`. Since `StringRecord` is
+guaranteed to be valid UTF-8, trying to build a `StringRecord` with invalid
+UTF-8 will result in the error that we see.
+
+All we need to do to make our example work is to switch from a `StringRecord`
+to a `ByteRecord`. This means using `byte_records` to create our iterator
+instead of `records`, and similarly using `byte_headers` instead of `headers`
+if we think our header data might contain invalid UTF-8 as well. Here's the
+change:
+
+```no_run
+//tutorial-pipeline-search-02.rs
+# extern crate csv;
+#
+# use std::env;
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
+fn run() -> Result<(), Box<Error>> {
+    let query = match env::args().nth(1) {
+        None => return Err(From::from("expected 1 argument, but got none")),
+        Some(query) => query,
+    };
+
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+    let mut wtr = csv::Writer::from_writer(io::stdout());
+
+    wtr.write_record(rdr.byte_headers()?)?;
+
+    for result in rdr.byte_records() {
+        let record = result?;
+        // `query` is a `String` while `field` is now a `&[u8]`, so we'll
+        // need to convert `query` to `&[u8]` before doing a comparison.
+        if record.iter().any(|field| field == query.as_bytes()) {
+            wtr.write_record(&record)?;
+        }
+    }
+
+    wtr.flush()?;
+    Ok(())
+}
+#
+# fn main() {
+#     if let Err(err) = run() {
+#         println!("{}", err);
+#         process::exit(1);
+#     }
+# }
+```
+
+Compiling and running this now yields the same results as our first example,
+but this time it works on data that isn't valid UTF-8.
+
+```text
+$ cargo build
+$ ./csvtutor MA < uspop-latin1.csv
+City,State,Population,Latitude,Longitude
+Reading,MA,23441,42.5255556,-71.0958333
+```
+
+## Filter by population count
+
+In this section, we will show another example program that both reads and
+writes CSV data, but instead of dealing with arbitrary records, we will use
+Serde to deserialize and serialize records with specific types.
 
 # Performance
 
