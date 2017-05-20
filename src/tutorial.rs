@@ -1810,6 +1810,106 @@ In this section, we will show another example program that both reads and
 writes CSV data, but instead of dealing with arbitrary records, we will use
 Serde to deserialize and serialize records with specific types.
 
+For this program, we'd like to be able to filter records in our population data
+by population count. Specifically, we'd like to see which records meet a
+certain population threshold. In addition to using a simple inequality, we must
+also account for records that have a missing population count. This is where
+types like `Option<T>` come in handy, because the compiler will force us to
+consider the case when the population count is missing.
+
+Since we're using Serde in this example, don't forget to add the Serde
+dependencies to your `Cargo.toml` in your `[dependencies]` section if they
+aren't already there:
+
+```text
+serde = "1"
+serde_derive = "1"
+```
+
+Now here's the code:
+
+```no_run
+//tutorial-pipeline-pop-01.rs
+extern crate csv;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+
+use std::env;
+use std::error::Error;
+use std::io;
+use std::process;
+
+// Unlike previous examples, we derive both Deserialize and Serialize. This
+// means we'll be able to automatically deserialize and serialize this type.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct Record {
+    city: String,
+    state: String,
+    population: Option<u64>,
+    latitude: f64,
+    longitude: f64,
+}
+
+fn run() -> Result<(), Box<Error>> {
+    // Get the query from the positional arguments.
+    // If one doesn't exist or isn't an integer, return an error.
+    let minimum_pop: u64 = match env::args().nth(1) {
+        None => return Err(From::from("expected 1 argument, but got none")),
+        Some(arg) => arg.parse()?,
+    };
+
+    // Build CSV readers and writers to stdin and stdout, respectively.
+    // Note that we don't need to write headers explicitly. Since we're
+    // serializing a custom struct, that's done for us automatically.
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+    let mut wtr = csv::Writer::from_writer(io::stdout());
+
+    // Iterate over all the records in `rdr`, and write only records containing
+    // a population that is greater than or equal to `minimum_pop`.
+    for result in rdr.deserialize() {
+        // Remember that when deserializing, we must use a type hint to
+        // indicate which type we want to deserialize our record into.
+        let record: Record = result?;
+
+        // `map_or` is a combinator on `Option`. It take two parameters:
+        // a value to use when the `Option` is `None` (i.e., the record has
+        // no population count) and a closure that returns another value of
+        // the same type when the `Option` is `Some`. In this case, we test it
+        // against our minimum population count that we got from the command
+        // line.
+        if record.population.map_or(false, |pop| pop >= minimum_pop) {
+            wtr.serialize(record)?;
+        }
+    }
+
+    // CSV writers use an internal buffer, so we should always flush when done.
+    wtr.flush()?;
+    Ok(())
+}
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
+}
+```
+
+If we compile and run our program with a minimum threshold of `100000`, we
+should see three matching records. Notice that the headers were added even
+though we never explicitly wrote them!
+
+```text
+$ cargo build
+$ ./target/debug/csvtutor 100000 < uspop.csv
+City,State,Population,Latitude,Longitude
+Fontana,CA,169160,34.0922222,-117.4341667
+Bridgeport,CT,139090,41.1669444,-73.2052778
+Indianapolis,IN,773283,39.7683333,-86.1580556
+```
+
 # Performance
 
 ## Amortizing allocations

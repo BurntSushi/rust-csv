@@ -230,6 +230,14 @@ fn tutorial_pipeline_search_02() {
     assert_eq!(out.stdout().lines().count(), 2);
 }
 
+#[test]
+fn tutorial_pipeline_pop_01() {
+    let mut cmd = cmd_for_example("tutorial-pipeline-pop-01");
+    cmd.arg("100000");
+    let out = cmd_output_with(&mut cmd, USPOP.as_bytes());
+    assert_eq!(out.stdout().lines().count(), 4);
+}
+
 // Helper functions follow.
 
 /// Return the target/debug directory path.
