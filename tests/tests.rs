@@ -8,6 +8,7 @@ use std::process::{self, Command};
 static USPOP: &'static str = include_str!("../examples/data/uspop.csv");
 static USPOP_NULL: &'static str = include_str!("../examples/data/uspop-null.csv");
 static USPOP_LATIN1: &'static [u8] = include_bytes!("../examples/data/uspop-latin1.csv");
+static WORLDPOP: &'static str = include_str!("../examples/data/bench/worldcitiespop.csv");
 static STRANGE: &'static str = include_str!("../examples/data/strange.csv");
 
 #[test]
@@ -236,6 +237,27 @@ fn tutorial_pipeline_pop_01() {
     cmd.arg("100000");
     let out = cmd_output_with(&mut cmd, USPOP.as_bytes());
     assert_eq!(out.stdout().lines().count(), 4);
+}
+
+#[test]
+fn tutorial_perf_alloc_01() {
+    let mut cmd = cmd_for_example("tutorial-perf-alloc-01");
+    let out = cmd_output_with(&mut cmd, WORLDPOP.as_bytes());
+    assert_eq!(out.stdout(), "11\n");
+}
+
+#[test]
+fn tutorial_perf_alloc_02() {
+    let mut cmd = cmd_for_example("tutorial-perf-alloc-02");
+    let out = cmd_output_with(&mut cmd, WORLDPOP.as_bytes());
+    assert_eq!(out.stdout(), "11\n");
+}
+
+#[test]
+fn tutorial_perf_alloc_03() {
+    let mut cmd = cmd_for_example("tutorial-perf-alloc-03");
+    let out = cmd_output_with(&mut cmd, WORLDPOP.as_bytes());
+    assert_eq!(out.stdout(), "11\n");
 }
 
 // Helper functions follow.

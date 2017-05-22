@@ -1,10 +1,14 @@
 /*!
 A tutorial for handling CSV data in Rust.
 
-This tutorial is targeted at beginner Rust programmers, but experienced Rust
-programmers may find parts of this tutorial useful as well. This tutorial will
-cover basic CSV reading and writing, automatic (de)serialization with Serde,
-CSV transformations and performance.
+This tutorial will cover basic CSV reading and writing, automatic
+(de)serialization with Serde, CSV transformations and performance.
+
+This tutorial is targeted at beginner Rust programmers. Experienced Rust
+programmers may find this tutorial to be too verbose, but skimming may be
+useful. There is also a
+[cookbook](../cookbook/index.html)
+of examples for those that prefer more information density.
 
 For an introduction to Rust, please see the
 [official book](https://doc.rust-lang.org/beta/book/second-edition/).
@@ -28,7 +32,6 @@ the book first.
 1. [Pipelining](#pipelining)
     * [Filter by search](#filter-by-search)
     * [Filter by population count](#filter-by-population-count)
-1. [Project: concatenate CSV data](#project-concatenate-csv-data)
 1. [Performance](#performance)
     * [Amortizing allocations](#amortizing-allocations)
     * [Serde and zero allocation](#serde-and-zero-allocation)
@@ -1912,7 +1915,276 @@ Indianapolis,IN,773283,39.7683333,-86.1580556
 
 # Performance
 
+In this section, we'll go over how to squeeze the most juice out of our CSV
+reader. As it happens, most of the APIs we've seen so far were designed with
+high level convenience in mind, and that often comes with some costs. For the
+most part, those costs revolve around unnecessary allocations. Therefore, most
+of the section will show how to do CSV parsing with as little allocation as
+possible.
+
+There are two critical preliminaries we must cover.
+
+Firstly, when you care about performance, you should compile your code
+with `cargo build --release` instead of `cargo build`. The `--release`
+flag instructs the compiler to spend more time optimizing your code. When
+compiling with the `--release` flag, you'll find your compiled program at
+`target/release/csvtutor` instead of `target/debug/csvtutor`. Throughout this
+tutorial, we've used `cargo build` because our dataset was small and we weren't
+focused on speed. The downside of `cargo build --release` is that it will take
+longer than `cargo build`.
+
+Secondly, the dataset we've used throughout this tutorial only has 100 records.
+We'd have to try really hard to cause our program to run slowly on 100 records,
+even when we compile without the `--release` flag. Therefore, in order to
+actually witness a performance difference, we need a bigger dataset. To get
+such a dataset, we'll use the original source of `uspop.csv`. **Warning: the
+download is 41MB compressed and decompresses to 145MB.**
+
+```text
+$ curl -LO http://burntsushi.net/stuff/worldcitiespop.csv.gz
+$ gunzip worldcitiespop.csv.gz
+$ wc worldcitiespop.csv
+  3173959   5681543 151492068 worldcitiespop.csv
+$ md5sum worldcitiespop.csv
+6198bd180b6d6586626ecbf044c1cca5  worldcitiespop.csv
+```
+
+Finally, it's worth pointing out that this section is not attempting to
+present a rigorous set of benchmarks. We will stay away from rigorous analysis
+and instead rely a bit more on wall clock times and intuition.
+
 ## Amortizing allocations
+
+In order to measure performance, we must be careful about what it is we're
+measuring. We must also be careful to not change the thing we're measuring as
+we make improvements to the code. For this reason, we will focus on measuring
+how long it takes to count the number of records corresponding to city
+population counts in Massachusetts. This represents a very small amount of work
+that requires us to visit every record, and therefore represents a decent way
+to measure how long it takes to do CSV parsing.
+
+Before diving into our first optimization, let's start with a baseline by
+adapting a previous example to count the number of records in
+`worldcitiespop.csv`:
+
+```no_run
+//tutorial-perf-alloc-01.rs
+extern crate csv;
+
+use std::error::Error;
+use std::io;
+use std::process;
+
+fn run() -> Result<u64, Box<Error>> {
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+
+    let mut count = 0;
+    for result in rdr.records() {
+        let record = result?;
+        if &record[0] == "us" && &record[3] == "MA" {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+fn main() {
+    match run() {
+        Ok(count) => {
+            println!("{}", count);
+        }
+        Err(err) => {
+            println!("{}", err);
+            process::exit(1);
+        }
+    }
+}
+```
+
+Now let's compile and run it and see what kind of timing we get. Don't forget
+to compile with the `--release` flag. (For grins, try compiling without the
+`--release` flag and see how long it takes to run the program!)
+
+```text
+$ cargo build --release
+$ time ./target/release/csvtutor < worldcitiespop.csv
+2176
+
+real    0m0.645s
+user    0m0.627s
+sys     0m0.017s
+```
+
+All right, so what's the first thing we can do to make this faster? This
+section promised to speed things up by amortizing allocation, but we can do
+something even simpler first: iterate over
+[`ByteRecord`](../struct.ByteRecord.html)s
+instead of
+[`StringRecord`](../struct.StringRecord.html)s.
+If you recall from a previous section, a `StringRecord` is guaranteed to be
+valid UTF-8, and therefore must validate that its contents is actually UTF-8.
+(If validation fails, then the CSV reader will return an error.) If we remove
+that validation from our program, then we can realize a nice speed boost as
+shown in the next example:
+
+```no_run
+//tutorial-perf-alloc-02.rs
+# extern crate csv;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
+fn run() -> Result<u64, Box<Error>> {
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+
+    let mut count = 0;
+    for result in rdr.byte_records() {
+        let record = result?;
+        if &record[0] == b"us" && &record[3] == b"MA" {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+#
+# fn main() {
+#     match run() {
+#         Ok(count) => {
+#             println!("{}", count);
+#         }
+#         Err(err) => {
+#             println!("{}", err);
+#             process::exit(1);
+#         }
+#     }
+# }
+```
+
+And now compile and run:
+
+```text
+$ cargo build --release
+$ time ./target/release/csvtutor < worldcitiespop.csv
+2176
+
+real    0m0.429s
+user    0m0.403s
+sys     0m0.023s
+```
+
+Our program is now approximately 30% faster, all because we removed UTF-8
+validation. But was it actually okay to remove UTF-8 validation? What have we
+lost? In this case, it is perfectly acceptable to drop UTF-8 validation and use
+`ByteRecord` instead because all we're doing with the data in the record is
+comparing two of its fields to raw bytes:
+
+```ignore
+if &record[0] == b"us" && &record[3] == b"MA" {
+    count += 1;
+}
+```
+
+In particular, it doesn't matter whether `record` is valid UTF-8 or not, since
+we're checking for equality on the raw bytes themselves.
+
+UTF-8 validation via `StringRecord` is useful because it provides access to
+fields as `&str` types, where as `ByteRecord` provides fields as `&[u8]` types.
+`&str` is the type of a borrowed string in Rust, which provides convenient
+access to string APIs like substring search. Strings are also frequently used
+in other areas, so they tend to be a useful thing to have. Therefore, sticking
+with `StringRecord` is a good default, but if you need the extra speed and can
+deal with arbitrary bytes, then switching to `ByteRecord` might be a good idea.
+
+Moving on, let's try to get another speed boost by amortizing allocation.
+Amortizing allocation is the technique that creates an allocation once (or
+very rarely), and then attempts to reuse it instead of creating additional
+allocations. In the case of the previous examples, we used iterators created
+by the `records` and `byte_records` methods on a CSV reader. These iterators
+allocate a new record for every item that it yields, which in turn corresponds
+to a new allocation. It does this because iterators cannot yield items that
+borrow from the iterator itself, and because creating new allocations tends to
+be a lot more convenient.
+
+If we're willing to forgo use of iterators, then we can amortize allocations
+by creating a *single* `ByteRecord` and asking the CSV reader to read into it.
+We do this by using the
+[`Reader::read_byte_record`](../struct.Reader.html#method.read_byte_record)
+method.
+
+```no_run
+//tutorial-perf-alloc-03.rs
+# extern crate csv;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
+fn run() -> Result<u64, Box<Error>> {
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+    let mut record = csv::ByteRecord::new();
+
+    let mut count = 0;
+    while rdr.read_byte_record(&mut record)? {
+        if &record[0] == b"us" && &record[3] == b"MA" {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+#
+# fn main() {
+#     match run() {
+#         Ok(count) => {
+#             println!("{}", count);
+#         }
+#         Err(err) => {
+#             println!("{}", err);
+#             process::exit(1);
+#         }
+#     }
+# }
+```
+
+Compile and run:
+
+```text
+$ cargo build --release
+$ time ./target/release/csvtutor < worldcitiespop.csv
+2176
+
+real    0m0.308s
+user    0m0.283s
+sys     0m0.023s
+```
+
+Woohoo! This represents *another* 30% boost over the previous example, which is
+a 50% boost over the first example.
+
+Let's dissect this code by taking a look at the type signature of the
+`read_byte_record` method:
+
+```ignore
+fn read_byte_record(&mut self, record: &mut ByteRecord) -> csv::Result<bool>;
+```
+
+This method takes as input a CSV reader (the `self` parameter) and a *mutable
+borrow* of a `ByteRecord`, and returns a `csv::Result<bool>`. (The
+`csv::Result<bool>` is equivalent to `Result<bool, csv::Error>`.) The return
+value is `true` if and only if a record was read. When it's `false`, that means
+the reader has exhausted its input. This method works by copying the contents
+of the next record into the provided `ByteRecord`. Since the same `ByteRecord`
+is used to read every record, it will already have space allocated for data.
+When `read_byte_record` runs, it will overwrite the contents that were there
+with the new record, which means that it can reuse the space that was
+allocated. Thus, we have *amortized allocation*.
+
+An exercise you might consider doing is to use a `StringRecord` instead of a
+`ByteRecord`, and therefore
+[`Reader::read_record`](../struct.Reader.html#method.read_record)
+instead of `read_byte_record`. This will give you easy access to Rust strings
+at the cost of UTF-8 validation but *without* the cost of allocating a new
+`StringRecord` for every record.
 
 ## Serde and zero allocation
 
