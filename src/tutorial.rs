@@ -2188,7 +2188,405 @@ at the cost of UTF-8 validation but *without* the cost of allocating a new
 
 ## Serde and zero allocation
 
+In this section, we are going to briefly examine how we use Serde and what we
+can do to speed it up. The key optimization we'll want to make is to---you
+guessed it---amortize allocation.
+
+As with the previous section, let's start with a simple baseline based off an
+example using Serde in a previous section:
+
+```no_run
+//tutorial-perf-serde-01.rs
+extern crate csv;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+
+use std::error::Error;
+use std::io;
+use std::process;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct Record {
+    country: String,
+    city: String,
+    accent_city: String,
+    region: String,
+    population: Option<u64>,
+    latitude: f64,
+    longitude: f64,
+}
+
+fn run() -> Result<u64, Box<Error>> {
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+
+    let mut count = 0;
+    for result in rdr.deserialize() {
+        let record: Record = result?;
+        if record.country == "us" && record.region == "MA" {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+fn main() {
+    match run() {
+        Ok(count) => {
+            println!("{}", count);
+        }
+        Err(err) => {
+            println!("{}", err);
+            process::exit(1);
+        }
+    }
+}
+```
+
+Now compile and run this program:
+
+```text
+$ cargo build --release
+$ ./target/release/csvtutor < worldcitiespop.csv
+2176
+
+real    0m1.381s
+user    0m1.367s
+sys     0m0.013s
+```
+
+The first thing you might notice is that this is quite a bit slower than our
+programs in the previous section. This is because deserializing each record
+has a certain amount of overhead to it. In particular, some of the fields need
+to be parsed as integers or floating point numbers, which isn't free. However,
+there is hope yet, because we can speed up this program!
+
+Our first attempt to speed up the program will be to amortize allocation. Doing
+this with Serde is a bit trickier than before, because we need to change our
+`Record` type and use the manual deserialization API. Let's see what that looks
+like:
+
+```no_run
+# //tutorial-perf-serde-02.rs
+# extern crate csv;
+# extern crate serde;
+# #[macro_use]
+# extern crate serde_derive;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct Record<'a> {
+    country: &'a str,
+    city: &'a str,
+    accent_city: &'a str,
+    region: &'a str,
+    population: Option<u64>,
+    latitude: f64,
+    longitude: f64,
+}
+
+fn run() -> Result<u64, Box<Error>> {
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+    let mut raw_record = csv::StringRecord::new();
+    let headers = rdr.headers()?.clone();
+
+    let mut count = 0;
+    while rdr.read_record(&mut raw_record)? {
+        let record: Record = raw_record.deserialize(Some(&headers))?;
+        if record.country == "us" && record.region == "MA" {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+#
+# fn main() {
+#     match run() {
+#         Ok(count) => {
+#             println!("{}", count);
+#         }
+#         Err(err) => {
+#             println!("{}", err);
+#             process::exit(1);
+#         }
+#     }
+# }
+```
+
+Compile and run:
+
+```text
+$ cargo build --release
+$ ./target/release/csvtutor < worldcitiespop.csv
+2176
+
+real    0m1.055s
+user    0m1.040s
+sys     0m0.013s
+```
+
+This corresponds to an approximately 24% increase in performance. To achieve
+this, we had to make two important changes.
+
+The first was to make our `Record` type contain `&str` fields instead of
+`String` fields. If you recall from a previous section, `&str` is a *borrowed*
+string where a `String` is an *owned* string. A borrowed string points to
+a already existing allocation where as a `String` always implies a new
+allocation. In this case, our `&str` is borrowing from the CSV record itself.
+
+The second change we had to make was to stop using the
+[`Reader::deserialize`](../struct.Reader.html#method.deserialize)
+iterator, and instead deserialize our record into a `StringRecord` explicitly
+and then use the
+[`StringRecord::deserialize`](../struct.StringRecord.html#method.deserialize)
+method to deserialize a single record.
+
+The second change is a bit tricky, because in order for it to work, our
+`Record` type needs to borrow from the data inside the `StringRecord`. That
+means that our `Record` value cannot outlive the `StringRecord` that it was
+created from. Since we overwrite the same `StringRecord` on each iteration
+(in order to amortize allocation), that means our `Record` value must evaporate
+before the next iteration of the loop. Indeed, the compiler will enforce this!
+
+There is one more optimization we can make: remove UTF-8 validation. In
+general, this means using `&[u8]` instead of `&str` and `ByteRecord` instead
+of `StringRecord`:
+
+```no_run
+# //tutorial-perf-serde-03.rs
+# extern crate csv;
+# extern crate serde;
+# #[macro_use]
+# extern crate serde_derive;
+#
+# use std::error::Error;
+# use std::io;
+# use std::process;
+#
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct Record<'a> {
+    country: &'a [u8],
+    city: &'a [u8],
+    accent_city: &'a [u8],
+    region: &'a [u8],
+    population: Option<u64>,
+    latitude: f64,
+    longitude: f64,
+}
+
+fn run() -> Result<u64, Box<Error>> {
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+    let mut raw_record = csv::ByteRecord::new();
+    let headers = rdr.byte_headers()?.clone();
+
+    let mut count = 0;
+    while rdr.read_byte_record(&mut raw_record)? {
+        let record: Record = raw_record.deserialize(Some(&headers))?;
+        if record.country == b"us" && record.region == b"MA" {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+#
+# fn main() {
+#     match run() {
+#         Ok(count) => {
+#             println!("{}", count);
+#         }
+#         Err(err) => {
+#             println!("{}", err);
+#             process::exit(1);
+#         }
+#     }
+# }
+```
+
+Compile and run:
+
+```text
+$ cargo build --release
+$ ./target/release/csvtutor < worldcitiespop.csv
+2176
+
+real    0m0.873s
+user    0m0.850s
+sys     0m0.023s
+```
+
+This corresponds to a 17% increase over the previous example and a 37% increase
+over the first example.
+
+In sum, Serde parsing is still quite fast, but will generally not be the
+fastest way to parse CSV since it necessarily needs to do more work.
+
 ## CSV parsing without the standard library
 
+In this section, we will explore a niche use case: parsing CSV without the
+standard library. While the `csv` crate itself requires the standard library,
+the underlying parser is actually part of the
+[`csv-core`](https://docs.rs/csv-core)
+crate, which does not depend on the standard library. The downside of not
+depending on the standard library is that CSV parsing becomes a lot more
+inconvenient.
+
+The `csv-core` crate is structured similarly to the `csv` crate. There is a
+[`Reader`](../../csv_core/struct.Reader.html)
+and a
+[`Writer`](../../csv_core/struct.Writer.html),
+as well as corresponding builders
+[`ReaderBuilder`](../../csv_core/struct.ReaderBuilder.html)
+and
+[`WriterBuilder`](../../csv_core/struct.WriterBuilder.html).
+The `csv-core` crate has no record types or iterators. Instead, CSV data
+can either be read one field at a time or one record at a time. In this
+section, we'll focus on reading a field at a time since it is simpler, but it
+is generally faster to read a record at a time since it does more work per
+function call.
+
+In keeping with this section on performance, let's write a program using only
+`csv-core` that counts the number of records in the state of Massachusetts.
+
+(Note that we unfortunately use the standard library in this example even
+though `csv-core` doesn't technically require it. We do this for convenient
+access to I/O, which would be harder without the standard library.)
+
+```no_run
+//tutorial-perf-core-01.rs
+extern crate csv_core;
+
+use std::io::{self, Read};
+use std::process;
+
+use csv_core::{Reader, ReadFieldResult};
+
+fn run(mut data: &[u8]) -> Option<u64> {
+    let mut rdr = Reader::new();
+
+    // Count the number of records in Massachusetts.
+    let mut count = 0;
+    // Indicates the current field index. Reset to 0 at start of each record.
+    let mut fieldidx = 0;
+    // True when the current record is in the United States.
+    let mut inus = false;
+    // Buffer for field data. Must be big enough to hold the largest field.
+    let mut field = [0; 1024];
+    loop {
+        // Attempt to incrementally read the next CSV field.
+        let (result, nread, nwrite) = rdr.read_field(data, &mut field);
+        // nread is the number of bytes read from our input. We should never
+        // pass those bytes to read_field again.
+        data = &data[nread..];
+        // nwrite is the number of bytes written to the output buffer `field`.
+        // The contents of the buffer after this point is unspecified.
+        let field = &field[..nwrite];
+
+        match result {
+            // We don't need to handle this case because we read all of the
+            // data up front. If we were reading data incrementally, then this
+            // would be a signal to read more.
+            ReadFieldResult::InputEmpty => {}
+            // If we get this case, then we found a field that contains more
+            // than 1024 bytes. We keep this example simple and just fail.
+            ReadFieldResult::OutputFull => {
+                return None;
+            }
+            // This case happens when we've successfully read a field. If the
+            // field is the last field in a record, then `record_end` is true.
+            ReadFieldResult::Field { record_end } => {
+                if fieldidx == 0 && field == b"us" {
+                    inus = true;
+                } else if inus && fieldidx == 3 && field == b"MA" {
+                    count += 1;
+                }
+                if record_end {
+                    fieldidx = 0;
+                    inus = false;
+                } else {
+                    fieldidx += 1;
+                }
+            }
+            // This case happens when the CSV reader has successfully exhausted
+            // all input.
+            ReadFieldResult::End => {
+                break;
+            }
+        }
+    }
+    Some(count)
+}
+
+fn main() {
+    // Read the entire contents of stdin up front.
+    let mut data = vec![];
+    if let Err(err) = io::stdin().read_to_end(&mut data) {
+        println!("{}", err);
+        process::exit(1);
+    }
+    match run(&data) {
+        None => {
+            println!("error: could not count records, buffer too small");
+            process::exit(1);
+        }
+        Some(count) => {
+            println!("{}", count);
+        }
+    }
+}
+```
+
+And compile and run it:
+
+```text
+$ cargo build --release
+$ time ./target/release/csvtutor < worldcitiespop.csv
+2176
+
+real    0m0.572s
+user    0m0.513s
+sys     0m0.057s
+```
+
+This isn't as fast as some of our previous examples where we used the `csv`
+crate to read into a `StringRecord` or a `ByteRecord`. This is mostly because
+this example reads a field at a time, which incurs more overhead than reading a
+record at a time. To fix this, you would want to use the
+[`Reader::read_record`](../../csv_core/struct.Reader.html#method.read_record)
+method instead, which is defined on `csv_core::Reader`.
+
+The other thing to notice here is that the example is considerably longer than
+the other examples. This is because we need to do more book keeping to keep
+track of which field we're reading and how much data we've already fed to the
+reader. There are basically two reasons to use the `csv_core` crate:
+
+1. If you're in an environment where the standard library is not usable.
+2. If you wanted to build your own csv-like library, you could build it on top
+   of `csv-core`.
+
 # Closing thoughts
+
+Congratulations on making it to the end! It seems incredible that one could
+write so many words on something as basic as CSV parsing. I wanted this
+guide to be accessible not only to Rust beginners, but to inexperienced
+programmers as well. My hope is that the large number of examples will help
+push you in the right direction.
+
+With that said, here are a few more things you might want to look at:
+
+* The [API documentation for the `csv` crate](../index.html) documents all
+  facets of the library, and is itself littered with even more examples.
+* The [`csv-index` crate](https://docs.rs/csv-index) provides data structures
+  that can index CSV data that are amenable to writing to disk. (This library
+  is still a work in progress.)
+* The [`xsv` command line tool](https://github.com/BurntSushi/xsv) is a high
+  performance CSV swiss army knife. It can slice, select, search, sort, join,
+  concatenate, index, format and compute statistics on arbitrary CSV data. Give
+  it a try!
+
 */

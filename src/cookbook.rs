@@ -26,22 +26,20 @@ if you're interested in adding an example to this list!
 
 # Reading: basic
 
-This example shows how to read CSV data from a file and print each record to
+This example shows how to read CSV data from stdin and print each record to
 stdout.
 
 ```no_run
 # //cookbook-read-basic.rs
 extern crate csv;
 
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
+use std::io;
 use std::process;
 
 fn example() -> Result<(), Box<Error>> {
     // Build the CSV reader and iterate over each record.
-    let file_path = get_first_arg()?;
-    let mut rdr = csv::Reader::from_path(&file_path)?;
+    let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.records() {
         // The iterator yields Result<StringRecord, Error>, so we check the
         // error here..
@@ -49,13 +47,6 @@ fn example() -> Result<(), Box<Error>> {
         println!("{:?}", record);
     }
     Ok(())
-}
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    match env::args_os().nth(1) {
-        Some(file_path) => Ok(file_path),
-        None => Err(From::from("expected 1 argument, but got none")),
-    }
 }
 
 fn main() {
@@ -71,7 +62,7 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example cookbook-read-basic examples/data/smallpop.csv
+$ cargo run --example cookbook-read-basic < examples/data/smallpop.csv
 ```
 
 # Reading: with Serde
@@ -89,9 +80,8 @@ extern crate csv;
 #[macro_use]
 extern crate serde_derive;
 
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
+use std::io;
 use std::process;
 
 // By default, struct field names are deserialized based on the position of
@@ -105,9 +95,7 @@ struct Record {
 }
 
 fn example() -> Result<(), Box<Error>> {
-    // Build the CSV reader and iterate over each record.
-    let file_path = get_first_arg()?;
-    let mut rdr = csv::Reader::from_path(&file_path)?;
+    let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         // Notice that we need to provide a type hint for automatic
         // deserialization.
@@ -117,13 +105,6 @@ fn example() -> Result<(), Box<Error>> {
     Ok(())
 }
 
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    match env::args_os().nth(1) {
-        Some(file_path) => Ok(file_path),
-        None => Err(From::from("expected 1 argument, but got none")),
-    }
-}
-
 fn main() {
     if let Err(err) = example() {
         println!("error running example: {}", err);
@@ -137,28 +118,26 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example cookbook-read-serde examples/data/smallpop.csv
+$ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
 ```
 
 # Reading: setting a different delimiter
 
-This example shows how to read CSV data from a file where fields are separated
+This example shows how to read CSV data from stdin where fields are separated
 by `:` instead of `,`.
 
 ```no_run
 # //cookbook-read-colon.rs
 extern crate csv;
 
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
+use std::io;
 use std::process;
 
 fn example() -> Result<(), Box<Error>> {
-    let file_path = get_first_arg()?;
     let mut rdr = csv::ReaderBuilder::new()
         .delimiter(b':')
-        .from_path(&file_path)?;
+        .from_reader(io::stdin());
     for result in rdr.records() {
         let record = result?;
         println!("{:?}", record);
@@ -166,13 +145,6 @@ fn example() -> Result<(), Box<Error>> {
     Ok(())
 }
 
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    match env::args_os().nth(1) {
-        Some(file_path) => Ok(file_path),
-        None => Err(From::from("expected 1 argument, but got none")),
-    }
-}
-
 fn main() {
     if let Err(err) = example() {
         println!("error running example: {}", err);
@@ -186,7 +158,7 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example cookbook-read-colon examples/data/smallpop-colon.csv
+$ cargo run --example cookbook-read-colon < examples/data/smallpop-colon.csv
 ```
 
 # Reading: without headers
@@ -200,28 +172,19 @@ first record is not skipped. This example shows how to disable that setting.
 # //cookbook-read-no-headers.rs
 extern crate csv;
 
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
+use std::io;
 use std::process;
 
 fn example() -> Result<(), Box<Error>> {
-    let file_path = get_first_arg()?;
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false)
-        .from_path(&file_path)?;
+        .from_reader(io::stdin());
     for result in rdr.records() {
         let record = result?;
         println!("{:?}", record);
     }
     Ok(())
-}
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    match env::args_os().nth(1) {
-        Some(file_path) => Ok(file_path),
-        None => Err(From::from("expected 1 argument, but got none")),
-    }
 }
 
 fn main() {
@@ -237,26 +200,23 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example cookbook-read-no-headers examples/data/smallpop-no-headers.csv
+$ cargo run --example cookbook-read-no-headers < examples/data/smallpop-no-headers.csv
 ```
 
 # Writing: basic
 
-This example shows how to write CSV data to a file.
+This example shows how to write CSV data to stdout.
 
 ```no_run
 # //cookbook-write-basic.rs
 extern crate csv;
 
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
+use std::io;
 use std::process;
 
 fn example() -> Result<(), Box<Error>> {
-    // Build the CSV writer and write a few records.
-    let file_path = get_first_arg()?;
-    let mut wtr = csv::Writer::from_path(&file_path)?;
+    let mut wtr = csv::Writer::from_writer(io::stdout());
 
     // When writing records without Serde, the header record is written just
     // like any other record.
@@ -267,13 +227,6 @@ fn example() -> Result<(), Box<Error>> {
     Ok(())
 }
 
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    match env::args_os().nth(1) {
-        Some(file_path) => Ok(file_path),
-        None => Err(From::from("expected 1 argument, but got none")),
-    }
-}
-
 fn main() {
     if let Err(err) = example() {
         println!("error running example: {}", err);
@@ -287,12 +240,12 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example cookbook-write-basic /tmp/simplepop.csv
+$ cargo run --example cookbook-write-basic > /tmp/simplepop.csv
 ```
 
 # Writing: with Serde
 
-This example shows how to write CSV data to a file with Serde. Namely, we
+This example shows how to write CSV data to stdout with Serde. Namely, we
 represent each record using a custom struct that we define. In this example,
 headers are written automatically.
 
@@ -302,9 +255,8 @@ extern crate csv;
 #[macro_use]
 extern crate serde_derive;
 
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
+use std::io;
 use std::process;
 
 #[derive(Debug, Serialize)]
@@ -316,9 +268,7 @@ struct Record {
 }
 
 fn example() -> Result<(), Box<Error>> {
-    // Build the CSV writer and write a few records.
-    let file_path = get_first_arg()?;
-    let mut wtr = csv::Writer::from_path(&file_path)?;
+    let mut wtr = csv::Writer::from_writer(io::stdout());
 
     // When writing records with Serde using structs, the header row is written
     // automatically.
@@ -338,13 +288,6 @@ fn example() -> Result<(), Box<Error>> {
     Ok(())
 }
 
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    match env::args_os().nth(1) {
-        Some(file_path) => Ok(file_path),
-        None => Err(From::from("expected 1 argument, but got none")),
-    }
-}
-
 fn main() {
     if let Err(err) = example() {
         println!("error running example: {}", err);
@@ -358,6 +301,6 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example cookbook-write-serde /tmp/simplepop.csv
+$ cargo run --example cookbook-write-serde > /tmp/simplepop.csv
 ```
 */

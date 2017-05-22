@@ -55,9 +55,26 @@ and this to your crate root:
 extern crate csv;
 ```
 
-# Simple example
+If you want to use Serde's custom derive functionality on your custom structs,
+then add this to your `[dependencies]` section of `Cargo.toml`:
 
-This example shows how to read CSV data from a file and print each record to
+```toml
+[dependencies]
+serde = "1"
+serde_derive = "1"
+```
+
+and this to your crate root:
+
+```ignore
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+```
+
+# Example
+
+This example shows how to read CSV data from stdin and print each record to
 stdout.
 
 There are more examples in the [cookbook](cookbook/index.html).
@@ -65,29 +82,20 @@ There are more examples in the [cookbook](cookbook/index.html).
 ```no_run
 extern crate csv;
 
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
+use std::io;
 use std::process;
 
 fn example() -> Result<(), Box<Error>> {
     // Build the CSV reader and iterate over each record.
-    let file_path = get_first_arg()?;
-    let mut rdr = csv::Reader::from_path(&file_path)?;
+    let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.records() {
         // The iterator yields Result<StringRecord, Error>, so we check the
-        // error here..
+        // error here.
         let record = result?;
         println!("{:?}", record);
     }
     Ok(())
-}
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    match env::args_os().nth(1) {
-        Some(file_path) => Ok(file_path),
-        None => Err(From::from("expected 1 argument, but got none")),
-    }
 }
 
 fn main() {
@@ -103,8 +111,59 @@ The above example can be run like so:
 ```ignore
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
-$ cargo run --example simple examples/data/simplepop.csv
+$ cargo run --example cookbook-read-basic < examples/data/smallpop.csv
 ```
+
+# Example with Serde
+
+This example shows how to read CSV data from stdin into your own custom struct.
+By default, the member names of the struct are matched with the values in the
+header record of your CSV data.
+
+```no_run
+extern crate csv;
+#[macro_use]
+extern crate serde_derive;
+
+use std::error::Error;
+use std::io;
+use std::process;
+
+#[derive(Debug,Deserialize)]
+struct Record {
+    city: String,
+    region: String,
+    country: String,
+    population: Option<u64>,
+}
+
+fn example() -> Result<(), Box<Error>> {
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+    for result in rdr.deserialize() {
+        // Notice that we need to provide a type hint for automatic
+        // deserialization.
+        let record: Record = result?;
+        println!("{:?}", record);
+    }
+    Ok(())
+}
+
+fn main() {
+    if let Err(err) = example() {
+        println!("error running example: {}", err);
+        process::exit(1);
+    }
+}
+```
+
+The above example can be run like so:
+
+```ignore
+$ git clone git://github.com/BurntSushi/rust-csv
+$ cd rust-csv
+$ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
+```
+
 */
 
 #![deny(missing_docs)]

@@ -101,36 +101,44 @@ trait DeRecord<'r> {
 struct DeRecordWrap<T>(T);
 
 impl<'r, T: DeRecord<'r>> DeRecord<'r> for DeRecordWrap<T> {
+    #[inline]
     fn has_headers(&self) -> bool {
         self.0.has_headers()
     }
 
+    #[inline]
     fn next_header(&mut self) -> Result<Option<&'r str>, DeserializeError> {
         self.0.next_header()
     }
 
+    #[inline]
     fn next_header_bytes(
         &mut self,
     ) -> Result<Option<&'r [u8]>, DeserializeError> {
         self.0.next_header_bytes()
     }
 
+    #[inline]
     fn next_field(&mut self) -> Result<&'r str, DeserializeError> {
         self.0.next_field()
     }
 
+    #[inline]
     fn next_field_bytes(&mut self) -> Result<&'r [u8], DeserializeError> {
         self.0.next_field_bytes()
     }
 
+    #[inline]
     fn peek_field(&mut self) -> Option<&'r [u8]> {
         self.0.peek_field()
     }
 
+    #[inline]
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
         self.0.error(kind)
     }
 
+    #[inline]
     fn infer_deserialize<'de, V: Visitor<'de>>(
         &mut self,
         visitor: V,
@@ -146,21 +154,24 @@ struct DeStringRecord<'r> {
 }
 
 impl<'r> DeRecord<'r> for DeStringRecord<'r> {
+    #[inline]
     fn has_headers(&self) -> bool {
         self.headers.is_some()
     }
 
+    #[inline]
     fn next_header(&mut self) -> Result<Option<&'r str>, DeserializeError> {
         Ok(self.headers.as_mut().and_then(|it| it.next()))
     }
 
+    #[inline]
     fn next_header_bytes(
         &mut self,
     ) -> Result<Option<&'r [u8]>, DeserializeError> {
         Ok(self.next_header()?.map(|s| s.as_bytes()))
     }
 
-    #[inline(always)]
+    #[inline]
     fn next_field(&mut self) -> Result<&'r str, DeserializeError> {
         match self.it.next() {
             Some(field) => {
@@ -174,11 +185,12 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     fn next_field_bytes(&mut self) -> Result<&'r [u8], DeserializeError> {
         self.next_field().map(|s| s.as_bytes())
     }
 
+    #[inline]
     fn peek_field(&mut self) -> Option<&'r [u8]> {
         self.it.peek().map(|s| s.as_bytes())
     }
@@ -218,10 +230,12 @@ struct DeByteRecord<'r> {
 }
 
 impl<'r> DeRecord<'r> for DeByteRecord<'r> {
+    #[inline]
     fn has_headers(&self) -> bool {
         self.headers.is_some()
     }
 
+    #[inline]
     fn next_header(&mut self) -> Result<Option<&'r str>, DeserializeError> {
         match self.next_header_bytes() {
             Ok(Some(field)) => Ok(Some(str::from_utf8(field).map_err(|err| {
@@ -232,13 +246,14 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
         }
     }
 
+    #[inline]
     fn next_header_bytes(
         &mut self,
     ) -> Result<Option<&'r [u8]>, DeserializeError> {
         Ok(self.headers.as_mut().and_then(|it| it.next()))
     }
 
-    #[inline(always)]
+    #[inline]
     fn next_field(&mut self) -> Result<&'r str, DeserializeError> {
         self.next_field_bytes().and_then(|field| {
             str::from_utf8(field).map_err(|err| {
@@ -247,7 +262,7 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
         })
     }
 
-    #[inline(always)]
+    #[inline]
     fn next_field_bytes(&mut self) -> Result<&'r [u8], DeserializeError> {
         match self.it.next() {
             Some(field) => {
@@ -261,6 +276,7 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
         }
     }
 
+    #[inline]
     fn peek_field(&mut self) -> Option<&'r [u8]> {
         self.it.peek().map(|s| *s)
     }

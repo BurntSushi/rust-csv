@@ -5,11 +5,56 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::{self, Command};
 
+static STRANGE: &'static str = include_str!("../examples/data/strange.csv");
 static USPOP: &'static str = include_str!("../examples/data/uspop.csv");
 static USPOP_NULL: &'static str = include_str!("../examples/data/uspop-null.csv");
 static USPOP_LATIN1: &'static [u8] = include_bytes!("../examples/data/uspop-latin1.csv");
 static WORLDPOP: &'static str = include_str!("../examples/data/bench/worldcitiespop.csv");
-static STRANGE: &'static str = include_str!("../examples/data/strange.csv");
+static SMALLPOP: &'static str = include_str!("../examples/data/smallpop.csv");
+static SMALLPOP_COLON: &'static str = include_str!("../examples/data/smallpop-colon.csv");
+static SMALLPOP_NO_HEADERS: &'static str = include_str!("../examples/data/smallpop-no-headers.csv");
+
+#[test]
+fn cookbook_read_basic() {
+    let mut cmd = cmd_for_example("cookbook-read-basic");
+    let out = cmd_output_with(&mut cmd, SMALLPOP.as_bytes());
+    assert_eq!(out.stdout().lines().count(), 10);
+}
+
+#[test]
+fn cookbook_read_serde() {
+    let mut cmd = cmd_for_example("cookbook-read-serde");
+    let out = cmd_output_with(&mut cmd, SMALLPOP.as_bytes());
+    assert_eq!(out.stdout().lines().count(), 10);
+}
+
+#[test]
+fn cookbook_read_colon() {
+    let mut cmd = cmd_for_example("cookbook-read-colon");
+    let out = cmd_output_with(&mut cmd, SMALLPOP_COLON.as_bytes());
+    assert_eq!(out.stdout().lines().count(), 10);
+}
+
+#[test]
+fn cookbook_read_no_headers() {
+    let mut cmd = cmd_for_example("cookbook-read-no-headers");
+    let out = cmd_output_with(&mut cmd, SMALLPOP_NO_HEADERS.as_bytes());
+    assert_eq!(out.stdout().lines().count(), 10);
+}
+
+#[test]
+fn cookbook_write_basic() {
+    let mut cmd = cmd_for_example("cookbook-write-basic");
+    let out = cmd_output(&mut cmd);
+    assert_eq!(out.stdout().lines().count(), 3);
+}
+
+#[test]
+fn cookbook_write_serde() {
+    let mut cmd = cmd_for_example("cookbook-write-serde");
+    let out = cmd_output(&mut cmd);
+    assert_eq!(out.stdout().lines().count(), 3);
+}
 
 #[test]
 fn tutorial_setup_01() {
@@ -256,6 +301,34 @@ fn tutorial_perf_alloc_02() {
 #[test]
 fn tutorial_perf_alloc_03() {
     let mut cmd = cmd_for_example("tutorial-perf-alloc-03");
+    let out = cmd_output_with(&mut cmd, WORLDPOP.as_bytes());
+    assert_eq!(out.stdout(), "11\n");
+}
+
+#[test]
+fn tutorial_perf_serde_01() {
+    let mut cmd = cmd_for_example("tutorial-perf-serde-01");
+    let out = cmd_output_with(&mut cmd, WORLDPOP.as_bytes());
+    assert_eq!(out.stdout(), "11\n");
+}
+
+#[test]
+fn tutorial_perf_serde_02() {
+    let mut cmd = cmd_for_example("tutorial-perf-serde-02");
+    let out = cmd_output_with(&mut cmd, WORLDPOP.as_bytes());
+    assert_eq!(out.stdout(), "11\n");
+}
+
+#[test]
+fn tutorial_perf_serde_03() {
+    let mut cmd = cmd_for_example("tutorial-perf-serde-03");
+    let out = cmd_output_with(&mut cmd, WORLDPOP.as_bytes());
+    assert_eq!(out.stdout(), "11\n");
+}
+
+#[test]
+fn tutorial_perf_core_01() {
+    let mut cmd = cmd_for_example("tutorial-perf-core-01");
     let out = cmd_output_with(&mut cmd, WORLDPOP.as_bytes());
     assert_eq!(out.stdout(), "11\n");
 }

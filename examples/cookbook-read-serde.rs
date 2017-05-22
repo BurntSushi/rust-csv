@@ -2,9 +2,8 @@ extern crate csv;
 #[macro_use]
 extern crate serde_derive;
 
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
+use std::io;
 use std::process;
 
 // By default, struct field names are deserialized based on the position of
@@ -18,9 +17,7 @@ struct Record {
 }
 
 fn example() -> Result<(), Box<Error>> {
-    // Build the CSV reader and iterate over each record.
-    let file_path = get_first_arg()?;
-    let mut rdr = csv::Reader::from_path(&file_path)?;
+    let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         // Notice that we need to provide a type hint for automatic
         // deserialization.
@@ -28,13 +25,6 @@ fn example() -> Result<(), Box<Error>> {
         println!("{:?}", record);
     }
     Ok(())
-}
-
-fn get_first_arg() -> Result<OsString, Box<Error>> {
-    match env::args_os().nth(1) {
-        Some(file_path) => Ok(file_path),
-        None => Err(From::from("expected 1 argument, but got none")),
-    }
 }
 
 fn main() {
