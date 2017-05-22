@@ -33,31 +33,23 @@ macro_rules! bench {
     };
 }
 
-bench!(count_nfl_field_nocopy_dfa, NFL, count_fields_nocopy, 130000);
 bench!(count_nfl_field_copy_dfa, NFL, count_fields, 130000);
 bench!(count_nfl_field_copy_nfa, NFL, count_fields, 130000, NFA);
-bench!(count_nfl_record_nocopy_dfa, NFL, count_records_nocopy, 10000);
 bench!(count_nfl_record_copy_dfa, NFL, count_records, 10000);
 bench!(count_nfl_record_copy_nfa, NFL, count_records, 10000, NFA);
 
-bench!(count_game_field_nocopy_dfa, GAME, count_fields_nocopy, 600000);
 bench!(count_game_field_copy_dfa, GAME, count_fields, 600000);
 bench!(count_game_field_copy_nfa, GAME, count_fields, 600000, NFA);
-bench!(count_game_record_nocopy_dfa, GAME, count_records_nocopy, 100000);
 bench!(count_game_record_copy_dfa, GAME, count_records, 100000);
 bench!(count_game_record_copy_nfa, GAME, count_records, 100000, NFA);
 
-bench!(count_pop_field_nocopy_dfa, POP, count_fields_nocopy, 140007);
 bench!(count_pop_field_copy_dfa, POP, count_fields, 140007);
 bench!(count_pop_field_copy_nfa, POP, count_fields, 140007, NFA);
-bench!(count_pop_record_nocopy_dfa, POP, count_records_nocopy, 20001);
 bench!(count_pop_record_copy_dfa, POP, count_records, 20001);
 bench!(count_pop_record_copy_nfa, POP, count_records, 20001, NFA);
 
-bench!(count_mbta_field_nocopy_dfa, MBTA, count_fields_nocopy, 90000);
 bench!(count_mbta_field_copy_dfa, MBTA, count_fields, 90000);
 bench!(count_mbta_field_copy_nfa, MBTA, count_fields, 90000, NFA);
-bench!(count_mbta_record_nocopy_dfa, MBTA, count_records_nocopy, 10000);
 bench!(count_mbta_record_copy_dfa, MBTA, count_records, 10000);
 bench!(count_mbta_record_copy_nfa, MBTA, count_records, 10000, NFA);
 
@@ -79,22 +71,6 @@ fn count_fields(rdr: &mut Reader, mut data: &[u8]) -> u64 {
     count
 }
 
-fn count_fields_nocopy(rdr: &mut Reader, mut data: &[u8]) -> u64 {
-    use csv_core::ReadFieldNoCopyResult::*;
-
-    let mut count = 0;
-    loop {
-        let (res, nin) = rdr.read_field_nocopy(data);
-        data = &data[nin..];
-        match res {
-            InputEmpty => {}
-            Field{..} => { count += 1; }
-            End => break,
-        }
-    }
-    count
-}
-
 fn count_records(rdr: &mut Reader, mut data: &[u8]) -> u64 {
     use csv_core::ReadRecordResult::*;
 
@@ -107,22 +83,6 @@ fn count_records(rdr: &mut Reader, mut data: &[u8]) -> u64 {
         match res {
             InputEmpty => {}
             OutputFull | OutputEndsFull => panic!("field too large"),
-            Record => count += 1,
-            End => break,
-        }
-    }
-    count
-}
-
-fn count_records_nocopy(rdr: &mut Reader, mut data: &[u8]) -> u64 {
-    use csv_core::ReadRecordNoCopyResult::*;
-
-    let mut count = 0;
-    loop {
-        let (res, nin) = rdr.read_record_nocopy(data);
-        data = &data[nin..];
-        match res {
-            InputEmpty => {}
             Record => count += 1,
             End => break,
         }

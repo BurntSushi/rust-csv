@@ -99,22 +99,17 @@ impl PartialEq<u8> for Terminator {
 ///
 /// # Usage
 ///
-/// A reader has four different ways to read CSV data, each with their own
+/// A reader has two different ways to read CSV data, each with their own
 /// trade offs.
 ///
 /// * `read_field` - Copies a single CSV field into an output buffer while
 ///   unescaping quotes. This is simple to use and doesn't require storing an
 ///   entire record contiguously in memory, but it is slower.
-/// * `read_field_nocopy` - Like `read_field`, but doesn't copy the CSV field
-///   anywhere. This has limited utility, e.g., for counting data or extracting
-///   the positions of fields.
 /// * `read_record` - Copies an entire CSV record into an output buffer while
 ///   unescaping quotes. The ending positions of each field are copied into
 ///   an additional buffer. This is harder to use and requires larger output
 ///   buffers, but it is faster than `read_field` since it amortizes more
 ///   costs.
-/// * `read_record_nocopy` - Like `read_record`, but doesn't copy the CSV
-///   record anywhere.
 ///
 /// # RFC 4180
 ///
@@ -334,21 +329,6 @@ impl ReadFieldResult {
             }
         }
     }
-
-    /// Convert this to a NoCopy result for use inside the NFA. This panics
-    /// if `self` is `ReadFieldResult::OutputFull`.
-    fn as_read_field_nocopy_result(&self) -> ReadFieldNoCopyResult {
-        match *self {
-            ReadFieldResult::InputEmpty => ReadFieldNoCopyResult::InputEmpty,
-            ReadFieldResult::OutputFull => {
-                panic!("cannot convert OutputFull result into nocopy result");
-            }
-            ReadFieldResult::Field { record_end } => {
-                ReadFieldNoCopyResult::Field { record_end: record_end }
-            }
-            ReadFieldResult::End => ReadFieldNoCopyResult::End,
-        }
-    }
 }
 
 /// The result of parsing at most one field from CSV data while ignoring the
@@ -418,24 +398,6 @@ impl ReadRecordResult {
                     ReadRecordResult::InputEmpty
                 }
             }
-        }
-    }
-
-    /// Convert this to a NoCopy result for use inside the NFA. This panics
-    /// if `self` is `ReadRecordResult::OutputFull` or
-    /// `ReadRecordResult::OutputEndsFull`.
-    fn as_read_record_nocopy_result(&self) -> ReadRecordNoCopyResult {
-        match *self {
-            ReadRecordResult::InputEmpty => ReadRecordNoCopyResult::InputEmpty,
-            ReadRecordResult::OutputFull => {
-                panic!("cannot convert OutputFull result into nocopy result");
-            }
-            ReadRecordResult::OutputEndsFull => {
-                panic!("cannot convert OutputEndsFull result \
-                        into nocopy result");
-            }
-            ReadRecordResult::Record => ReadRecordNoCopyResult::Record,
-            ReadRecordResult::End => ReadRecordNoCopyResult::End,
         }
     }
 }
@@ -595,24 +557,6 @@ impl Reader {
         }
     }
 
-    /// Parse a single CSV field in `input`.
-    ///
-    /// This routine has the same semantics as `read_field`, except it will
-    /// not copy the input anywhere, and is therefore generally faster. This
-    /// is useful when you only care about the positions of fields/records (or
-    /// want to count them).
-    pub fn read_field_nocopy(
-        &mut self,
-        input: &[u8],
-    ) -> (ReadFieldNoCopyResult, usize) {
-        if self.use_nfa {
-            let (res, nin, _) = self.read_field_nfa(input, &mut []);
-            (res.as_read_field_nocopy_result(), nin)
-        } else {
-            self.read_field_nocopy_dfa(input)
-        }
-    }
-
     /// Parse a single CSV record in `input` and copy each field contiguously
     /// to `output`, with the end position of each field written to `ends`.
     ///
@@ -664,25 +608,6 @@ impl Reader {
             self.read_record_nfa(input, output, ends)
         } else {
             self.read_record_dfa(input, output, ends)
-        }
-    }
-
-    /// Parse a single CSV record in `input`.
-    ///
-    /// This routine has the same semantics as `read_record`, except it will
-    /// not copy the input anywhere, and is therefore generally faster. This
-    /// is useful when you only care about the positions of fields/records (or
-    /// want to count them).
-    pub fn read_record_nocopy(
-        &mut self,
-        input: &[u8],
-    ) -> (ReadRecordNoCopyResult, usize) {
-        if self.use_nfa {
-            let (res, nin, _, _) = self.read_record_nfa(
-                input, &mut [], &mut []);
-            (res.as_read_record_nocopy_result(), nin)
-        } else {
-            self.read_record_nocopy_dfa(input)
         }
     }
 
@@ -764,67 +689,6 @@ impl Reader {
     }
 
     #[inline(always)]
-    fn read_record_nocopy_dfa(
-        &mut self,
-        input: &[u8],
-    ) -> (ReadRecordNoCopyResult, usize) {
-        if input.is_empty() {
-            self.dfa_state = self.transition_final_dfa(self.dfa_state);
-            let res = self.dfa.new_read_record_nocopy_result(
-                self.dfa_state, true);
-            return (res, 0);
-        }
-        let mut nin = 0;
-        let mut state = self.dfa_state;
-        while nin < input.len() {
-            state = self.dfa.get(state, input[nin]);
-            self.line += (input[nin] == b'\n') as u64;
-            nin += 1;
-            if state >= self.dfa.final_record {
-                break;
-            }
-            // Unroll the loop for some nice gains.
-            // Sadly, a similar optimization doesn't work well in the
-            // copy variant, which makes this cleverness suspicious.
-            if nin + 4 < input.len() {
-                state = self.dfa.get(state, input[nin]);
-                self.line += (input[nin] == b'\n') as u64;
-                nin += 1;
-                if state >= self.dfa.final_record {
-                    break;
-                }
-                state = self.dfa.get(state, input[nin]);
-                self.line += (input[nin] == b'\n') as u64;
-                nin += 1;
-                if state >= self.dfa.final_record {
-                    break;
-                }
-                state = self.dfa.get(state, input[nin]);
-                self.line += (input[nin] == b'\n') as u64;
-                nin += 1;
-                if state >= self.dfa.final_record {
-                    break;
-                }
-                state = self.dfa.get(state, input[nin]);
-                self.line += (input[nin] == b'\n') as u64;
-                nin += 1;
-                if state >= self.dfa.final_record {
-                    break;
-                }
-                state = self.dfa.get(state, input[nin]);
-                self.line += (input[nin] == b'\n') as u64;
-                nin += 1;
-                if state >= self.dfa.final_record {
-                    break;
-                }
-            }
-        }
-        let res = self.dfa.new_read_record_nocopy_result(state, false);
-        self.dfa_state = state;
-        (res, nin)
-    }
-
-    #[inline(always)]
     fn read_field_dfa(
         &mut self,
         input: &[u8],
@@ -859,64 +723,6 @@ impl Reader {
             state, false, nin >= input.len(), nout >= output.len());
         self.dfa_state = state;
         (res, nin, nout)
-    }
-
-    #[inline(always)]
-    fn read_field_nocopy_dfa(
-        &mut self,
-        input: &[u8],
-    ) -> (ReadFieldNoCopyResult, usize) {
-        if input.is_empty() {
-            self.dfa_state = self.transition_final_dfa(self.dfa_state);
-            let res = self.dfa.new_read_field_nocopy_result(
-                self.dfa_state, true);
-            return (res, 0);
-        }
-        let mut nin = 0;
-        let mut state = self.dfa_state;
-        while nin < input.len() {
-            state = self.dfa.get(state, input[nin]);
-            self.line += (input[nin] == b'\n') as u64;
-            nin += 1;
-            if state >= self.dfa.final_field {
-                break;
-            }
-            if nin + 4 < input.len() {
-                state = self.dfa.get(state, input[nin]);
-                self.line += (input[nin] == b'\n') as u64;
-                nin += 1;
-                if state >= self.dfa.final_field {
-                    break;
-                }
-                state = self.dfa.get(state, input[nin]);
-                self.line += (input[nin] == b'\n') as u64;
-                nin += 1;
-                if state >= self.dfa.final_field {
-                    break;
-                }
-                state = self.dfa.get(state, input[nin]);
-                self.line += (input[nin] == b'\n') as u64;
-                nin += 1;
-                if state >= self.dfa.final_field {
-                    break;
-                }
-                state = self.dfa.get(state, input[nin]);
-                self.line += (input[nin] == b'\n') as u64;
-                nin += 1;
-                if state >= self.dfa.final_field {
-                    break;
-                }
-                state = self.dfa.get(state, input[nin]);
-                self.line += (input[nin] == b'\n') as u64;
-                nin += 1;
-                if state >= self.dfa.final_field {
-                    break;
-                }
-            }
-        }
-        let res = self.dfa.new_read_field_nocopy_result(state, false);
-        self.dfa_state = state;
-        (res, nin)
     }
 
     /// Perform the final state transition, i.e., when the caller indicates
@@ -1334,12 +1140,6 @@ impl Dfa {
         self.new_state(NfaState::EndRecord)
     }
 
-    fn get(&self, state: DfaState, c: u8) -> DfaState {
-        let cls = self.classes.classes[c as usize];
-        let idx = state.0 as usize + cls as usize;
-        self.trans[idx]
-    }
-
     fn get_output(&self, state: DfaState, c: u8) -> (DfaState, bool) {
         let cls = self.classes.classes[c as usize];
         let idx = state.0 as usize + cls as usize;
@@ -1383,23 +1183,6 @@ impl Dfa {
         }
     }
 
-    fn new_read_field_nocopy_result(
-        &self,
-        state: DfaState,
-        is_final_trans: bool,
-    ) -> ReadFieldNoCopyResult {
-        if state >= self.final_record {
-            ReadFieldNoCopyResult::Field { record_end: true }
-        } else if state == self.final_field {
-            ReadFieldNoCopyResult::Field { record_end: false }
-        } else if is_final_trans && state.is_start() {
-            ReadFieldNoCopyResult::End
-        } else {
-            debug_assert!(state < self.final_field);
-            ReadFieldNoCopyResult::InputEmpty
-        }
-    }
-
     fn new_read_record_result(
         &self,
         state: DfaState,
@@ -1421,21 +1204,6 @@ impl Dfa {
             } else {
                 ReadRecordResult::InputEmpty
             }
-        }
-    }
-
-    fn new_read_record_nocopy_result(
-        &self,
-        state: DfaState,
-        is_final_trans: bool,
-    ) -> ReadRecordNoCopyResult {
-        if state >= self.final_record {
-            ReadRecordNoCopyResult::Record
-        } else if is_final_trans && state.is_start() {
-            ReadRecordNoCopyResult::End
-        } else {
-            debug_assert!(state < self.final_record);
-            ReadRecordNoCopyResult::InputEmpty
         }
     }
 }
