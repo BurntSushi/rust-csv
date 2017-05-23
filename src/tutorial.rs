@@ -2268,7 +2268,7 @@ this with Serde is a bit trickier than before, because we need to change our
 like:
 
 ```no_run
-# //tutorial-perf-serde-02.rs
+//tutorial-perf-serde-02.rs
 # extern crate csv;
 # extern crate serde;
 # #[macro_use]
@@ -2358,7 +2358,7 @@ general, this means using `&[u8]` instead of `&str` and `ByteRecord` instead
 of `StringRecord`:
 
 ```no_run
-# //tutorial-perf-serde-03.rs
+//tutorial-perf-serde-03.rs
 # extern crate csv;
 # extern crate serde;
 # #[macro_use]

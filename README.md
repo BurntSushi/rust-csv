@@ -78,7 +78,7 @@ This example shows how to read CSV data from stdin into your own custom struct.
 By default, the member names of the struct are matched with the values in the
 header record of your CSV data.
 
-```no_run
+```rust
 extern crate csv;
 #[macro_use]
 extern crate serde_derive;
