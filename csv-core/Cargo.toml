@@ -9,6 +9,7 @@ repository = "https://github.com/BurntSushi/rust-csv"
 readme = "README.md"
 keywords = ["csv", "comma", "parser", "delimited", "no_std"]
 license = "Unlicense/MIT"
+categories = ["encoding", "no-std", "parser-implementations"]
 
 [lib]
 bench = false
