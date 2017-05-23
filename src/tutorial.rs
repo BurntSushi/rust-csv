@@ -478,7 +478,7 @@ StringRecord(["Oakman", "AL", "", "33.7133333", "-87.3886111"])
 This example contains two new pieces of code:
 
 1. Code for querying the positional arguments of your program. We put this code
-   into its own funcation called `get_first_arg`. Our program expects a file
+   into its own function called `get_first_arg`. Our program expects a file
    path in the first position (which is indexed at `1`; the argument at index
    `0` is the executable name), so if one doesn't exist, then `get_first_arg`
    returns an error.
