@@ -11,6 +11,10 @@ keywords = ["csv", "comma", "parser", "delimited", "index"]
 license = "Unlicense/MIT"
 categories = ["encoding", "parser-implementations"]
 
+[badges]
+travis-ci = { repository = "BurntSushi/rust-csv" }
+appveyor = { repository = "BurntSushi/rust-csv" }
+
 [lib]
 bench = false
 
