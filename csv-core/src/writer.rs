@@ -68,10 +68,10 @@ impl WriterBuilder {
 
     /// The record terminator to use when writing CSV.
     ///
-    /// A record terminator can be any single byte. The default is a special
-    /// value, `Terminator::CRLF`, which uses `\r\n` as the record terminator.
+    /// A record terminator can be any single byte. The default is `\n`.
     ///
-    /// The default is `b'\n'`.
+    /// Note that RFC 4180 specifies that record terminators should be `\r\n`.
+    /// To use `\r\n`, use the special `Terminator::CRLF` value.
     pub fn terminator(&mut self, term: Terminator) -> &mut WriterBuilder {
         self.wtr.term = term;
         self
@@ -145,6 +145,11 @@ pub enum WriteResult {
 /// This writer conforms to RFC 4180 with one exception: it doesn't guarantee
 /// that all records written are of the same length. Instead, the onus is on
 /// the caller to ensure that all records written are of the same length.
+///
+/// Note that the default configuration of a `Writer` uses `\n` for record
+/// terminators instead of `\r\n` as specified by RFC 4180. Use the
+/// `terminator` method on `WriterBuilder` to set the terminator to `\r\n` if
+/// it's desired.
 #[derive(Clone, Debug)]
 pub struct Writer {
     state: WriterState,
