@@ -4,13 +4,13 @@ use std::path::Path;
 use std::result;
 
 use csv_core::{
-    Writer as CoreWriter, WriterBuilder as CoreWriterBuilder,
-    QuoteStyle, Terminator, WriteResult,
+    Writer as CoreWriter, WriterBuilder as CoreWriterBuilder, WriteResult,
 };
 use serde::Serialize;
 
 use error::{Error, Result, IntoInnerError, new_into_inner_error};
 use serializer::serialize;
+use {QuoteStyle, Terminator};
 
 /// Builds a CSV writer with various configuration knobs.
 ///
@@ -336,7 +336,7 @@ impl WriterBuilder {
         &mut self,
         term: Terminator,
     ) -> &mut WriterBuilder {
-        self.builder.terminator(term);
+        self.builder.terminator(term.to_core());
         self
     }
 
@@ -397,7 +397,7 @@ impl WriterBuilder {
     /// }
     /// ```
     pub fn quote_style(&mut self, style: QuoteStyle) -> &mut WriterBuilder {
-        self.builder.quote_style(style);
+        self.builder.quote_style(style.to_core());
         self
     }
 

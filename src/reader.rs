@@ -5,13 +5,14 @@ use std::path::Path;
 use std::result;
 
 use csv_core::{
-    Reader as CoreReader, ReaderBuilder as CoreReaderBuilder, Terminator,
+    Reader as CoreReader, ReaderBuilder as CoreReaderBuilder,
 };
 use serde::de::DeserializeOwned;
 
 use byte_record::{self, ByteRecord, Position};
 use error::{Error, Result, Utf8Error};
 use string_record::{self, StringRecord};
+use Terminator;
 
 /// Builds a CSV reader with various configuration knobs.
 ///
@@ -352,7 +353,7 @@ impl ReaderBuilder {
         &mut self,
         term: Terminator,
     ) -> &mut ReaderBuilder {
-        self.builder.terminator(term);
+        self.builder.terminator(term.to_core());
         self
     }
 
