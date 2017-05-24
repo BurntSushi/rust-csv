@@ -104,11 +104,89 @@ extern crate arrayvec;
 extern crate memchr;
 
 pub use reader::{
-    Reader, ReaderBuilder, Terminator,
+    Reader, ReaderBuilder,
     ReadFieldResult, ReadFieldNoCopyResult,
     ReadRecordResult, ReadRecordNoCopyResult,
 };
-pub use writer::{Writer, WriterBuilder, WriteResult, QuoteStyle};
+pub use writer::{Writer, WriterBuilder, WriteResult};
 
 mod reader;
 mod writer;
+
+/// A record terminator.
+///
+/// Use this to specify the record terminator while parsing CSV. The default is
+/// CRLF, which treats `\r`, `\n` or `\r\n` as a single record terminator.
+#[derive(Clone, Copy, Debug)]
+pub enum Terminator {
+    /// Parses `\r`, `\n` or `\r\n` as a single record terminator.
+    CRLF,
+    /// Parses the byte given as a record terminator.
+    Any(u8),
+    /// Hints that destructuring should not be exhaustive.
+    ///
+    /// This enum may grow additional variants, so this makes sure clients
+    /// don't count on exhaustive matching. (Otherwise, adding a new variant
+    /// could break existing code.)
+    #[doc(hidden)]
+    __Nonexhaustive,
+}
+
+impl Terminator {
+    /// Checks whether the terminator is set to CRLF.
+    fn is_crlf(&self) -> bool {
+        match *self {
+            Terminator::CRLF => true,
+            Terminator::Any(_) => false,
+            _ => unreachable!(),
+        }
+    }
+
+    fn equals(&self, other: u8) -> bool {
+        match *self {
+            Terminator::CRLF => other == b'\r' || other == b'\n',
+            Terminator::Any(b) => other == b,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl Default for Terminator {
+    fn default() -> Terminator {
+        Terminator::CRLF
+    }
+}
+
+/// The quoting style to use when writing CSV data.
+#[derive(Clone, Copy, Debug)]
+pub enum QuoteStyle {
+    /// This puts quotes around every field. Always.
+    Always,
+    /// This puts quotes around fields only when necessary.
+    ///
+    /// They are necessary when fields contain a quote, delimiter or record
+    /// terminator. Quotes are also necessary when writing an empty record
+    /// (which is indistinguishable from a record with one empty field).
+    ///
+    /// This is the default.
+    Necessary,
+    /// This puts quotes around all fields that are non-numeric. Namely, when
+    /// writing a field that does not parse as a valid float or integer, then
+    /// quotes will be used even if they aren't strictly necessary.
+    NonNumeric,
+    /// This *never* writes quotes, even if it would produce invalid CSV data.
+    Never,
+    /// Hints that destructuring should not be exhaustive.
+    ///
+    /// This enum may grow additional variants, so this makes sure clients
+    /// don't count on exhaustive matching. (Otherwise, adding a new variant
+    /// could break existing code.)
+    #[doc(hidden)]
+    __Nonexhaustive,
+}
+
+impl Default for QuoteStyle {
+    fn default() -> QuoteStyle {
+        QuoteStyle::Necessary
+    }
+}

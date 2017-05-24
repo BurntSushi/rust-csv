@@ -1,5 +1,7 @@
 use core::fmt;
 
+use Terminator;
+
 // BE ADVISED
 //
 // This may just be one of the more complicated CSV parsers you'll come across.
@@ -47,44 +49,6 @@ use core::fmt;
 //   from the caller has been exhausted. We must be careful to guard this
 //   case analysis on whether the input is actually exhausted, since the start
 //   state is an otherwise valid state.
-
-/// A record terminator.
-///
-/// Use this to specify the record terminator while parsing CSV. The default is
-/// CRLF, which treats `\r`, `\n` or `\r\n` as a single record terminator.
-#[derive(Clone, Copy, Debug)]
-pub enum Terminator {
-    /// Parses `\r`, `\n` or `\r\n` as a single record terminator.
-    CRLF,
-    /// Parses the byte given as a record terminator.
-    Any(u8),
-}
-
-impl Terminator {
-    /// Checks whether the terminator is set to CRLF.
-    fn is_crlf(&self) -> bool {
-        match *self {
-            Terminator::CRLF => true,
-            Terminator::Any(_) => false,
-        }
-    }
-}
-
-impl Default for Terminator {
-    fn default() -> Terminator {
-        Terminator::CRLF
-    }
-}
-
-impl PartialEq<u8> for Terminator {
-    #[inline]
-    fn eq(&self, &other: &u8) -> bool {
-        match *self {
-            Terminator::CRLF => other == b'\r' || other == b'\n',
-            Terminator::Any(b) => other == b,
-        }
-    }
-}
 
 /// A pull based CSV reader.
 ///
@@ -794,6 +758,7 @@ impl Reader {
                 self.dfa.classes.add(b'\r');
                 self.dfa.classes.add(b'\n');
             }
+            _ => unreachable!(),
         }
         // Build the DFA transition table by computing the DFA state for all
         // possible combinations of state and input byte.
@@ -969,7 +934,7 @@ impl Reader {
         match state {
             End => (End, false, false),
             StartRecord => {
-                if self.term == c {
+                if self.term.equals(c) {
                     (StartRecord, true, false)
                 } else {
                     (StartField, false, false)
@@ -983,7 +948,7 @@ impl Reader {
                     (InQuotedField, true, false)
                 } else if self.delimiter == c {
                     (EndFieldDelim, true, false)
-                } else if self.term == c {
+                } else if self.term.equals(c) {
                     (EndFieldTerm, false, false)
                 } else if self.comment == Some(c) {
                     (InComment, true, false)
@@ -1000,7 +965,7 @@ impl Reader {
             InField => {
                 if self.delimiter == c {
                     (EndFieldDelim, true, false)
-                } else if self.term == c {
+                } else if self.term.equals(c) {
                     (EndFieldTerm, false, false)
                 } else {
                     (InField, true, true)
@@ -1023,7 +988,7 @@ impl Reader {
                     (InQuotedField, true, true)
                 } else if self.delimiter == c {
                     (EndFieldDelim, true, false)
-                } else if self.term == c {
+                } else if self.term.equals(c) {
                     (EndFieldTerm, false, false)
                 } else {
                     (InField, true, true)

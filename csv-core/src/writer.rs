@@ -2,41 +2,7 @@ use core::str;
 
 use memchr::memchr;
 
-use Terminator;
-
-/// The quoting style to use when writing CSV data.
-#[derive(Clone, Copy, Debug)]
-pub enum QuoteStyle {
-    /// This puts quotes around every field. Always.
-    Always,
-    /// This puts quotes around fields only when necessary.
-    ///
-    /// They are necessary when fields contain a quote, delimiter or record
-    /// terminator. Quotes are also necessary when writing an empty record
-    /// (which is indistinguishable from a record with one empty field).
-    ///
-    /// This is the default.
-    Necessary,
-    /// This puts quotes around all fields that are non-numeric. Namely, when
-    /// writing a field that does not parse as a valid float or integer, then
-    /// quotes will be used even if they aren't strictly necessary.
-    NonNumeric,
-    /// This *never* writes quotes, even if it would produce invalid CSV data.
-    Never,
-    /// Hints that destructuring should not be exhaustive.
-    ///
-    /// This enum may grow additional variants, so this makes sure clients
-    /// don't count on exhaustive matching. (Otherwise, adding a new variant
-    /// could break existing code.)
-    #[doc(hidden)]
-    __Nonexhaustive,
-}
-
-impl Default for QuoteStyle {
-    fn default() -> QuoteStyle {
-        QuoteStyle::Necessary
-    }
-}
+use {QuoteStyle, Terminator};
 
 /// A builder for configuring a CSV writer.
 ///
@@ -337,6 +303,7 @@ impl Writer {
         let (res, o) = match self.term {
             Terminator::CRLF => write_pessimistic(&[b'\r', b'\n'], output),
             Terminator::Any(b) => write_pessimistic(&[b], output),
+            _ => unreachable!(),
         };
         if o == 0 {
             return (res, nout);
@@ -356,7 +323,7 @@ impl Writer {
 
     fn byte_needs_quotes(&self, b: u8) -> bool {
         self.delimiter == b
-        || self.term == b
+        || self.term.equals(b)
         || self.quote == b
         // This is a bit hokey. By default, the record terminator is
         // '\n', but we still need to quote '\r' because the reader
