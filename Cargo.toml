@@ -1,6 +1,6 @@
 [package]
 name = "csv"
-version = "1.0.0-beta.2"  #:version
+version = "1.0.0-beta.3"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 description = "Fast CSV parsing with support for serde."
 documentation = "http://burntsushi.net/rustdoc/csv/"
@@ -19,7 +19,7 @@ appveyor = { repository = "BurntSushi/rust-csv" }
 bench = false
 
 [dependencies]
-csv-core = { path = "csv-core", version = "0.1.0" }
+csv-core = { path = "csv-core", version = "0.1.2" }
 serde = "1.0.7"
 
 [dev-dependencies]

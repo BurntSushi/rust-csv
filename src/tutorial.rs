@@ -53,7 +53,7 @@ $ cd csvtutor
 ```
 
 Once inside `csvtutor`, open `Cargo.toml` in your favorite text editor and add
-`csv = "1.0.0-beta.2"` to your `[dependencies]` section. At this point, your
+`csv = "1.0.0-beta.3"` to your `[dependencies]` section. At this point, your
 `Cargo.toml` should look something like this:
 
 ```text
@@ -63,7 +63,7 @@ version = "0.1.0"
 authors = ["Your Name"]
 
 [dependencies]
-csv = "1.0.0-beta.2"
+csv = "1.0.0-beta.3"
 ```
 
 Next, let's build your project. Since you added the `csv` crate as a
@@ -478,7 +478,7 @@ StringRecord(["Oakman", "AL", "", "33.7133333", "-87.3886111"])
 This example contains two new pieces of code:
 
 1. Code for querying the positional arguments of your program. We put this code
-   into its own funcation called `get_first_arg`. Our program expects a file
+   into its own function called `get_first_arg`. Our program expects a file
    path in the first position (which is indexed at `1`; the argument at index
    `0` is the executable name), so if one doesn't exist, then `get_first_arg`
    returns an error.
