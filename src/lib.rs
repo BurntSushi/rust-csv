@@ -182,7 +182,9 @@ use serde::{Deserialize, Deserializer};
 
 pub use byte_record::{ByteRecord, ByteRecordIter, Position};
 pub use deserializer::{DeserializeError, DeserializeErrorKind};
-pub use error::{Error, FromUtf8Error, IntoInnerError, Result, Utf8Error};
+pub use error::{
+    Error, ErrorKind, FromUtf8Error, IntoInnerError, Result, Utf8Error,
+};
 pub use reader::{
     Reader, ReaderBuilder,
     DeserializeRecordsIntoIter, DeserializeRecordsIter,

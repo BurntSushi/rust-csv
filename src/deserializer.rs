@@ -12,7 +12,7 @@ use serde::de::{
 use serde::de::value::BorrowedBytesDeserializer;
 
 use byte_record::{ByteRecord, ByteRecordIter};
-use error::Error;
+use error::{Error, ErrorKind, new_error};
 use string_record::{StringRecord, StringRecordIter};
 
 use self::DeserializeErrorKind as DEK;
@@ -27,10 +27,10 @@ pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
         field: 0,
     });
     D::deserialize(&mut deser).map_err(|err| {
-        Error::Deserialize {
+        new_error(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
             err: err,
-        }
+        })
     })
 }
 
@@ -44,10 +44,10 @@ pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
         field: 0,
     });
     D::deserialize(&mut deser).map_err(|err| {
-        Error::Deserialize {
+        new_error(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
             err: err,
-        }
+        })
     })
 }
 

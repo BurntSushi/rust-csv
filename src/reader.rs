@@ -10,7 +10,7 @@ use csv_core::{
 use serde::de::DeserializeOwned;
 
 use byte_record::{self, ByteRecord, Position};
-use error::{Error, Result, Utf8Error};
+use error::{ErrorKind, Result, Utf8Error, new_error};
 use string_record::{self, StringRecord};
 use Terminator;
 
@@ -280,7 +280,7 @@ impl ReaderBuilder {
     /// extern crate csv;
     ///
     /// use std::error::Error;
-    /// use csv::ReaderBuilder;
+    /// use csv::{ErrorKind, ReaderBuilder};
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
@@ -294,15 +294,15 @@ impl ReaderBuilder {
     ///         .from_reader(data.as_bytes());
     ///
     ///     if let Some(Err(err)) = rdr.records().next() {
-    ///         match err {
-    ///             csv::Error::UnequalLengths { expected_len, len, .. } => {
+    ///         match *err.kind() {
+    ///             ErrorKind::UnequalLengths { expected_len, len, .. } => {
     ///                 // The header row has 3 fields...
     ///                 assert_eq!(expected_len, 3);
     ///                 // ... but the first row has only 2 fields.
     ///                 assert_eq!(len, 2);
     ///                 Ok(())
     ///             }
-    ///             wrong => {
+    ///             ref wrong => {
     ///                 Err(From::from(format!(
     ///                     "expected UnequalLengths error but got {:?}",
     ///                     wrong)))
@@ -1265,10 +1265,10 @@ impl<R: io::Read> Reader<R> {
         let headers = self.state.headers.as_ref().unwrap();
         match headers.string_record {
             Ok(ref record) => Ok(record),
-            Err(ref err) => Err(Error::Utf8 {
+            Err(ref err) => Err(new_error(ErrorKind::Utf8 {
                 pos: headers.byte_record.position().map(Clone::clone),
                 err: err.clone(),
-            }),
+            })),
         }
     }
 
@@ -1811,11 +1811,11 @@ impl ReaderState {
                 None => self.first_field_count = Some(record.len() as u64),
                 Some(expected) => {
                     if record.len() as u64 != expected {
-                        return Err(Error::UnequalLengths {
+                        return Err(new_error(ErrorKind::UnequalLengths {
                             pos: record.position().map(Clone::clone),
                             expected_len: expected,
                             len: record.len() as u64,
-                        });
+                        }));
                     }
                 }
             }
@@ -2092,7 +2092,7 @@ mod tests {
     use std::io;
 
     use byte_record::ByteRecord;
-    use error::Error;
+    use error::ErrorKind;
     use string_record::StringRecord;
 
     use super::{ReaderBuilder, Position};
@@ -2151,12 +2151,17 @@ mod tests {
         assert_eq!("foo", s(&rec[0]));
 
         match rdr.read_byte_record(&mut rec) {
-            Err(Error::UnequalLengths {
-                expected_len: 1,
-                pos,
-                len: 2,
-            }) => {
-                assert_eq!(pos, Some(newpos(4, 2, 1)));
+            Err(err) => {
+                match *err.kind() {
+                    ErrorKind::UnequalLengths {
+                        expected_len: 1,
+                        ref pos,
+                        len: 2,
+                    } => {
+                        assert_eq!(pos, &Some(newpos(4, 2, 1)));
+                    }
+                    ref wrong => panic!("match failed, got {:?}", wrong),
+                }
             }
             wrong => panic!("match failed, got {:?}", wrong),
         }
@@ -2198,12 +2203,17 @@ mod tests {
         assert_eq!("foo", s(&rec[0]));
 
         match rdr.read_byte_record(&mut rec) {
-            Err(Error::UnequalLengths {
-                expected_len: 1,
-                pos,
-                len: 2,
-            }) => {
-                assert_eq!(pos, Some(newpos(4, 2, 1)));
+            Err(err) => {
+                match err.kind() {
+                    &ErrorKind::UnequalLengths {
+                        expected_len: 1,
+                        ref pos,
+                        len: 2,
+                    } => {
+                        assert_eq!(pos, &Some(newpos(4, 2, 1)));
+                    }
+                    wrong => panic!("match failed, got {:?}", wrong),
+                }
             }
             wrong => panic!("match failed, got {:?}", wrong),
         }
@@ -2272,13 +2282,13 @@ mod tests {
             assert_eq!(b"b\xFFar", &headers[1]);
             assert_eq!(b"baz", &headers[2]);
         }
-        match rdr.headers().unwrap_err() {
-            Error::Utf8 { pos: Some(pos), err } => {
-                assert_eq!(pos, newpos(0, 1, 0));
+        match *rdr.headers().unwrap_err().kind() {
+            ErrorKind::Utf8 { pos: Some(ref pos), ref err } => {
+                assert_eq!(pos, &newpos(0, 1, 0));
                 assert_eq!(err.field(), 1);
                 assert_eq!(err.valid_up_to(), 1);
             }
-            err => panic!("match failed, got {:?}", err),
+            ref err => panic!("match failed, got {:?}", err),
         }
     }
 

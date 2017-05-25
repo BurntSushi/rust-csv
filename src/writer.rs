@@ -11,7 +11,11 @@ use csv_core::{
 };
 use serde::Serialize;
 
-use error::{Error, Result, IntoInnerError, new_into_inner_error};
+use byte_record::ByteRecord;
+use error::{
+    ErrorKind, Result, IntoInnerError,
+    new_error, new_into_inner_error,
+};
 use serializer::serialize;
 use {QuoteStyle, Terminator};
 
@@ -290,12 +294,14 @@ impl WriterBuilder {
     ///         .from_writer(vec![]);
     ///     wtr.write_record(&["a", "b"])?;
     ///     let err = wtr.write_record(&["x", "y", "z"]).unwrap_err();
-    ///     match err {
-    ///         csv::Error::UnequalLengths { expected_len, len, .. } => {
+    ///     match *err.kind() {
+    ///         csv::ErrorKind::UnequalLengths { expected_len, len, .. } => {
     ///             assert_eq!(expected_len, 2);
     ///             assert_eq!(len, 3);
     ///         }
-    ///         wrong => panic!("expected UnequalLengths but got {:?}", wrong),
+    ///         ref wrong => {
+    ///             panic!("expected UnequalLengths but got {:?}", wrong);
+    ///         }
     ///     }
     ///     Ok(())
     /// }
@@ -1130,11 +1136,11 @@ impl<W: io::Write> Writer<W> {
                         Some(self.state.fields_written);
                 }
                 Some(expected) if expected != self.state.fields_written => {
-                    return Err(Error::UnequalLengths {
+                    return Err(new_error(ErrorKind::UnequalLengths {
                         pos: None,
                         expected_len: expected,
                         len: self.state.fields_written,
-                    })
+                    }))
                 }
                 Some(_) => {}
             }
@@ -1176,7 +1182,7 @@ impl Buffer {
 #[cfg(test)]
 mod tests {
     use byte_record::ByteRecord;
-    use error::Error;
+    use error::ErrorKind;
     use string_record::StringRecord;
 
     use super::{Writer, WriterBuilder};
@@ -1256,13 +1262,33 @@ mod tests {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.write_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();
         let err = wtr.write_record(&ByteRecord::from(vec!["a"])).unwrap_err();
-        match err {
-            Error::UnequalLengths { pos, expected_len, len } => {
+        match *err.kind() {
+            ErrorKind::UnequalLengths { ref pos, expected_len, len } => {
                 assert!(pos.is_none());
                 assert_eq!(expected_len, 3);
                 assert_eq!(len, 1);
             }
-            x => panic!("expected UnequalLengths error, but got '{:?}'", x),
+            ref x => {
+                panic!("expected UnequalLengths error, but got '{:?}'", x);
+            }
+        }
+    }
+
+    #[test]
+    fn raw_unequal_records_bad() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.write_byte_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();
+        let err = wtr.write_byte_record(
+            &ByteRecord::from(vec!["a"])).unwrap_err();
+        match *err.kind() {
+            ErrorKind::UnequalLengths { ref pos, expected_len, len } => {
+                assert!(pos.is_none());
+                assert_eq!(expected_len, 3);
+                assert_eq!(len, 1);
+            }
+            ref x => {
+                panic!("expected UnequalLengths error, but got '{:?}'", x);
+            }
         }
     }
 
@@ -1271,6 +1297,14 @@ mod tests {
         let mut wtr = WriterBuilder::new().flexible(true).from_writer(vec![]);
         wtr.write_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();
         wtr.write_record(&ByteRecord::from(vec!["a"])).unwrap();
+        assert_eq!(wtr_as_string(wtr), "a,b,c\na\n");
+    }
+
+    #[test]
+    fn raw_unequal_records_ok() {
+        let mut wtr = WriterBuilder::new().flexible(true).from_writer(vec![]);
+        wtr.write_byte_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();
+        wtr.write_byte_record(&ByteRecord::from(vec!["a"])).unwrap();
         assert_eq!(wtr_as_string(wtr), "a,b,c\na\n");
     }
 

@@ -8,7 +8,7 @@ use std::str;
 use serde::de::Deserialize;
 
 use deserializer::deserialize_string_record;
-use error::{Error, FromUtf8Error, Result, new_from_utf8_error};
+use error::{ErrorKind, FromUtf8Error, Result, new_error, new_from_utf8_error};
 use reader::Reader;
 use byte_record::{self, ByteRecord, ByteRecordIter, Position};
 
@@ -42,7 +42,9 @@ pub fn read<R: io::Read>(
     };
     match (read_res, utf8_res) {
         (Err(err), _) => Err(err),
-        (Ok(_), Err(err)) => Err(Error::Utf8 { pos: Some(pos), err: err }),
+        (Ok(_), Err(err)) => {
+            Err(new_error(ErrorKind::Utf8 { pos: Some(pos), err: err }))
+        }
         (Ok(eof), Ok(())) => Ok(eof),
     }
 }
