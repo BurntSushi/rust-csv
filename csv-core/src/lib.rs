@@ -108,7 +108,7 @@ pub use reader::{
     ReadFieldResult, ReadFieldNoCopyResult,
     ReadRecordResult, ReadRecordNoCopyResult,
 };
-pub use writer::{Writer, WriterBuilder, WriteResult};
+pub use writer::{Writer, WriterBuilder, WriteResult, is_non_numeric, quote};
 
 mod reader;
 mod writer;
