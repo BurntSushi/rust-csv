@@ -20,7 +20,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-csv = "1.0.0-beta.1"
+csv = "1.0.0-beta.2"
 ```
 
 and this to your crate root:
@@ -35,7 +35,7 @@ This example shows how to read CSV data from stdin and print each record to
 stdout.
 
 There are more examples in the
-[cookbook](https://docs.rs/csv/1.0.0-beta.1/csv/examples/index.html).
+[cookbook](https://docs.rs/csv/1.0.0-beta.2/csv/examples/index.html).
 
 ```rust
 extern crate csv;

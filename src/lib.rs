@@ -46,7 +46,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-csv = "1.0.0-beta.1"
+csv = "1.0.0-beta.2"
 ```
 
 and this to your crate root:
@@ -178,13 +178,12 @@ extern crate serde_derive;
 
 use std::result;
 
+pub use csv_core::{QuoteStyle, Terminator};
 use serde::{Deserialize, Deserializer};
 
 pub use byte_record::{ByteRecord, ByteRecordIter, Position};
 pub use deserializer::{DeserializeError, DeserializeErrorKind};
-pub use error::{
-    Error, ErrorKind, FromUtf8Error, IntoInnerError, Result, Utf8Error,
-};
+pub use error::{Error, FromUtf8Error, IntoInnerError, Result, Utf8Error};
 pub use reader::{
     Reader, ReaderBuilder,
     DeserializeRecordsIntoIter, DeserializeRecordsIter,
@@ -203,88 +202,6 @@ mod serializer;
 mod string_record;
 pub mod tutorial;
 mod writer;
-
-/// The quoting style to use when writing CSV data.
-#[derive(Clone, Copy, Debug)]
-pub enum QuoteStyle {
-    /// This puts quotes around every field. Always.
-    Always,
-    /// This puts quotes around fields only when necessary.
-    ///
-    /// They are necessary when fields contain a quote, delimiter or record
-    /// terminator. Quotes are also necessary when writing an empty record
-    /// (which is indistinguishable from a record with one empty field).
-    ///
-    /// This is the default.
-    Necessary,
-    /// This puts quotes around all fields that are non-numeric. Namely, when
-    /// writing a field that does not parse as a valid float or integer, then
-    /// quotes will be used even if they aren't strictly necessary.
-    NonNumeric,
-    /// This *never* writes quotes, even if it would produce invalid CSV data.
-    Never,
-    /// Hints that destructuring should not be exhaustive.
-    ///
-    /// This enum may grow additional variants, so this makes sure clients
-    /// don't count on exhaustive matching. (Otherwise, adding a new variant
-    /// could break existing code.)
-    #[doc(hidden)]
-    __Nonexhaustive,
-}
-
-impl QuoteStyle {
-    fn to_core(self) -> csv_core::QuoteStyle {
-        match self {
-            QuoteStyle::Always => csv_core::QuoteStyle::Always,
-            QuoteStyle::Necessary => csv_core::QuoteStyle::Necessary,
-            QuoteStyle::NonNumeric => csv_core::QuoteStyle::NonNumeric,
-            QuoteStyle::Never => csv_core::QuoteStyle::Never,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl Default for QuoteStyle {
-    fn default() -> QuoteStyle {
-        QuoteStyle::Necessary
-    }
-}
-
-/// A record terminator.
-///
-/// Use this to specify the record terminator while parsing CSV. The default is
-/// CRLF, which treats `\r`, `\n` or `\r\n` as a single record terminator.
-#[derive(Clone, Copy, Debug)]
-pub enum Terminator {
-    /// Parses `\r`, `\n` or `\r\n` as a single record terminator.
-    CRLF,
-    /// Parses the byte given as a record terminator.
-    Any(u8),
-    /// Hints that destructuring should not be exhaustive.
-    ///
-    /// This enum may grow additional variants, so this makes sure clients
-    /// don't count on exhaustive matching. (Otherwise, adding a new variant
-    /// could break existing code.)
-    #[doc(hidden)]
-    __Nonexhaustive,
-}
-
-impl Terminator {
-    /// Convert this to the csv_core type of the same name.
-    fn to_core(self) -> csv_core::Terminator {
-        match self {
-            Terminator::CRLF => csv_core::Terminator::CRLF,
-            Terminator::Any(b) => csv_core::Terminator::Any(b),
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl Default for Terminator {
-    fn default() -> Terminator {
-        Terminator::CRLF
-    }
-}
 
 /// A custom Serde deserializer for possibly invalid `Option<T>` fields.
 ///
