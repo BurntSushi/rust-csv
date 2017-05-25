@@ -432,6 +432,43 @@ impl Writer {
         }
     }
 
+    /// Return the delimiter used for this writer.
+    #[inline]
+    pub fn get_delimiter(&self) -> u8 {
+        self.delimiter
+    }
+
+    /// Return the terminator used for this writer.
+    #[inline]
+    pub fn get_terminator(&self) -> Terminator {
+        self.term
+    }
+
+    /// Return the quoting style used for this writer.
+    #[inline]
+    pub fn get_quote_style(&self) -> QuoteStyle {
+        self.style
+    }
+
+    /// Return the quote character used for this writer.
+    #[inline]
+    pub fn get_quote(&self) -> u8 {
+        self.quote
+    }
+
+    /// Return the escape character used for this writer.
+    #[inline]
+    pub fn get_escape(&self) -> u8 {
+        self.escape
+    }
+
+    /// Return whether this writer doubles quotes or not. When the writer
+    /// does not double quotes, it will escape them using the escape character.
+    #[inline]
+    pub fn get_double_quote(&self) -> bool {
+        self.double_quote
+    }
+
     fn write(&self, data: &[u8], output: &mut [u8]) -> (WriteResult, usize) {
         if data.len() > output.len() {
             (WriteResult::OutputFull, 0)
