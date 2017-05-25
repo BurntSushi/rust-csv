@@ -1,3 +1,4 @@
+use core::fmt;
 use core::str;
 
 use memchr::memchr;
@@ -8,7 +9,7 @@ use {QuoteStyle, Terminator};
 ///
 /// This builder permits specifying the CSV delimiter, terminator, quoting
 /// style and more.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct WriterBuilder {
     wtr: Writer,
 }
@@ -16,12 +17,46 @@ pub struct WriterBuilder {
 impl WriterBuilder {
     /// Create a new builder for configuring a CSV writer.
     pub fn new() -> WriterBuilder {
-        WriterBuilder { wtr: Writer::default() }
+        let wtr = Writer {
+            state: WriterState::default(),
+            requires_quotes: [false; 256],
+            delimiter: b',',
+            term: Terminator::Any(b'\n'),
+            style: QuoteStyle::default(),
+            quote: b'"',
+            escape: b'\\',
+            double_quote: true,
+        };
+        WriterBuilder { wtr: wtr }
     }
 
     /// Builder a CSV writer from this configuration.
     pub fn build(&self) -> Writer {
-        self.wtr.clone()
+        use Terminator::*;
+
+        let mut wtr = self.wtr.clone();
+        wtr.requires_quotes[self.wtr.delimiter as usize] = true;
+        wtr.requires_quotes[self.wtr.quote as usize] = true;
+        if !self.wtr.double_quote {
+            // We only need to quote the escape character if the escape
+            // character is used for escaping quotes.
+            wtr.requires_quotes[self.wtr.escape as usize] = true;
+        }
+        match self.wtr.term {
+            CRLF | Any(b'\n') | Any(b'\r') => {
+                // This is a bit hokey. By default, the record terminator
+                // is '\n', but we still need to quote '\r' (even if our
+                // terminator is only `\n`) because the reader interprets '\r'
+                // as a record terminator by default.
+                wtr.requires_quotes[b'\r' as usize] = true;
+                wtr.requires_quotes[b'\n' as usize] = true;
+            }
+            Any(b) => {
+                wtr.requires_quotes[b as usize] = true;
+            }
+            _ => unreachable!(),
+        }
+        wtr
     }
 
     /// The field delimiter to use when writing CSV.
@@ -86,6 +121,12 @@ impl WriterBuilder {
     }
 }
 
+impl Default for WriterBuilder {
+    fn default() -> WriterBuilder {
+        WriterBuilder::new()
+    }
+}
+
 /// The result of writing CSV data.
 ///
 /// A value of this type is returned from every interaction with `Writer`. It
@@ -116,15 +157,48 @@ pub enum WriteResult {
 /// terminators instead of `\r\n` as specified by RFC 4180. Use the
 /// `terminator` method on `WriterBuilder` to set the terminator to `\r\n` if
 /// it's desired.
-#[derive(Clone, Debug)]
 pub struct Writer {
     state: WriterState,
+    requires_quotes: [bool; 256],
     delimiter: u8,
     term: Terminator,
     style: QuoteStyle,
     quote: u8,
     escape: u8,
     double_quote: bool,
+}
+
+impl Clone for Writer {
+    fn clone(&self) -> Writer {
+        let mut requires_quotes = [false; 256];
+        for i in 0..256 {
+            requires_quotes[i] = self.requires_quotes[i];
+        }
+        Writer {
+            state: self.state.clone(),
+            requires_quotes: requires_quotes,
+            delimiter: self.delimiter,
+            term: self.term,
+            style: self.style,
+            quote: self.quote,
+            escape: self.escape,
+            double_quote: self.double_quote,
+        }
+    }
+}
+
+impl fmt::Debug for Writer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Writer")
+            .field("state", &self.state)
+            .field("delimiter", &self.delimiter)
+            .field("term", &self.term)
+            .field("style", &self.style)
+            .field("quote", &self.quote)
+            .field("escape", &self.escape)
+            .field("double_quote", &self.double_quote)
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -317,23 +391,38 @@ impl Writer {
     /// Returns true if and only if the given input field *requires* quotes to
     /// preserve the integrity of `input` while taking into account the current
     /// configuration of this writer (except for the configured quoting style).
-    fn needs_quotes(&self, input: &[u8]) -> bool {
-        input.iter().any(|&b| self.byte_needs_quotes(b))
+    #[inline]
+    fn needs_quotes(&self, mut input: &[u8]) -> bool {
+        let mut needs = false;
+        while !needs && input.len() >= 8 {
+            needs =
+                self.requires_quotes[input[0] as usize]
+                || self.requires_quotes[input[1] as usize]
+                || self.requires_quotes[input[2] as usize]
+                || self.requires_quotes[input[3] as usize]
+                || self.requires_quotes[input[4] as usize]
+                || self.requires_quotes[input[5] as usize]
+                || self.requires_quotes[input[6] as usize]
+                || self.requires_quotes[input[7] as usize];
+            input = &input[8..];
+        }
+        needs || input.iter().any(|&b| self.is_special_byte(b))
     }
 
-    fn byte_needs_quotes(&self, b: u8) -> bool {
-        self.delimiter == b
-        || self.term.equals(b)
-        || self.quote == b
-        // This is a bit hokey. By default, the record terminator is
-        // '\n', but we still need to quote '\r' because the reader
-        // interprets '\r' as a record terminator by default.
-        || b == b'\r' || b == b'\n'
+    /// Returns true if and only if the given byte corresponds to a special
+    /// byte in this CSV writer's configuration.
+    ///
+    /// Note that this does **not** take into account this writer's quoting
+    /// style.
+    #[inline]
+    pub fn is_special_byte(&self, b: u8) -> bool {
+        self.requires_quotes[b as usize]
     }
 
     /// Returns true if and only if we should put the given field data
     /// in quotes. This takes the quoting style into account.
-    fn should_quote(&self, input: &[u8]) -> bool {
+    #[inline]
+    pub fn should_quote(&self, input: &[u8]) -> bool {
         match self.style {
             QuoteStyle::Always => true,
             QuoteStyle::Never => false,
@@ -355,15 +444,7 @@ impl Writer {
 
 impl Default for Writer {
     fn default() -> Writer {
-        Writer {
-            state: WriterState::default(),
-            delimiter: b',',
-            term: Terminator::Any(b'\n'),
-            style: QuoteStyle::default(),
-            quote: b'"',
-            escape: b'\\',
-            double_quote: true,
-        }
+        WriterBuilder::new().build()
     }
 }
 
