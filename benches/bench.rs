@@ -11,7 +11,7 @@ use std::io;
 use serde::de::DeserializeOwned;
 use test::Bencher;
 
-use csv::{ByteRecord, Reader, ReaderBuilder, StringRecord};
+use csv::{ByteRecord, Reader, ReaderBuilder, StringRecord, Writer};
 
 static NFL: &'static str =
     include_str!("../examples/data/bench/nfl.csv");
@@ -267,6 +267,47 @@ bench!(count_mbta_iter_str, MBTA, count_iter_str, 90000);
 bench!(count_mbta_read_bytes, MBTA, count_read_bytes, 90000);
 bench!(count_mbta_read_str, MBTA, count_read_str, 90000);
 
+macro_rules! bench_write {
+    ($name:ident, $data:ident) => {
+        #[bench]
+        fn $name(b: &mut Bencher) {
+            let data = $data.as_bytes();
+            b.bytes = data.len() as u64;
+            let records = collect_records(data);
+
+            b.iter(|| {
+                let mut wtr = Writer::from_writer(vec![]);
+                for r in &records {
+                    wtr.write_record(r).unwrap();
+                }
+                assert!(wtr.flush().is_ok());
+            })
+        }
+    }
+}
+
+macro_rules! bench_write_bytes {
+    ($name:ident, $data:ident) => {
+        #[bench]
+        fn $name(b: &mut Bencher) {
+            let data = $data.as_bytes();
+            b.bytes = data.len() as u64;
+            let records = collect_records(data);
+
+            b.iter(|| {
+                let mut wtr = Writer::from_writer(vec![]);
+                for r in &records {
+                    wtr.write_byte_record(r).unwrap();
+                }
+                assert!(wtr.flush().is_ok());
+            })
+        }
+    }
+}
+
+bench_write!(write_nfl_record, NFL);
+bench_write_bytes!(write_nfl_bytes, NFL);
+
 fn count_deserialize_owned_bytes<R, D>(rdr: &mut Reader<R>) -> u64
     where R: io::Read, D: DeserializeOwned
 {
@@ -322,4 +363,13 @@ fn count_read_str<R: io::Read>(rdr: &mut Reader<R>) -> u64 {
         count += rec.len() as u64;
     }
     count
+}
+
+fn collect_records(data: &[u8]) -> Vec<ByteRecord> {
+    let mut rdr = ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(data);
+    rdr.byte_records()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
 }

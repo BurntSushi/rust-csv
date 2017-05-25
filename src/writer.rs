@@ -4,7 +4,10 @@ use std::path::Path;
 use std::result;
 
 use csv_core::{
-    Writer as CoreWriter, WriterBuilder as CoreWriterBuilder, WriteResult,
+    self,
+    Writer as CoreWriter,
+    WriterBuilder as CoreWriterBuilder,
+    WriteResult,
 };
 use serde::Serialize;
 
@@ -888,9 +891,97 @@ impl<W: io::Write> Writer<W> {
         where I: IntoIterator<Item=T>, T: AsRef<[u8]>
     {
         for field in record.into_iter() {
-            self.write_field(field)?;
+            self.write_field_impl(field)?;
         }
         self.write_terminator()
+    }
+
+    /// Write a single `ByteRecord`.
+    ///
+    /// This method accepts a borrowed `ByteRecord` and writes its contents
+    /// to the underlying writer.
+    ///
+    /// This is similar to `write_record` except that it specifically requires
+    /// a `ByteRecord`. This permits the writer to possibly write the record
+    /// more quickly than the more generic `write_record`.
+    ///
+    /// This may be called with an empty record, which will cause a record
+    /// terminator to be written. If no fields had been written, then a single
+    /// empty field is written before the terminator.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{ByteRecord, Writer};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = Writer::from_writer(vec![]);
+    ///     wtr.write_byte_record(&ByteRecord::from(&["a", "b", "c"][..]))?;
+    ///     wtr.write_byte_record(&ByteRecord::from(&["x", "y", "z"][..]))?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "a,b,c\nx,y,z\n");
+    ///     Ok(())
+    /// }
+    /// ```
+    #[inline(never)]
+    pub fn write_byte_record(&mut self, record: &ByteRecord) -> Result<()> {
+        if record.as_slice().is_empty() {
+            return self.write_record(record);
+        }
+        // The idea here is to find a fast path for shuffling our record into
+        // our buffer as quickly as possible. We do this because the underlying
+        // "core" CSV writer does a lot of book-keeping to maintain its state
+        // oriented API.
+        //
+        // The fast path occurs when we know our record will fit in whatever
+        // space we have left in our buffer. We can actually quickly compute
+        // the upper bound on the space required:
+        let upper_bound =
+            // The data itself plus the worst case: every byte is a quote.
+            (2 * record.as_slice().len())
+            // The number of field delimiters.
+            + (record.len().saturating_sub(1))
+            // The maximum number of quotes inserted around each field.
+            + (2 * record.len())
+            // The maximum number of bytes for the terminator.
+            + 2;
+        if self.buf.writable().len() < upper_bound {
+            return self.write_record(record);
+        }
+        let mut first = true;
+        for field in record.iter() {
+            if !first {
+                self.buf.writable()[0] = self.core.get_delimiter();
+                self.buf.written(1);
+            }
+            first = false;
+
+            if !self.core.should_quote(field) {
+                self.buf.writable()[..field.len()].copy_from_slice(field);
+                self.buf.written(field.len());
+            } else {
+                self.buf.writable()[0] = self.core.get_quote();
+                self.buf.written(1);
+                let (res, nin, nout) = csv_core::quote(
+                    field,
+                    self.buf.writable(),
+                    self.core.get_quote(),
+                    self.core.get_escape(),
+                    self.core.get_double_quote());
+                debug_assert!(res == WriteResult::InputEmpty);
+                debug_assert!(nin == field.len());
+                self.buf.written(nout);
+                self.buf.writable()[0] = self.core.get_quote();
+                self.buf.written(1);
+            }
+        }
+        self.state.fields_written = record.len() as u64;
+        self.write_terminator_into_buffer()
     }
 
     /// Write a single field.
@@ -928,6 +1019,15 @@ impl<W: io::Write> Writer<W> {
     /// }
     /// ```
     pub fn write_field<T: AsRef<[u8]>>(&mut self, field: T) -> Result<()> {
+        self.write_field_impl(field)
+    }
+
+    /// Implementation of write_field.
+    ///
+    /// This is a separate method so we can force the compiler to inline it
+    /// into write_record.
+    #[inline(always)]
+    fn write_field_impl<T: AsRef<[u8]>>(&mut self, field: T) -> Result<()> {
         if self.state.fields_written > 0 {
             self.write_delimiter()?;
         }
@@ -987,6 +1087,42 @@ impl<W: io::Write> Writer<W> {
 
     /// Write a CSV terminator.
     fn write_terminator(&mut self) -> Result<()> {
+        self.check_field_count()?;
+        loop {
+            let (res, nout) = self.core.terminator(self.buf.writable());
+            self.buf.written(nout);
+            match res {
+                WriteResult::InputEmpty => {
+                    self.state.fields_written = 0;
+                    return Ok(());
+                }
+                WriteResult::OutputFull => self.flush()?,
+            }
+        }
+    }
+
+    /// Write a CSV terminator that is guaranteed to fit into the current
+    /// buffer.
+    #[inline(never)]
+    fn write_terminator_into_buffer(&mut self) -> Result<()> {
+        self.check_field_count()?;
+        match self.core.get_terminator() {
+            csv_core::Terminator::CRLF => {
+                self.buf.writable()[0] = b'\r';
+                self.buf.writable()[1] = b'\n';
+                self.buf.written(2);
+            }
+            csv_core::Terminator::Any(b) => {
+                self.buf.writable()[0] = b;
+                self.buf.written(1);
+            }
+            _ => unreachable!(),
+        }
+        self.state.fields_written = 0;
+        Ok(())
+    }
+
+    fn check_field_count(&mut self) -> Result<()> {
         if !self.state.flexible {
             match self.state.first_field_count {
                 None => {
@@ -1003,17 +1139,7 @@ impl<W: io::Write> Writer<W> {
                 Some(_) => {}
             }
         }
-        loop {
-            let (res, nout) = self.core.terminator(self.buf.writable());
-            self.buf.written(nout);
-            match res {
-                WriteResult::InputEmpty => {
-                    self.state.fields_written = 0;
-                    return Ok(());
-                }
-                WriteResult::OutputFull => self.flush()?,
-            }
-        }
+        Ok(())
     }
 }
 
@@ -1021,6 +1147,7 @@ impl Buffer {
     /// Returns a slice of the buffer's current contents.
     ///
     /// The slice returned may be empty.
+    #[inline]
     fn readable(&self) -> &[u8] {
         &self.buf[..self.len]
     }
@@ -1028,16 +1155,19 @@ impl Buffer {
     /// Returns a mutable slice of the remaining space in this buffer.
     ///
     /// The slice returned may be empty.
+    #[inline]
     fn writable(&mut self) -> &mut [u8] {
         &mut self.buf[self.len..]
     }
 
     /// Indicates that `n` bytes have been written to this buffer.
+    #[inline]
     fn written(&mut self, n: usize) {
         self.len += n;
     }
 
     /// Clear the buffer.
+    #[inline]
     fn clear(&mut self) {
         self.len = 0;
     }
@@ -1080,9 +1210,25 @@ mod tests {
     }
 
     #[test]
+    fn raw_one_byte_record() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.write_byte_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();
+
+        assert_eq!(wtr_as_string(wtr), "a,b,c\n");
+    }
+
+    #[test]
     fn one_empty_record() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.write_record(&[""]).unwrap();
+
+        assert_eq!(wtr_as_string(wtr), "\"\"\n");
+    }
+
+    #[test]
+    fn raw_one_empty_record() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.write_byte_record(&ByteRecord::from(vec![""])).unwrap();
 
         assert_eq!(wtr_as_string(wtr), "\"\"\n");
     }
@@ -1092,6 +1238,15 @@ mod tests {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.write_record(&[""]).unwrap();
         wtr.write_record(&[""]).unwrap();
+
+        assert_eq!(wtr_as_string(wtr), "\"\"\n\"\"\n");
+    }
+
+    #[test]
+    fn raw_two_empty_records() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.write_byte_record(&ByteRecord::from(vec![""])).unwrap();
+        wtr.write_byte_record(&ByteRecord::from(vec![""])).unwrap();
 
         assert_eq!(wtr_as_string(wtr), "\"\"\n\"\"\n");
     }
