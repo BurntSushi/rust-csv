@@ -9,7 +9,7 @@ use serde::ser::{
     SerializeStructVariant,
 };
 
-use error::Error;
+use error::{Error, ErrorKind, new_error};
 use writer::Writer;
 
 /// Serialize the given value to the given writer, and return an error if
@@ -369,7 +369,7 @@ impl<'a, 'w, W: io::Write> SerializeStructVariant for &'a mut SeRecord<'w, W> {
 
 impl SerdeError for Error {
     fn custom<T: fmt::Display>(msg: T) -> Error {
-        Error::Serialize(msg.to_string())
+        new_error(ErrorKind::Serialize(msg.to_string()))
     }
 }
 
@@ -383,7 +383,7 @@ mod tests {
     use serde::Serialize;
     use serde_bytes::Bytes;
 
-    use error::Error;
+    use error::{Error, ErrorKind};
     use writer::Writer;
 
     use super::SeRecord;
@@ -567,9 +567,9 @@ mod tests {
 
         let err = serialize_err(
             false, false, Foo::X(false, 42, "hi".to_string()));
-        match err {
-            Error::Serialize(_) => {}
-            x => panic!("expected Error::Serialize but got '{:?}'", x),
+        match *err.kind() {
+            ErrorKind::Serialize(_) => {}
+            ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
         }
     }
 
@@ -582,9 +582,9 @@ mod tests {
 
         let err = serialize_err(
             false, false, Foo::X { a: false, b: 1, c: "hi".into() });
-        match err {
-            Error::Serialize(_) => {}
-            x => panic!("expected Error::Serialize but got '{:?}'", x),
+        match *err.kind() {
+            ErrorKind::Serialize(_) => {}
+            ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
         }
     }
 
@@ -641,9 +641,9 @@ mod tests {
         assert_eq!(got, "label,nest\n");
 
         let err = serialize_err(false, true, row.clone());
-        match err {
-            Error::Serialize(_) => {}
-            x => panic!("expected Error::Serialize but got '{:?}'", x),
+        match *err.kind() {
+            ErrorKind::Serialize(_) => {}
+            ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
         }
     }
 
@@ -660,9 +660,9 @@ mod tests {
         assert_eq!(got, "label,values\n");
 
         let err = serialize_err(false, true, row.clone());
-        match err {
-            Error::Serialize(_) => {}
-            x => panic!("expected Error::Serialize but got '{:?}'", x),
+        match *err.kind() {
+            ErrorKind::Serialize(_) => {}
+            ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
         }
     }
 }
