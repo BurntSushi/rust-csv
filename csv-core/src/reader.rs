@@ -933,9 +933,6 @@ impl Reader {
     /// This returns the next NFA state along with an NfaInputAction that
     /// indicates what should be done with the input byte (nothing for an epsilon
     /// transition, copied to a caller provided output buffer, or discarded).
-    ///
-    /// Note that this is more like a DFA than a true NFA; you cannot transition
-    /// to multiple states.
     #[inline(always)]
     fn transition_nfa(
         &self,
