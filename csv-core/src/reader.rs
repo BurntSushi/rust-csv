@@ -382,6 +382,19 @@ pub enum ReadRecordNoCopyResult {
     End,
 }
 
+/// What should be done with input bytes during an NFA transition
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum NfaInputAction {
+    // Do not consume an input byte
+    Epsilon,
+    // Copy input byte to a caller-provided output buffer
+    CopyToOutput,
+    // Consume but do not copy input byte (for example, seeing a field delimiter will consume an input
+    // byte but should not copy it to the output buffer.
+    Discard,
+}
+
+
 /// An NFA state is a state that can be visited in the NFA parser.
 ///
 /// Given the simplicity of the machine, a subset of NFA states double as DFA
@@ -764,20 +777,14 @@ impl Reader {
         // possible combinations of state and input byte.
         for &state in NFA_STATES {
             for c in (0..256).map(|c| c as u8) {
-                let (mut nextstate, mut inp, mut out) = (state, false, false);
+                let mut nfa_result = (state, NfaInputAction::Epsilon);
                 // Consume NFA states until we hit a non-epsilon transition.
-                while !inp && nextstate != NfaState::End {
-                    let (s, i, o) = self.transition_nfa(nextstate, c);
-                    assert!(i || !o);
-                    nextstate = s;
-                    inp = i;
-                    // If any state we visit emits an output byte, then mark
-                    // this state as emitting output.
-                    out = out || o;
+                while nfa_result.0 != NfaState::End && nfa_result.1 == NfaInputAction::Epsilon {
+                    nfa_result = self.transition_nfa(nfa_result.0, c);
                 }
                 let from = self.dfa.new_state(state);
-                let to = self.dfa.new_state(nextstate);
-                self.dfa.set(from, c, to, out);
+                let to = self.dfa.new_state(nfa_result.0);
+                self.dfa.set(from, c, to, nfa_result.1 == NfaInputAction::CopyToOutput);
             }
         }
         self.dfa_state = self.dfa.new_state(NfaState::StartRecord);
@@ -824,14 +831,17 @@ impl Reader {
         let (mut nin, mut nout, mut nend) = (0, self.output_pos, 0);
         let mut state = self.nfa_state;
         while nin < input.len() && nout < output.len() && nend < ends.len() {
-            let (s, i, o) = self.transition_nfa(state, input[nin]);
-            debug_assert!(i || !o);
-            if o {
-                output[nout] = input[nin];
-                nout += 1;
-            }
-            if i {
-                nin += 1;
+            let (s, io) = self.transition_nfa(state, input[nin]);
+            match io {
+                NfaInputAction::CopyToOutput => {
+                    output[nout] = input[nin];
+                    nout += 1;
+                    nin += 1;
+                },
+                NfaInputAction::Discard => {
+                    nin += 1;
+                },
+                NfaInputAction::Epsilon => {}
             }
             state = s;
             if state.is_field_final() {
@@ -871,14 +881,17 @@ impl Reader {
         let (mut nin, mut nout) = (0, 0);
         let mut state = self.nfa_state;
         while nin < input.len() && nout < output.len() {
-            let (s, i, o) = self.transition_nfa(state, input[nin]);
-            debug_assert!(i || !o);
-            if o {
-                output[nout] = input[nin];
-                nout += 1;
-            }
-            if i {
-                nin += 1;
+            let (s, io) = self.transition_nfa(state, input[nin]);
+            match io {
+                NfaInputAction::CopyToOutput => {
+                    output[nout] = input[nin];
+                    nout += 1;
+                    nin += 1;
+                },
+                NfaInputAction::Discard => {
+                    nin += 1;
+                },
+                NfaInputAction::Epsilon => ()
             }
             state = s;
             if state.is_field_final() {
@@ -913,106 +926,105 @@ impl Reader {
         }
     }
 
+
     /// Compute the next NFA state given the current NFA state and the current
     /// input byte.
     ///
-    /// This returns the next NFA state along with two booleans that indicate
-    /// whether an input byte was consumed (i.e., a non-epsilon transition)
-    /// and whether the input byte should be copied to a caller provided output
-    /// buffer. For example, seeing a field delimiter will consume an input
-    /// byte but should not copy it to the output buffer.
+    /// This returns the next NFA state along with an NfaInputAction that
+    /// indicates what should be done with the input byte (nothing for an epsilon
+    /// transition, copied to a caller provided output buffer, or discarded).
     ///
-    /// It is illegal for this to emit an output byte without consuming the
-    /// input byte.
+    /// Note that this is more like a DFA than a true NFA; you cannot transition
+    /// to multiple states.
     #[inline(always)]
     fn transition_nfa(
         &self,
         state: NfaState,
         c: u8,
-    ) -> (NfaState, bool, bool) {
+    ) -> (NfaState, NfaInputAction) {
         use self::NfaState::*;
         match state {
-            End => (End, false, false),
+            End => (End, NfaInputAction::Epsilon),
             StartRecord => {
                 if self.term.equals(c) {
-                    (StartRecord, true, false)
+                    (StartRecord, NfaInputAction::Discard)
                 } else {
-                    (StartField, false, false)
+                    (StartField, NfaInputAction::Epsilon)
                 }
             }
             EndRecord => {
-                (StartRecord, false, false)
+                (StartRecord, NfaInputAction::Epsilon)
             }
             StartField => {
                 if self.quote == c {
-                    (InQuotedField, true, false)
+                    (InQuotedField, NfaInputAction::Discard)
                 } else if self.delimiter == c {
-                    (EndFieldDelim, true, false)
+                    (EndFieldDelim, NfaInputAction::Discard)
                 } else if self.term.equals(c) {
-                    (EndFieldTerm, false, false)
+                    (EndFieldTerm, NfaInputAction::Epsilon)
                 } else if self.comment == Some(c) {
-                    (InComment, true, false)
+                    (InComment, NfaInputAction::Discard)
                 } else {
-                    (InField, true, true)
+                    (InField, NfaInputAction::CopyToOutput)
                 }
             }
             EndFieldDelim => {
-                (StartField, false, false)
+                (StartField, NfaInputAction::Epsilon)
             }
             EndFieldTerm => {
-                (InRecordTerm, false, false)
+                (InRecordTerm, NfaInputAction::Epsilon)
             }
             InField => {
                 if self.delimiter == c {
-                    (EndFieldDelim, true, false)
+                    (EndFieldDelim, NfaInputAction::Discard)
                 } else if self.term.equals(c) {
-                    (EndFieldTerm, false, false)
+                    (EndFieldTerm, NfaInputAction::Epsilon)
                 } else {
-                    (InField, true, true)
+                    (InField, NfaInputAction::CopyToOutput)
                 }
             }
             InQuotedField => {
                 if self.quote == c {
-                    (InDoubleEscapedQuote, true, false)
+                    (InDoubleEscapedQuote, NfaInputAction::Discard)
                 } else if self.escape == Some(c) {
-                    (InEscapedQuote, true, false)
+                    (InEscapedQuote, NfaInputAction::Discard)
                 } else {
-                    (InQuotedField, true, true)
+                    (InQuotedField, NfaInputAction::CopyToOutput)
                 }
             }
             InEscapedQuote => {
-                (InQuotedField, true, true)
+                (InQuotedField, NfaInputAction::CopyToOutput)
             }
             InDoubleEscapedQuote => {
                 if self.double_quote && self.quote == c {
-                    (InQuotedField, true, true)
+                    (InQuotedField, NfaInputAction::CopyToOutput)
                 } else if self.delimiter == c {
-                    (EndFieldDelim, true, false)
+                    (EndFieldDelim, NfaInputAction::Discard)
                 } else if self.term.equals(c) {
-                    (EndFieldTerm, false, false)
+                    (EndFieldTerm, NfaInputAction::Epsilon)
                 } else {
-                    (InField, true, true)
+                    (InField, NfaInputAction::CopyToOutput)
                 }
             }
             InComment => {
                 if b'\n' == c {
-                    (StartRecord, true, false)
+                    (StartRecord, NfaInputAction::Discard)
                 } else {
-                    (InComment, true, false)
+                    (InComment, NfaInputAction::Discard)
                 }
             }
             InRecordTerm => {
                 if self.term.is_crlf() && b'\r' == c {
-                    (CRLF, true, false)
+                    (CRLF, NfaInputAction::Discard)
                 } else {
-                    (EndRecord, true, false)
+                    (EndRecord, NfaInputAction::Discard)
                 }
             }
             CRLF => {
                 if b'\n' == c {
-                    (StartRecord, true, false)
+                    (StartRecord, NfaInputAction::Discard)
                 } else {
-                    (StartRecord, false, false)
+                    (StartRecord, NfaInputAction::Epsilon)
                 }
             }
         }
