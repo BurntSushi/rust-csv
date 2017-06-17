@@ -39,7 +39,7 @@ This example shows how to read CSV data from stdin and print each record to
 stdout.
 
 There are more examples in the
-[cookbook](https://docs.rs/csv/1.0.0-beta.3/csv/examples/index.html).
+[cookbook](https://docs.rs/csv/1.0.0-beta.3/csv/cookbook/index.html).
 
 ```rust
 extern crate csv;
