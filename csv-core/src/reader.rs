@@ -119,6 +119,8 @@ pub struct Reader {
     use_nfa: bool,
     /// The current line number.
     line: u64,
+    /// Whether this parser has ever read anything.
+    has_read: bool,
     /// The current position in the output buffer when reading a record.
     output_pos: usize,
 }
@@ -137,6 +139,7 @@ impl Default for Reader {
             comment: None,
             use_nfa: false,
             line: 1,
+            has_read: false,
             output_pos: 0,
         }
     }
@@ -475,6 +478,7 @@ impl Reader {
         self.dfa_state = self.dfa.new_state(NfaState::StartRecord);
         self.nfa_state = NfaState::StartRecord;
         self.line = 1;
+        self.has_read = false;
     }
 
     /// Return the current line number as measured by the number of occurrences
@@ -527,11 +531,14 @@ impl Reader {
         input: &[u8],
         output: &mut [u8],
     ) -> (ReadFieldResult, usize, usize) {
-        if self.use_nfa {
+        let (input, bom_nin) = self.strip_utf8_bom(input);
+        let (res, nin, nout) = if self.use_nfa {
             self.read_field_nfa(input, output)
         } else {
             self.read_field_dfa(input, output)
-        }
+        };
+        self.has_read = true;
+        (res, nin + bom_nin, nout)
     }
 
     /// Parse a single CSV record in `input` and copy each field contiguously
@@ -581,11 +588,30 @@ impl Reader {
         output: &mut [u8],
         ends: &mut [usize],
     ) -> (ReadRecordResult, usize, usize, usize) {
-        if self.use_nfa {
+        let (input, bom_nin) = self.strip_utf8_bom(input);
+        let (res, nin, nout, nend) = if self.use_nfa {
             self.read_record_nfa(input, output, ends)
         } else {
             self.read_record_dfa(input, output, ends)
-        }
+        };
+        self.has_read = true;
+        (res, nin + bom_nin, nout, nend)
+    }
+
+    /// Strip off a possible UTF-8 BOM at the start of a file. Quick note that
+    /// this method will fail to strip off the BOM if only part of the BOM is
+    /// buffered. Hopefully that won't happen very often.
+    fn strip_utf8_bom<'a>(&self, input: &'a [u8]) -> (&'a [u8], usize) {
+        let (input, nin) = if {
+            !self.has_read &&
+                input.len() >= 3 &&
+                &input[0..3] == b"\xef\xbb\xbf"
+        } {
+            (&input[3..], 3)
+        } else {
+            (input, 0)
+        };
+        (input, nin)
     }
 
     #[inline(always)]
@@ -1519,6 +1545,10 @@ mod tests {
         ascii_delimited, "a\x1fb\x1ec\x1fd",
         csv![["a", "b"], ["c", "d"]],
         |b: &mut ReaderBuilder| { b.ascii(); });
+
+    parses_to!(bom_at_start, "\u{feff}a", csv![["a"]]);
+    parses_to!(bom_in_field, "a\u{feff}", csv![["a\u{feff}"]]);
+    parses_to!(bom_at_field_start, "a,\u{feff}b", csv![["a","\u{feff}b"]]);
 
     parses_to!(quote_empty, "\"\"", csv![[""]]);
     parses_to!(quote_lf, "\"\"\n", csv![[""]]);
