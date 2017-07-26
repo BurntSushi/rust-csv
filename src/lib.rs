@@ -46,7 +46,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-csv = "1.0.0-beta.3"
+csv = "1.0.0-beta.4"
 ```
 
 and this to your crate root:

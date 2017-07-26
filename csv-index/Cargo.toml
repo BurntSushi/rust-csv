@@ -20,7 +20,7 @@ bench = false
 
 [dependencies]
 byteorder = "1"
-csv = { path = "..", version = "1.0.0-beta.3" }
+csv = { path = "..", version = "1.0.0-beta.4" }
 
 [profile.release]
 debug = true
