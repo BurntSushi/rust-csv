@@ -392,8 +392,9 @@ enum NfaInputAction {
     Epsilon,
     // Copy input byte to a caller-provided output buffer
     CopyToOutput,
-    // Consume but do not copy input byte (for example, seeing a field delimiter will consume an input
-    // byte but should not copy it to the output buffer.
+    // Consume but do not copy input byte (for example, seeing a field
+    // delimiter will consume an input byte but should not copy it to the
+    // output buffer.
     Discard,
 }
 
@@ -805,12 +806,16 @@ impl Reader {
             for c in (0..256).map(|c| c as u8) {
                 let mut nfa_result = (state, NfaInputAction::Epsilon);
                 // Consume NFA states until we hit a non-epsilon transition.
-                while nfa_result.0 != NfaState::End && nfa_result.1 == NfaInputAction::Epsilon {
+                while
+                    nfa_result.0 != NfaState::End
+                    && nfa_result.1 == NfaInputAction::Epsilon
+                {
                     nfa_result = self.transition_nfa(nfa_result.0, c);
                 }
                 let from = self.dfa.new_state(state);
                 let to = self.dfa.new_state(nfa_result.0);
-                self.dfa.set(from, c, to, nfa_result.1 == NfaInputAction::CopyToOutput);
+                self.dfa.set(
+                    from, c, to, nfa_result.1 == NfaInputAction::CopyToOutput);
             }
         }
         self.dfa_state = self.dfa.new_state(NfaState::StartRecord);
