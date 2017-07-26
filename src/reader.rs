@@ -473,6 +473,45 @@ impl ReaderBuilder {
         self
     }
 
+    /// Enable or disable quoting.
+    ///
+    /// This is enabled by default, but it may be disabled. When disabled,
+    /// quotes are not treated specially.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    ///city,country,pop
+    ///Boston,\"The United States,4628910
+    ///";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .quoting(false)
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec![
+    ///             "Boston", "\"The United States", "4628910",
+    ///         ]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn quoting(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.builder.quoting(yes);
+        self
+    }
+
     /// The comment character to use when parsing CSV.
     ///
     /// If the start of a record begins with the byte given here, then that
@@ -2104,15 +2143,6 @@ mod tests {
         let mut p = Position::new();
         p.set_byte(byte).set_line(line).set_record(record);
         p
-    }
-
-    macro_rules! assert_match {
-        ($e:expr, $p:pat) => {{
-            match $e {
-                $p => {}
-                e => panic!("match failed, got {:?}", e),
-            }
-        }}
     }
 
     #[test]
