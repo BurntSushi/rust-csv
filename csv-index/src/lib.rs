@@ -83,7 +83,6 @@ amenable to serializing to disk.)
 
 extern crate byteorder;
 extern crate csv;
-extern crate csv_core;
 
 pub use simple::RandomAccessSimple;
 
