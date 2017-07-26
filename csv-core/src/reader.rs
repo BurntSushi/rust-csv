@@ -112,6 +112,9 @@ pub struct Reader {
     double_quote: bool,
     /// If enabled, lines beginning with this byte are ignored.
     comment: Option<u8>,
+    /// If enabled (the default), then quotes are respected. When disabled,
+    /// quotes are not treated specially.
+    quoting: bool,
     /// Whether to use the NFA for parsing.
     ///
     /// Generally this is for debugging. There's otherwise no good reason
@@ -137,6 +140,7 @@ impl Default for Reader {
             escape: None,
             double_quote: true,
             comment: None,
+            quoting: true,
             use_nfa: false,
             line: 1,
             has_read: false,
@@ -214,6 +218,15 @@ impl ReaderBuilder {
     /// doubled quotes are not interpreted as escapes.
     pub fn double_quote(&mut self, yes: bool) -> &mut ReaderBuilder {
         self.rdr.double_quote = yes;
+        self
+    }
+
+    /// Enable or disable quoting.
+    ///
+    /// This is enabled by default, but it may be disabled. When disabled,
+    /// quotes are not treated specially.
+    pub fn quoting(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.rdr.quoting = yes;
         self
     }
 
@@ -397,7 +410,6 @@ enum NfaInputAction {
     // output buffer.
     Discard,
 }
-
 
 /// An NFA state is a state that can be visited in the NFA parser.
 ///
@@ -785,9 +797,11 @@ impl Reader {
         // the next transition, microbenchmarks say that it doesn't make much
         // of a difference. Perhaps because everything fits into the L1 cache.
         self.dfa.classes.add(self.delimiter);
-        self.dfa.classes.add(self.quote);
-        if let Some(escape) = self.escape {
-            self.dfa.classes.add(escape);
+        if self.quoting {
+            self.dfa.classes.add(self.quote);
+            if let Some(escape) = self.escape {
+                self.dfa.classes.add(escape);
+            }
         }
         if let Some(comment) = self.comment {
             self.dfa.classes.add(comment);
@@ -984,7 +998,7 @@ impl Reader {
                 (StartRecord, NfaInputAction::Epsilon)
             }
             StartField => {
-                if self.quote == c {
+                if self.quoting && self.quote == c {
                     (InQuotedField, NfaInputAction::Discard)
                 } else if self.delimiter == c {
                     (EndFieldDelim, NfaInputAction::Discard)
@@ -1012,9 +1026,9 @@ impl Reader {
                 }
             }
             InQuotedField => {
-                if self.quote == c {
+                if self.quoting && self.quote == c {
                     (InDoubleEscapedQuote, NfaInputAction::Discard)
-                } else if self.escape == Some(c) {
+                } else if self.quoting && self.escape == Some(c) {
                     (InEscapedQuote, NfaInputAction::Discard)
                 } else {
                     (InQuotedField, NfaInputAction::CopyToOutput)
@@ -1024,7 +1038,7 @@ impl Reader {
                 (InQuotedField, NfaInputAction::CopyToOutput)
             }
             InDoubleEscapedQuote => {
-                if self.double_quote && self.quote == c {
+                if self.quoting && self.double_quote && self.quote == c {
                     (InQuotedField, NfaInputAction::CopyToOutput)
                 } else if self.delimiter == c {
                     (EndFieldDelim, NfaInputAction::Discard)
@@ -1576,6 +1590,9 @@ mod tests {
                |b: &mut ReaderBuilder| { b.escape(Some(b'\\')); });
     parses_to!(quote_escapes_change, r#""az"b""#, csv![[r#"a"b"#]],
                |b: &mut ReaderBuilder| { b.escape(Some(b'z')); });
+
+    parses_to!(quoting_disabled, r#""abc,foo""#, csv![[r#""abc"#, r#"foo""#]],
+               |b: &mut ReaderBuilder| { b.quoting(false); });
 
     parses_to!(delimiter_tabs, "a\tb", csv![["a", "b"]],
                |b: &mut ReaderBuilder| { b.delimiter(b'\t'); });
