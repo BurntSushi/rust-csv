@@ -124,7 +124,7 @@ will use this same CSV data throughout the entire tutorial.) To get the data,
 download it from github:
 
 ```text
-$ curl -LO 'https://raw.githubusercontent.com/BurntSushi/rust-csv/rewrite/examples/data/uspop.csv'
+$ curl -LO 'https://raw.githubusercontent.com/BurntSushi/rust-csv/master/examples/data/uspop.csv'
 ```
 
 And now finally, run your program on `uspop.csv`:
