@@ -16,7 +16,7 @@ use error::{
     ErrorKind, Result, IntoInnerError,
     new_error, new_into_inner_error,
 };
-use serializer::serialize;
+use serializer::{serialize, serialize_header};
 use {QuoteStyle, Terminator};
 
 /// Builds a CSV writer with various configuration knobs.
@@ -575,7 +575,7 @@ enum HeaderState {
     /// Indicates that writing a header was attempt, and a header was written.
     DidWrite,
     /// Indicates that writing a header was attempted, but no headers were
-    /// written.
+    /// written or the attempt failed.
     DidNotWrite,
     /// This state is used when headers are disabled. It cannot transition
     /// to any other state.
@@ -729,10 +729,10 @@ impl<W: io::Write> Writer<W> {
     ///
     ///     let data = String::from_utf8(wtr.into_inner()?)?;
     ///     assert_eq!(data, "\
-    ///city,country,popcount
-    ///Boston,United States,4628910
-    ///Concord,United States,42695
-    ///");
+    /// city,country,popcount
+    /// Boston,United States,4628910
+    /// Concord,United States,42695
+    /// ");
     ///     Ok(())
     /// }
     /// ```
@@ -745,56 +745,34 @@ impl<W: io::Write> Writer<W> {
     /// complicated story. In general, when working with CSV data, one should
     /// avoid *nested sequences* as much as possible.
     ///
-    /// Structs, tuples and tuple structs map to CSV records in a simple way.
-    /// Tuples and tuple structs encode their fields in the order that they
-    /// are defined. Structs will do the same only if `has_headers` has been
-    /// disabled using [`WriterBuilder`](struct.WriterBuilder.html).
+    /// For the purpose of this section, Rust types can be divided into three
+    /// categories: scalars, non-struct collections, and structs.
     ///
-    /// Nested sequences are supported in a limited capacity. Namely, they
-    /// are flattened only when headers are not being written automatically.
-    /// For example:
+    /// ## Scalars
     ///
-    /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
+    /// Single values with no field names are written like the following. Note
+    /// that some of the outputs may be quoted, according to the selected
+    /// quoting style.
     ///
-    /// use std::error::Error;
-    /// use csv::WriterBuilder;
+    /// | Name | Example Type | Example Value | Output |
+    /// | ---- | ---- | ---- | ---- |
+    /// | boolean | `bool` | `true` | `true` |
+    /// | integers | `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64` | `5` | `5` |
+    /// | floats | `f32`, `f64` | `3.14` | `3.14` |
+    /// | character | `char` | `'☃'` | `☃` |
+    /// | string | `&str` | `"hi"` | `hi` |
+    /// | bytes | `&[u8]` | `b"hi"[..]` | `hi` |
+    /// | option | `Option` | `None` | *empty* |
+    /// | option |          | `Some(5)` | `5` |
+    /// | unit | `()` | `()` | *empty* |
+    /// | unit struct | `struct Foo;` | `Foo` | `Foo` |
+    /// | unit enum variant | `enum E { A, B }` | `E::A` | `A` |
+    /// | newtype struct | `struct Foo(u8);` | `Foo(5)` | `5` |
+    /// | newtype enum variant | `enum E { A(u8) }` | `E::A(5)` | `5` |
     ///
-    /// #[derive(Serialize)]
-    /// struct Row {
-    ///     label: String,
-    ///     values: Vec<f64>,
-    /// }
-    ///
-    /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
-    ///     let mut wtr = WriterBuilder::new()
-    ///         .has_headers(false)
-    ///         .from_writer(vec![]);
-    ///     wtr.serialize(Row {
-    ///         label: "foo".to_string(),
-    ///         values: vec![1.1234, 2.5678, 3.14],
-    ///     })?;
-    ///
-    ///     let data = String::from_utf8(wtr.into_inner()?)?;
-    ///     assert_eq!(data, "\
-    ///foo,1.1234,2.5678,3.14
-    ///");
-    ///     Ok(())
-    /// }
-    /// ```
-    ///
-    /// If `has_headers` were enabled in the above example, then serialization
-    /// would return an error. This applies to all forms of nested composite
-    /// types because there's no obvious way to write headers that are in
-    /// correspondence with the records.
-    ///
-    /// Simple enums in Rust can be serialized. Namely, enums must either be
-    /// variants with no arguments or variants with a single argument. For
-    /// example, to serialize a field from either an integer or a float type,
-    /// one can do this:
+    /// Note that this table includes simple structs and enums. For example, to
+    /// serialize a field from either an integer or a float type, one can do
+    /// this:
     ///
     /// ```
     /// extern crate csv;
@@ -830,38 +808,103 @@ impl<W: io::Write> Writer<W> {
     ///
     ///     let data = String::from_utf8(wtr.into_inner()?)?;
     ///     assert_eq!(data, "\
-    ///label,value
-    ///foo,3
-    ///bar,3.14
-    ///");
+    /// label,value
+    /// foo,3
+    /// bar,3.14
+    /// ");
     ///     Ok(())
     /// }
     /// ```
-    pub fn serialize<S: Serialize>(&mut self, mut record: S) -> Result<()> {
-        match self.state.header {
-            HeaderState::None | HeaderState::DidNotWrite => {
-                serialize(self, record, false, false)?;
+    ///
+    /// ## Non-Struct Collections
+    ///
+    /// Nested collections are flattened to their scalar components, with the
+    /// exeption of a few types that are not allowed:
+    ///
+    /// | Name | Example Type | Example Value | Output |
+    /// | ---- | ---- | ---- | ---- |
+    /// | sequence | `Vec<u8>` | `vec![1, 2, 3]` | `1,2,3` |
+    /// | tuple | `(u8, bool)` | `(5, true)` | `5,true` |
+    /// | tuple struct | `Foo(u8, bool)` | `Foo(5, true)` | `5,true` |
+    /// | tuple enum variant | `enum E { A(u8, bool) }` | `E::A(5, true)` | *error* |
+    /// | struct enum variant | `enum E { V { a: u8, b: bool } }` | `E::V { a: 5, b: true }` | *error* |
+    /// | map | `BTreeMap<K, V>` | `BTreeMap::new()` | *error* |
+    ///
+    /// ## Structs
+    ///
+    /// Like the other collections, structs are flattened to their scalar
+    /// components:
+    ///
+    /// | Name | Example Type | Example Value | Output |
+    /// | ---- | ---- | ---- | ---- |
+    /// | struct | `struct Foo { a: u8, b: bool }` | `Foo { a: 5, b: true }` | `5,true` |
+    ///
+    /// If `has_headers` is `false`, then there are no additional restrictions;
+    /// types can be nested arbitrarily. For example:
+    ///
+    /// ```
+    /// extern crate csv;
+    /// #[macro_use]
+    /// extern crate serde_derive;
+    ///
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// #[derive(Serialize)]
+    /// struct Row {
+    ///     label: String,
+    ///     values: Vec<f64>,
+    /// }
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = WriterBuilder::new()
+    ///         .has_headers(false)
+    ///         .from_writer(vec![]);
+    ///     wtr.serialize(Row {
+    ///         label: "foo".to_string(),
+    ///         values: vec![1.1234, 2.5678, 3.14],
+    ///     })?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "\
+    /// foo,1.1234,2.5678,3.14
+    /// ");
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// However, if `has_headers` were enabled in the above example, then
+    /// serialization would return an error. Speficially, when `has_headers` is
+    /// `true`, there are two restrictions:
+    ///
+    /// 1. Named field values in structs must be scalars.
+    ///
+    /// 2. All scalars must be named field values in structs.
+    ///
+    /// Other than these two restrictions, types can be nested arbitrarily.
+    /// Here are a few examples:
+    ///
+    /// | Value | Header | Record |
+    /// | ---- | ---- | ---- |
+    /// | `(Foo { x: 5, y: 6 }, Bar { z: true })` | `x,y,z` | `5,6,true` |
+    /// | `vec![Foo { x: 5, y: 6 }, Foo { x: 7, y: 8 }]` | `x,y,x,y` | `5,6,7,8` |
+    /// | `(Foo { x: 5, y: 6 }, vec![Bar { z: Baz(true) }])` | `x,y,z` | `5,6,true` |
+    /// | `Foo { x: 5, y: (6, 7) }` | *error: restriction 1* | `5,6,7` |
+    /// | `(5, Foo { x: 6, y: 7 }` | *error: restriction 2* | `5,6,7` |
+    /// | `(Foo { x: 5, y: 6 }, true)` | *error: restriction 2* | `5,6,true` |
+    pub fn serialize<S: Serialize>(&mut self, record: S) -> Result<()> {
+        if let HeaderState::Write = self.state.header {
+            let wrote_header = serialize_header(self, &record)?;
+            if wrote_header {
                 self.write_terminator()?;
-            }
-            HeaderState::DidWrite => {
-                serialize(self, record, false, true)?;
-                self.write_terminator()?;
-            }
-            HeaderState::Write => {
-                let did = serialize(self, &mut record, true, false)?;
-                self.state.header =
-                    if did {
-                        HeaderState::DidWrite
-                    } else {
-                        HeaderState::DidNotWrite
-                    };
-                self.write_terminator()?;
-                if did {
-                    serialize(self, record, false, true)?;
-                    self.write_terminator()?;
-                }
-            }
+                self.state.header = HeaderState::DidWrite;
+            } else {
+                self.state.header = HeaderState::DidNotWrite;
+            };
         }
+        serialize(self, &record)?;
+        self.write_terminator()?;
         Ok(())
     }
 
