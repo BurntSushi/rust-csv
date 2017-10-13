@@ -16,7 +16,7 @@ use writer::Writer;
 /// Serialize the given value to the given writer, and return an error if
 /// anything went wrong.
 pub fn serialize<S: Serialize, W: io::Write>(wtr: &mut Writer<W>, value: S) -> Result<(), Error> {
-    value.serialize(&mut SeRecord { wtr })
+    value.serialize(&mut SeRecord { wtr: wtr })
 }
 
 struct SeRecord<'w, W: 'w + io::Write> {
