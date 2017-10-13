@@ -1593,7 +1593,7 @@ impl<R: io::Read> Reader<R> {
         loop {
             let (res, nin, nout, nend) = {
                 let input = self.rdr.fill_buf()?;
-                let (mut fields, mut ends) = byte_record::as_parts(record);
+                let (fields, ends) = byte_record::as_parts(record);
                 self.core.read_record(
                     input, &mut fields[outlen..], &mut ends[endlen..])
             };

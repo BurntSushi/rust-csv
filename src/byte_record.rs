@@ -19,7 +19,7 @@ pub fn as_parts(
 ) -> (&mut Vec<u8>, &mut Vec<usize>) {
     // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
     // (&mut record.fields, &mut record.bounds.ends)
-    let mut inner = &mut *record.0;
+    let inner = &mut *record.0;
     (&mut inner.fields, &mut inner.bounds.ends)
 }
 

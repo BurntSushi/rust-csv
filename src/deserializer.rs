@@ -314,7 +314,7 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
 macro_rules! deserialize_int {
     ($method:ident, $visit:ident) => {
         fn $method<V: Visitor<'de>>(
-            mut self,
+            self,
             visitor: V,
         ) -> Result<V::Value, Self::Error> {
             visitor.$visit(
