@@ -53,7 +53,7 @@ $ cd csvtutor
 ```
 
 Once inside `csvtutor`, open `Cargo.toml` in your favorite text editor and add
-`csv = "1.0.0-beta.4"` to your `[dependencies]` section. At this point, your
+`csv = "1.0.0-beta.5"` to your `[dependencies]` section. At this point, your
 `Cargo.toml` should look something like this:
 
 ```text
@@ -63,7 +63,7 @@ version = "0.1.0"
 authors = ["Your Name"]
 
 [dependencies]
-csv = "1.0.0-beta.4"
+csv = "1.0.0-beta.5"
 ```
 
 Next, let's build your project. Since you added the `csv` crate as a

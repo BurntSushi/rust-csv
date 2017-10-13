@@ -1,6 +1,6 @@
 [package]
 name = "csv"
-version = "1.0.0-beta.4"  #:version
+version = "1.0.0-beta.5"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 description = "Fast CSV parsing with support for serde."
 documentation = "http://burntsushi.net/rustdoc/csv/"
