@@ -392,16 +392,16 @@ pub fn serialize_header<S: Serialize, W: io::Write>(
 ///       |             |            |                 |                |
 ///       v             v            v                 v                |
 ///   Err(err)       Ok(())        Err(_)   +----------------------+    |
-///                                         |EncounteredStructField|----/
-///                                         +----------------------+
-///                                                    |
-///                                             /------+------\
-///                                             |             |
-///                                         encounter       finish
-///                                           scalar          |
-///                                             |             |
-///                                             v             v
-///                                           Err(_)       Ok(())
+///                                         |EncounteredStructField|    |
+///                                         +----------------------+    |
+///                                                    |                |
+///                                         /----------+----------------/
+///                                         |          |
+///                                     encounter    finish
+///                                       scalar       |
+///                                         |          |
+///                                         v          v
+///                                       Err(_)    Ok(())
 /// ```
 enum HeaderState {
     /// Start here. Headers need to be written if the type has field names.
