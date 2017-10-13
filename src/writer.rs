@@ -209,10 +209,10 @@ impl WriterBuilder {
     ///
     ///     let data = String::from_utf8(wtr.into_inner()?)?;
     ///     assert_eq!(data, "\
-    ///city,country,popcount
-    ///Boston,United States,4628910
-    ///Concord,United States,42695
-    ///");
+    /// city,country,popcount
+    /// Boston,United States,4628910
+    /// Concord,United States,42695
+    /// ");
     ///     Ok(())
     /// }
     /// ```
@@ -238,9 +238,9 @@ impl WriterBuilder {
     ///
     ///     let data = String::from_utf8(wtr.into_inner()?)?;
     ///     assert_eq!(data, "\
-    ///Boston,United States,4628910
-    ///Concord,United States,42695
-    ///");
+    /// Boston,United States,4628910
+    /// Concord,United States,42695
+    /// ");
     ///     Ok(())
     /// }
     /// ```

@@ -331,9 +331,9 @@ impl Default for Terminator {
 /// # fn main() { example().unwrap(); }
 /// fn example() -> Result<(), Box<Error>> {
 ///     let data = "\
-///a,b,c
-///5,\"\",xyz
-///";
+/// a,b,c
+/// 5,\"\",xyz
+/// ";
 ///     let mut rdr = Reader::from_reader(data.as_bytes());
 ///     if let Some(result) = rdr.deserialize().next() {
 ///         let record: Row = result?;
