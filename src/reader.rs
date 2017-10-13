@@ -60,10 +60,10 @@ impl ReaderBuilder {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///Concord,United States,42695
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// Concord,United States,42695
+    /// ";
     ///     let mut rdr = ReaderBuilder::new().from_reader(data.as_bytes());
     ///
     ///     let records = rdr
@@ -124,10 +124,10 @@ impl ReaderBuilder {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///Concord,United States,42695
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// Concord,United States,42695
+    /// ";
     ///     let mut rdr = ReaderBuilder::new().from_reader(data.as_bytes());
     ///     for result in rdr.records() {
     ///         let record = result?;
@@ -155,9 +155,9 @@ impl ReaderBuilder {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city;country;pop
-    ///Boston;United States;4628910
-    ///";
+    /// city;country;pop
+    /// Boston;United States;4628910
+    /// ";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .delimiter(b';')
     ///         .from_reader(data.as_bytes());
@@ -200,9 +200,9 @@ impl ReaderBuilder {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// ";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .has_headers(false)
     ///         .from_reader(data.as_bytes());
@@ -253,9 +253,9 @@ impl ReaderBuilder {
     /// fn example() -> Result<(), Box<Error>> {
     ///     // Notice that the first row is missing the population count.
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States
-    ///";
+    /// city,country,pop
+    /// Boston,United States
+    /// ";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .flexible(true)
     ///         .from_reader(data.as_bytes());
@@ -286,9 +286,9 @@ impl ReaderBuilder {
     /// fn example() -> Result<(), Box<Error>> {
     ///     // Notice that the first row is missing the population count.
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States
-    ///";
+    /// city,country,pop
+    /// Boston,United States
+    /// ";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .flexible(false)
     ///         .from_reader(data.as_bytes());
@@ -372,9 +372,9 @@ impl ReaderBuilder {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,'United States',4628910
-    ///";
+    /// city,country,pop
+    /// Boston,'United States',4628910
+    /// ";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .quote(b'\'')
     ///         .from_reader(data.as_bytes());
@@ -411,9 +411,9 @@ impl ReaderBuilder {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,\"The \\\"United\\\" States\",4628910
-    ///";
+    /// city,country,pop
+    /// Boston,\"The \\\"United\\\" States\",4628910
+    /// ";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .escape(Some(b'\\'))
     ///         .from_reader(data.as_bytes());
@@ -450,9 +450,9 @@ impl ReaderBuilder {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,\"The \"\"United\"\" States\",4628910
-    ///";
+    /// city,country,pop
+    /// Boston,\"The \"\"United\"\" States\",4628910
+    /// ";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .double_quote(false)
     ///         .from_reader(data.as_bytes());
@@ -489,9 +489,9 @@ impl ReaderBuilder {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,\"The United States,4628910
-    ///";
+    /// city,country,pop
+    /// Boston,\"The United States,4628910
+    /// ";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .quoting(false)
     ///         .from_reader(data.as_bytes());
@@ -530,10 +530,10 @@ impl ReaderBuilder {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///#Concord,United States,42695
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,pop
+    /// #Concord,United States,42695
+    /// Boston,United States,4628910
+    /// ";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .comment(Some(b'#'))
     ///         .from_reader(data.as_bytes());
@@ -569,7 +569,7 @@ impl ReaderBuilder {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city\x1Fcountry\x1Fpop\x1EBoston\x1FUnited States\x1F4628910";
+    /// city\x1Fcountry\x1Fpop\x1EBoston\x1FUnited States\x1F4628910";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .ascii()
     ///         .from_reader(data.as_bytes());
@@ -632,9 +632,9 @@ impl ReaderBuilder {
 /// # fn main() { example().unwrap(); }
 /// fn example() -> Result<(), Box<Error>> {
 ///     let data = "\
-///city;country;pop
-///Boston;United States;4628910
-///";
+/// city;country;pop
+/// Boston;United States;4628910
+/// ";
 ///     let mut rdr = ReaderBuilder::new()
 ///         .delimiter(b';')
 ///         .from_reader(data.as_bytes());
@@ -801,10 +801,10 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///Concord,United States,42695
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// Concord,United States,42695
+    /// ";
     ///     let mut rdr = Reader::from_reader(data.as_bytes());
     ///     for result in rdr.records() {
     ///         let record = result?;
@@ -854,9 +854,9 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,popcount
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,popcount
+    /// Boston,United States,4628910
+    /// ";
     ///     let mut rdr = Reader::from_reader(data.as_bytes());
     ///     let mut iter = rdr.deserialize();
     ///
@@ -974,10 +974,10 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///label,value
-    ///celsius,22.2222
-    ///fahrenheit,72
-    ///";
+    /// label,value
+    /// celsius,22.2222
+    /// fahrenheit,72
+    /// ";
     ///     let mut rdr = Reader::from_reader(data.as_bytes());
     ///     let mut iter = rdr.deserialize();
     ///
@@ -1052,9 +1052,9 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,popcount
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,popcount
+    /// Boston,United States,4628910
+    /// ";
     ///     let rdr = Reader::from_reader(data.as_bytes());
     ///     let mut iter = rdr.into_deserialize();
     ///
@@ -1097,9 +1097,9 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// ";
     ///     let mut rdr = Reader::from_reader(data.as_bytes());
     ///     let mut iter = rdr.records();
     ///
@@ -1139,9 +1139,9 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// ";
     ///     let rdr = Reader::from_reader(data.as_bytes());
     ///     let mut iter = rdr.into_records();
     ///
@@ -1178,9 +1178,9 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// ";
     ///     let mut rdr = Reader::from_reader(data.as_bytes());
     ///     let mut iter = rdr.byte_records();
     ///
@@ -1220,9 +1220,9 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// ";
     ///     let rdr = Reader::from_reader(data.as_bytes());
     ///     let mut iter = rdr.into_byte_records();
     ///
@@ -1267,9 +1267,9 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// ";
     ///     let mut rdr = Reader::from_reader(data.as_bytes());
     ///
     ///     // We can read the headers before iterating.
@@ -1338,9 +1338,9 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// ";
     ///     let mut rdr = Reader::from_reader(data.as_bytes());
     ///
     ///     // We can read the headers before iterating.
@@ -1392,9 +1392,9 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// ";
     ///     let mut rdr = Reader::from_reader(data.as_bytes());
     ///
     ///     assert_eq!(rdr.headers()?, vec!["city", "country", "pop"]);
@@ -1425,9 +1425,9 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// ";
     ///     let mut rdr = Reader::from_reader(data.as_bytes());
     ///
     ///     assert_eq!(rdr.byte_headers()?, vec!["city", "country", "pop"]);
@@ -1490,9 +1490,9 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// ";
     ///     let mut rdr = Reader::from_reader(data.as_bytes());
     ///     let mut record = StringRecord::new();
     ///
@@ -1533,9 +1533,9 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,pop
-    ///Boston,United States,4628910
-    ///";
+    /// city,country,pop
+    /// Boston,United States,4628910
+    /// ";
     ///     let mut rdr = Reader::from_reader(data.as_bytes());
     ///     let mut record = ByteRecord::new();
     ///
@@ -1645,10 +1645,10 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,popcount
-    ///Boston,United States,4628910
-    ///Concord,United States,42695
-    ///";
+    /// city,country,popcount
+    /// Boston,United States,4628910
+    /// Concord,United States,42695
+    /// ";
     ///     let rdr = Reader::from_reader(io::Cursor::new(data));
     ///     let mut iter = rdr.into_records();
     ///     let mut pos = Position::new();
@@ -1690,10 +1690,10 @@ impl<R: io::Read> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,popcount
-    ///Boston,United States,4628910
-    ///Concord,United States,42695
-    ///";
+    /// city,country,popcount
+    /// Boston,United States,4628910
+    /// Concord,United States,42695
+    /// ";
     ///     let mut rdr = Reader::from_reader(io::Cursor::new(data));
     ///     assert!(!rdr.is_done());
     ///     for result in rdr.records() {
@@ -1768,10 +1768,10 @@ impl<R: io::Read + io::Seek> Reader<R> {
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<Error>> {
     ///     let data = "\
-    ///city,country,popcount
-    ///Boston,United States,4628910
-    ///Concord,United States,42695
-    ///";
+    /// city,country,popcount
+    /// Boston,United States,4628910
+    /// Concord,United States,42695
+    /// ";
     ///     let rdr = Reader::from_reader(io::Cursor::new(data));
     ///     let mut iter = rdr.into_records();
     ///     let mut pos = Position::new();
