@@ -376,12 +376,12 @@ pub fn serialize_header<S: Serialize, W: io::Write>(
 ///                              +-----+
 ///                                 |
 ///              /------------------+------------------\
-///              |                                     |
-///          encounter                             encounter
-///            scalar                             struct field
-///              |                                     |
-///              v                                     v
-///     +-----------------+                     +-------------+
+///              |                  |                  |
+///          encounter            finish           encounter
+///            scalar               |             struct field
+///              |                  |                  |
+///              v                  v                  v
+///     +-----------------+       Ok(())        +-------------+
 ///     |ErrorIfWrite(err)|                     |InStructField|<--------\
 ///     +-----------------+                     +-------------+         |
 ///              |                                     |                |
