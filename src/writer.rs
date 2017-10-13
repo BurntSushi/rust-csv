@@ -739,14 +739,20 @@ impl<W: io::Write> Writer<W> {
     ///
     /// # Rules
     ///
-    /// For the most part, any Rust type that maps straight-forwardly to a CSV
-    /// record is supported. This includes structs, tuples and tuple structs.
-    /// Other Rust types, such as `Vec`s, arrays, maps and enums have a more
-    /// complicated story. In general, when working with CSV data, one should
-    /// avoid *nested sequences* as much as possible.
+    /// The behavior of `serialize` is fairly simple:
+    ///
+    /// 1. Nested containers (tuples, `Vec`s, structs, etc.) are always
+    ///    flattened (depth-first order).
+    ///
+    /// 2. If `has_headers` is `true` and the type contains field names, then
+    ///    a header row is automatically generated.
+    ///
+    /// However, some container types cannot be serialized, and if
+    /// `has_headers` is `true`, there are some additional restrictions on the
+    /// types that can be serialized. See below for details.
     ///
     /// For the purpose of this section, Rust types can be divided into three
-    /// categories: scalars, non-struct collections, and structs.
+    /// categories: scalars, non-struct containers, and structs.
     ///
     /// ## Scalars
     ///
@@ -816,9 +822,9 @@ impl<W: io::Write> Writer<W> {
     /// }
     /// ```
     ///
-    /// ## Non-Struct Collections
+    /// ## Non-Struct Containers
     ///
-    /// Nested collections are flattened to their scalar components, with the
+    /// Nested containers are flattened to their scalar components, with the
     /// exeption of a few types that are not allowed:
     ///
     /// | Name | Example Type | Example Value | Output |
@@ -832,7 +838,7 @@ impl<W: io::Write> Writer<W> {
     ///
     /// ## Structs
     ///
-    /// Like the other collections, structs are flattened to their scalar
+    /// Like the other containers, structs are flattened to their scalar
     /// components:
     ///
     /// | Name | Example Type | Example Value | Output |
