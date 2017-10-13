@@ -363,6 +363,46 @@ pub fn serialize_header<S: Serialize, W: io::Write>(
 }
 
 /// State machine for `SeHeader`.
+///
+/// This is a diagram of the transitions in the state machine. Note that only
+/// some serialization events cause a state transition, and only for certain
+/// states. For example, encountering a scalar causes a transition if the state
+/// is `Write` or `EncounteredStructField`, but not if the state is
+/// `ErrorIfWrite(err)` or `InStructField`.
+///
+/// ```text
+///                              +-----+
+///                              |Write|
+///                              +-----+
+///                                 |
+///              /------------------+------------------\
+///              |                                     |
+///          encounter                             encounter
+///            scalar                             struct field
+///              |                                     |
+///              v                                     v
+///     +-----------------+                     +-------------+
+///     |ErrorIfWrite(err)|                     |InStructField|<--------\
+///     +-----------------+                     +-------------+         |
+///              |                                     |                |
+///       /------+------\            /-----------------+                |
+///       |             |            |                 |                |
+///   encounter       finish     encounter          finish          encounter
+///  struct field       |        container           field         struct field
+///       |             |            |                 |                |
+///       v             v            v                 v                |
+///   Err(err)       Ok(())        Err(_)   +----------------------+    |
+///                                         |EncounteredStructField|----/
+///                                         +----------------------+
+///                                                    |
+///                                             /------+------\
+///                                             |             |
+///                                         encounter       finish
+///                                           scalar          |
+///                                             |             |
+///                                             v             v
+///                                           Err(_)       Ok(())
+/// ```
 enum HeaderState {
     /// Start here. Headers need to be written if the type has field names.
     Write,
