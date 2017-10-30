@@ -1666,7 +1666,7 @@ mod tests {
         use ReadFieldResult::*;
 
         let mut inp = b("fooquux");
-        let mut out = &mut [0; 2];
+        let out = &mut [0; 2];
         let mut rdr = Reader::new();
 
         assert_read!(rdr, inp, out, 2, 2, OutputFull);
@@ -1696,7 +1696,7 @@ mod tests {
     fn stream_input_chunks() {
         use ReadFieldResult::*;
 
-        let mut out = &mut [0; 10];
+        let out = &mut [0; 10];
         let mut rdr = Reader::new();
 
         assert_read!(rdr, b("fo"), out, 2, 2, InputEmpty);
@@ -1720,7 +1720,7 @@ mod tests {
     fn stream_doubled_quotes() {
         use ReadFieldResult::*;
 
-        let mut out = &mut [0; 10];
+        let out = &mut [0; 10];
         let mut rdr = Reader::new();
 
         assert_read!(rdr, b("\"fo\""), out, 4, 2, InputEmpty);
@@ -1738,7 +1738,7 @@ mod tests {
     fn stream_escaped_quotes() {
         use ReadFieldResult::*;
 
-        let mut out = &mut [0; 10];
+        let out = &mut [0; 10];
         let mut builder = ReaderBuilder::new();
         let mut rdr = builder.escape(Some(b'\\')).build();
 
@@ -1757,7 +1757,7 @@ mod tests {
     fn stream_empty_output() {
         use ReadFieldResult::*;
 
-        let mut out = &mut [0; 10];
+        let out = &mut [0; 10];
         let mut rdr = Reader::new();
 
         assert_read!(
@@ -1779,7 +1779,7 @@ mod tests {
     fn reset_works() {
         use ReadFieldResult::*;
 
-        let mut out = &mut [0; 10];
+        let out = &mut [0; 10];
         let mut rdr = Reader::new();
 
         assert_read!(rdr, b("\"foo"), out, 4, 3, InputEmpty);
@@ -1803,7 +1803,7 @@ mod tests {
     fn line_numbers() {
         use ReadFieldResult::*;
 
-        let mut out = &mut [0; 10];
+        let out = &mut [0; 10];
         let mut rdr = Reader::new();
 
         assert_eq!(1, rdr.line());
@@ -1842,8 +1842,8 @@ mod tests {
         use ReadRecordResult::*;
 
         let mut inp = b("foo,bar\nbaz");
-        let mut out = &mut [0; 1024];
-        let mut ends = &mut [0; 10];
+        let out = &mut [0; 1024];
+        let ends = &mut [0; 10];
         let mut rdr = Reader::new();
 
         assert_read_record!(rdr, &inp, out, ends, 8, 6, 2, Record);
@@ -1867,8 +1867,8 @@ mod tests {
         use ReadRecordResult::*;
 
         let mut inp = b("foo,bar\nbaz");
-        let mut out = &mut [0; 1024];
-        let mut ends = &mut [0; 10];
+        let out = &mut [0; 1024];
+        let ends = &mut [0; 10];
         let mut rdr = Reader::new();
 
         assert_read_record!(rdr, &inp, out, ends, 8, 6, 2, Record);

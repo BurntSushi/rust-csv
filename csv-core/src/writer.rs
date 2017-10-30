@@ -663,7 +663,7 @@ mod tests {
     #[test]
     fn writer_one_field() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
         let mut n = 0;
 
         assert_field!(wtr, b("abc"), &mut out[n..], 3, 3, InputEmpty, "abc");
@@ -675,7 +675,7 @@ mod tests {
     #[test]
     fn writer_one_empty_field_terminator() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
 
         assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
         assert_write!(wtr, terminator, &mut out[..], 3, InputEmpty, "\"\"\n");
@@ -685,7 +685,7 @@ mod tests {
     #[test]
     fn writer_one_empty_field_finish() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
 
         assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
         assert_write!(wtr, finish, &mut out[..], 2, InputEmpty, "\"\"");
@@ -694,7 +694,7 @@ mod tests {
     #[test]
     fn writer_many_one_empty_field_finish() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
 
         assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
         assert_write!(wtr, terminator, &mut out[..], 3, InputEmpty, "\"\"\n");
@@ -705,7 +705,7 @@ mod tests {
     #[test]
     fn writer_many_one_empty_field_terminator() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
 
         assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
         assert_write!(wtr, terminator, &mut out[..], 3, InputEmpty, "\"\"\n");
@@ -717,7 +717,7 @@ mod tests {
     #[test]
     fn writer_one_field_quote() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
         let mut n = 0;
 
         assert_field!(
@@ -730,7 +730,7 @@ mod tests {
     #[test]
     fn writer_one_field_stream() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
         let mut n = 0;
 
         assert_field!(wtr, b("abc"), &mut out[n..], 3, 3, InputEmpty, "abc");
@@ -744,7 +744,7 @@ mod tests {
     #[test]
     fn writer_one_field_stream_quote() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
         let mut n = 0;
 
         assert_field!(
@@ -759,7 +759,7 @@ mod tests {
     #[test]
     fn writer_one_field_stream_quote_partial() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 4];
+        let out = &mut [0; 4];
 
         assert_field!(wtr, b("ab\"xyz"), out, 2, 3, OutputFull, "\"ab");
         assert_field!(wtr, b("\"xyz"), out, 3, 4, OutputFull, "\"\"xy");
@@ -770,7 +770,7 @@ mod tests {
     #[test]
     fn writer_two_fields() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
         let mut n = 0;
 
         assert_field!(wtr, b("abc"), &mut out[n..], 3, 3, InputEmpty, "abc");
@@ -790,7 +790,7 @@ mod tests {
         let mut wtr = WriterBuilder::new()
             .quote_style(QuoteStyle::NonNumeric)
             .build();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
         let mut n = 0;
 
         assert_field!(wtr, b("abc"), &mut out[n..], 3, 4, InputEmpty, "\"abc");
@@ -812,7 +812,7 @@ mod tests {
     #[test]
     fn writer_two_fields_quote() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
         let mut n = 0;
 
         assert_field!(
@@ -832,7 +832,7 @@ mod tests {
     #[test]
     fn writer_two_fields_two_records() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
         let mut n = 0;
 
         assert_field!(wtr, b("abc"), &mut out[n..], 3, 3, InputEmpty, "abc");
@@ -858,7 +858,7 @@ mod tests {
     #[test]
     fn writer_two_fields_two_records_quote() {
         let mut wtr = Writer::new();
-        let mut out = &mut [0; 1024];
+        let out = &mut [0; 1024];
         let mut n = 0;
 
         assert_field!(
