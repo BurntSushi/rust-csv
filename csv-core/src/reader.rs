@@ -1591,6 +1591,15 @@ mod tests {
     parses_to!(quote_escapes_change, r#""az"b""#, csv![[r#"a"b"#]],
                |b: &mut ReaderBuilder| { b.escape(Some(b'z')); });
 
+    parses_to!(
+        quote_escapes_with_comma,
+        r#""\"A,B\"""#,
+        csv![[r#""A,B""#]],
+        |b: &mut ReaderBuilder| {
+            b.escape(Some(b'\\')).double_quote(false);
+        });
+
+
     parses_to!(quoting_disabled, r#""abc,foo""#, csv![[r#""abc"#, r#"foo""#]],
                |b: &mut ReaderBuilder| { b.quoting(false); });
 
