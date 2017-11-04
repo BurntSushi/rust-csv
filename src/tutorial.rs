@@ -1050,7 +1050,7 @@ the data is slightly messier than what we've been using. You can get it like
 so:
 
 ```text
-$ curl -LO 'https://raw.githubusercontent.com/BurntSushi/rust-csv/rewrite/examples/data/uspop-null.csv'
+$ curl -LO 'https://raw.githubusercontent.com/BurntSushi/rust-csv/master/examples/data/uspop-null.csv'
 ```
 
 Let's start by running our program from the previous section:
