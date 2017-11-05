@@ -1,6 +1,6 @@
 use core::fmt;
 
-use Terminator;
+use {Terminator};
 
 // BE ADVISED
 //

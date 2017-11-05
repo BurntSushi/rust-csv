@@ -445,6 +445,30 @@ impl StringRecord {
         self.0.clear();
     }
 
+    /// Trim the fields of this record so that leading and trailing whitespace is removed.
+    ///
+    /// Note that the whitespace trimmed is currently only the ASCII space and tab.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::StringRecord;
+    ///
+    /// let mut record = StringRecord::from(vec!["  ", "\u{3000}\tfoo ", "bar  ", "b a z"]);
+    /// record.trim();
+    /// assert_eq!(record, vec!["", "foo", "bar", "b a z"]);
+    /// ```
+    pub fn trim(&mut self) {
+        let length = self.len();
+        if length == 0 {
+            return;
+        }
+        let field = self.get(length - 1).unwrap().to_string();
+        self.truncate(length - 1);
+        self.trim();
+        self.push_field(field.trim());
+    }
+
     /// Add a new field to this record.
     ///
     /// # Example
@@ -700,5 +724,40 @@ impl<'r> DoubleEndedIterator for StringRecordIter<'r> {
             // See StringRecord::get for safety argument.
             unsafe { str::from_utf8_unchecked(bytes) }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use string_record::StringRecord;
+
+    #[test]
+    fn whitespace_only_record_trimmed() {
+        let mut rec = StringRecord::new();
+        rec.push_field("\u{0009}\u{000A}\u{000B}\u{000C}\u{000D}\u{0020}\u{0085}\u{00A0}\u{1680}\u{2000}\u{2001}\u{2002}\u{2003}\u{2004}\u{2005}\u{2006}\u{2007}\u{2008}\u{2009}\u{200A}\u{2028}\u{2029}\u{202F}\u{205F}\u{3000}");
+
+        rec.trim();
+
+        assert_eq!(rec.get(0), Some(""));
+    }
+
+    #[test]
+    fn trim_does_not_panic_on_empty_records_1() {
+        let mut rec = StringRecord::new();
+        rec.push_field("");
+        rec.trim();
+
+        assert_eq!(rec.get(0), Some(""));
+    }
+
+    #[test]
+    fn trim_does_not_panic_on_empty_records_2() {
+        let mut rec = StringRecord::new();
+        rec.push_field("");
+        rec.push_field("");
+        rec.trim();
+
+        assert_eq!(rec.get(0), Some(""));
+        assert_eq!(rec.get(1), Some(""));
     }
 }
