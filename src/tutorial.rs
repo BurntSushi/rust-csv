@@ -1050,7 +1050,7 @@ the data is slightly messier than what we've been using. You can get it like
 so:
 
 ```text
-$ curl -LO 'https://raw.githubusercontent.com/BurntSushi/rust-csv/rewrite/examples/data/uspop-null.csv'
+$ curl -LO 'https://raw.githubusercontent.com/BurntSushi/rust-csv/master/examples/data/uspop-null.csv'
 ```
 
 Let's start by running our program from the previous section:
@@ -1705,7 +1705,7 @@ file that contains an encoding of a Latin-1 character that is invalid UTF-8.
 You can get the data like so:
 
 ```text
-$ curl -LO 'https://raw.githubusercontent.com/BurntSushi/rust-csv/rewrite/examples/data/uspop-latin1.csv'
+$ curl -LO 'https://raw.githubusercontent.com/BurntSushi/rust-csv/master/examples/data/uspop-latin1.csv'
 ```
 
 Even though I've already given away the problem, let's see what happen when
