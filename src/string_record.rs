@@ -445,6 +445,36 @@ impl StringRecord {
         self.0.clear();
     }
 
+    /// Trim the fields of this record so that leading and trailing whitespace
+    /// is removed.
+    ///
+    /// This method uses the Unicode definition of whitespace.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::StringRecord;
+    ///
+    /// let mut record = StringRecord::from(vec![
+    ///     "  ", "\u{3000}\tfoo ", "bar  ", "b a z",
+    /// ]);
+    /// record.trim();
+    /// assert_eq!(record, vec!["", "foo", "bar", "b a z"]);
+    /// ```
+    pub fn trim(&mut self) {
+        let length = self.len();
+        if length == 0 {
+            return;
+        }
+        // TODO: We could likely do this in place, but for now, we allocate.
+        let mut trimmed = StringRecord::with_capacity(
+            self.as_slice().len(), self.len());
+        for mut field in &*self {
+            trimmed.push_field(field.trim());
+        }
+        *self = trimmed;
+    }
+
     /// Add a new field to this record.
     ///
     /// # Example
@@ -700,5 +730,77 @@ impl<'r> DoubleEndedIterator for StringRecordIter<'r> {
             // See StringRecord::get for safety argument.
             unsafe { str::from_utf8_unchecked(bytes) }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use string_record::StringRecord;
+
+    #[test]
+    fn trim_front() {
+        let mut rec = StringRecord::from(vec![" abc"]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some("abc"));
+
+        let mut rec = StringRecord::from(vec![" abc", "  xyz"]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some("abc"));
+        assert_eq!(rec.get(1), Some("xyz"));
+    }
+
+    #[test]
+    fn trim_back() {
+        let mut rec = StringRecord::from(vec!["abc "]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some("abc"));
+
+        let mut rec = StringRecord::from(vec!["abc ", "xyz  "]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some("abc"));
+        assert_eq!(rec.get(1), Some("xyz"));
+    }
+
+    #[test]
+    fn trim_both() {
+        let mut rec = StringRecord::from(vec![" abc "]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some("abc"));
+
+        let mut rec = StringRecord::from(vec![" abc ", "  xyz  "]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some("abc"));
+        assert_eq!(rec.get(1), Some("xyz"));
+    }
+
+    #[test]
+    fn trim_does_not_panic_on_empty_records_1() {
+        let mut rec = StringRecord::from(vec![""]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(""));
+    }
+
+    #[test]
+    fn trim_does_not_panic_on_empty_records_2() {
+        let mut rec = StringRecord::from(vec!["", ""]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(""));
+        assert_eq!(rec.get(1), Some(""));
+    }
+
+    #[test]
+    fn trim_does_not_panic_on_empty_records_3() {
+        let mut rec = StringRecord::new();
+        rec.trim();
+        assert_eq!(rec.as_slice().len(), 0);
+    }
+
+    #[test]
+    fn trim_whitespace_only() {
+        let mut rec = StringRecord::from(vec![
+            "\u{0009}\u{000A}\u{000B}\u{000C}\u{000D}\u{0020}\u{0085}\u{00A0}\u{1680}\u{2000}\u{2001}\u{2002}\u{2003}\u{2004}\u{2005}\u{2006}\u{2007}\u{2008}\u{2009}\u{200A}\u{2028}\u{2029}\u{202F}\u{205F}\u{3000}",
+        ]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(""));
     }
 }

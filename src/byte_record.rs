@@ -417,6 +417,59 @@ impl ByteRecord {
         self.truncate(0);
     }
 
+    /// Trim the fields of this record so that leading and trailing whitespace
+    /// is removed.
+    ///
+    /// This method uses the ASCII definition of whitespace. That is, only
+    /// bytes in the class `[\t\n\v\f\r ]` are trimmed.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// let mut record = ByteRecord::from(vec![
+    ///     "  ", "\tfoo", "bar  ", "b a z",
+    /// ]);
+    /// record.trim();
+    /// assert_eq!(record, vec!["", "foo", "bar", "b a z"]);
+    /// ```
+    pub fn trim(&mut self) {
+        let mut trimmed = 0;
+        for field in 0..self.len() {
+            self.0.bounds.ends[field] -= trimmed;
+            let bound = self.0.bounds.get(field).unwrap();
+            let front_space = self.count_leading_whitespace(bound.clone());
+            let back_space =
+                if front_space < bound.end - bound.start {
+                    self.count_leading_whitespace(bound.clone().rev())
+                } else {
+                    0
+                };
+
+            self.0.fields.drain(bound.end - back_space..bound.end);
+            self.0.fields.drain(bound.start..bound.start + front_space);
+            self.0.bounds.ends[field] -= front_space + back_space;
+            trimmed += front_space + back_space;
+        }
+    }
+
+    /// Returns amount of leading whitespace starting in the given range.
+    /// Whitespace is not counted past the end of the range.
+    fn count_leading_whitespace<R>(&self, range: R) -> usize
+    where R: Iterator<Item=usize>
+    {
+        let mut count = 0;
+        for i in range {
+            match self.0.fields[i] {
+                b'\t' | b'\n' | b'\x0B' | b'\x0C' | b'\r' | b' ' => {}
+                _ => break,
+            }
+            count += 1;
+        }
+        count
+    }
+
     /// Add a new field to this record.
     ///
     /// # Example
@@ -840,6 +893,71 @@ mod tests {
         assert_eq!(rec.len(), 0);
         assert_eq!(rec.get(0), None);
         assert_eq!(rec.get(1), None);
+    }
+
+    #[test]
+    fn trim_whitespace_only() {
+        let mut rec = ByteRecord::from(vec![b" \t\n\r\x0c"]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("")));
+    }
+
+    #[test]
+    fn trim_front() {
+        let mut rec = ByteRecord::from(vec![b" abc"]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("abc")));
+
+        let mut rec = ByteRecord::from(vec![b(" abc"), b("  xyz")]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("abc")));
+        assert_eq!(rec.get(1), Some(b("xyz")));
+    }
+
+    #[test]
+    fn trim_back() {
+        let mut rec = ByteRecord::from(vec![b"abc "]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("abc")));
+
+        let mut rec = ByteRecord::from(vec![b("abc "), b("xyz  ")]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("abc")));
+        assert_eq!(rec.get(1), Some(b("xyz")));
+    }
+
+    #[test]
+    fn trim_both() {
+        let mut rec = ByteRecord::from(vec![b" abc "]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("abc")));
+
+        let mut rec = ByteRecord::from(vec![b(" abc "), b("  xyz  ")]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("abc")));
+        assert_eq!(rec.get(1), Some(b("xyz")));
+    }
+
+    #[test]
+    fn trim_does_not_panic_on_empty_records_1() {
+        let mut rec = ByteRecord::from(vec![b""]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("")));
+    }
+
+    #[test]
+    fn trim_does_not_panic_on_empty_records_2() {
+        let mut rec = ByteRecord::from(vec![b"", b""]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("")));
+        assert_eq!(rec.get(1), Some(b("")));
+    }
+
+    #[test]
+    fn trim_does_not_panic_on_empty_records_3() {
+        let mut rec = ByteRecord::new();
+        rec.trim();
+        assert_eq!(rec.as_slice().len(), 0);
     }
 
     #[test]
