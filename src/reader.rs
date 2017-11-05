@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 use byte_record::{self, ByteRecord, Position};
 use error::{ErrorKind, Result, Utf8Error, new_error};
 use string_record::{self, StringRecord};
-use Terminator;
+use {Terminator, Trim};
 
 /// Builds a CSV reader with various configuration knobs.
 ///
@@ -24,6 +24,7 @@ pub struct ReaderBuilder {
     capacity: usize,
     flexible: bool,
     has_headers: bool,
+    trim: Trim,
     /// The underlying CSV parser builder.
     ///
     /// We explicitly put this on the heap because CoreReaderBuilder embeds an
@@ -38,6 +39,7 @@ impl Default for ReaderBuilder {
             capacity: 8 * (1<<10),
             flexible: false,
             has_headers: true,
+            trim: Trim::default(),
             builder: Box::new(CoreReaderBuilder::default()),
         }
     }
@@ -316,6 +318,59 @@ impl ReaderBuilder {
     /// ```
     pub fn flexible(&mut self, yes: bool) -> &mut ReaderBuilder {
         self.flexible = yes;
+        self
+    }
+
+    /// Whether fields are trimmed of leading and trailing whitespace or not.
+    ///
+    /// By default, no trimming is performed. This method permits one to
+    /// override that behavior and choose one of the following options:
+    ///
+    /// 1. `Trim::Headers` trims only header values.
+    /// 2. `Trim::Fields` trims only non-header or "field" values.
+    /// 3. `Trim::All` trims both header and non-header values.
+    ///
+    /// A value is only interpreted as a header value if this CSV reader is
+    /// configured to read a header record (which is the default).
+    ///
+    /// When reading string records, characters meeting the definition of
+    /// Unicode whitespace are trimmed. When reading byte records, characters
+    /// meeting the definition of ASCII whitespace are trimmed. ASCII
+    /// whitespace characters correspond to the set `[\t\n\v\f\r ]`.
+    ///
+    /// # Example
+    ///
+    /// This example shows what happens when all values are trimmed.
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::error::Error;
+    /// use csv::{ReaderBuilder, StringRecord, Trim};
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let data = "\
+    /// city ,   country ,  pop
+    /// Boston,\"
+    ///    United States\",4628910
+    /// Concord,   United States   ,42695
+    /// ";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .trim(Trim::All)
+    ///         .from_reader(data.as_bytes());
+    ///     let records = rdr
+    ///         .records()
+    ///         .collect::<Result<Vec<StringRecord>, csv::Error>>()?;
+    ///     assert_eq!(records, vec![
+    ///         vec!["Boston", "United States", "4628910"],
+    ///         vec!["Concord", "United States", "42695"],
+    ///     ]);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn trim(&mut self, trim: Trim) -> &mut ReaderBuilder {
+        self.trim = trim;
         self
     }
 
@@ -710,6 +765,7 @@ struct ReaderState {
     /// set, every record must have the same number of fields, or else an error
     /// is reported.
     flexible: bool,
+    trim: Trim,
     /// The number of fields in the first record parsed.
     first_field_count: Option<u64>,
     /// The current position of the parser.
@@ -776,6 +832,7 @@ impl<R: io::Read> Reader<R> {
                 headers: None,
                 has_headers: builder.has_headers,
                 flexible: builder.flexible,
+                trim: builder.trim,
                 first_field_count: None,
                 cur_pos: Position::new(),
                 first: false,
@@ -1447,7 +1504,7 @@ impl<R: io::Read> Reader<R> {
     ) {
         // If we have string headers, then get byte headers. But if we have
         // byte headers, then get the string headers (or a UTF-8 error).
-        let (str_headers, byte_headers) = match headers {
+        let (mut str_headers, mut byte_headers) = match headers {
             Ok(string) => {
                 let bytes = string.clone().into_byte_record();
                 (Ok(string), bytes)
@@ -1459,6 +1516,12 @@ impl<R: io::Read> Reader<R> {
                 }
             }
         };
+        if self.state.trim.should_trim_headers() {
+            if let Ok(ref mut str_headers) = str_headers.as_mut() {
+                str_headers.trim();
+            }
+            byte_headers.trim();
+        }
         self.state.headers = Some(Headers {
             byte_record: byte_headers,
             string_record: str_headers,
@@ -1505,7 +1568,14 @@ impl<R: io::Read> Reader<R> {
     /// }
     /// ```
     pub fn read_record(&mut self, record: &mut StringRecord) -> Result<bool> {
-        string_record::read(self, record)
+        let result = string_record::read(self, record);
+        // We need to trim again because trimming string records includes
+        // Unicode whitespace. (ByteRecord trimming only includes ASCII
+        // whitespace.)
+        if self.state.trim.should_trim_fields() {
+            record.trim();
+        }
+        result
     }
 
     /// Read a single row into the given byte record. Returns false when no
@@ -1558,6 +1628,9 @@ impl<R: io::Read> Reader<R> {
             if let Some(ref headers) = self.state.headers {
                 self.state.first = true;
                 record.clone_from(&headers.byte_record);
+                if self.state.trim.should_trim_fields() {
+                    record.trim();
+                }
                 return Ok(!record.is_empty());
             }
         }
@@ -1569,8 +1642,14 @@ impl<R: io::Read> Reader<R> {
             // never return the first row. Instead, we should attempt to
             // read and return the next one.
             if self.state.has_headers {
-                return self.read_byte_record_impl(record);
+                let result = self.read_byte_record_impl(record);
+                if self.state.trim.should_trim_fields() {
+                    record.trim();
+                }
+                return result;
             }
+        } else if self.state.trim.should_trim_fields() {
+            record.trim();
         }
         Ok(ok)
     }
@@ -2134,7 +2213,7 @@ mod tests {
     use error::ErrorKind;
     use string_record::StringRecord;
 
-    use super::{ReaderBuilder, Position};
+    use super::{ReaderBuilder, Position, Trim};
 
     fn b(s: &str) -> &[u8] { s.as_bytes() }
     fn s(b: &[u8]) -> &str { ::std::str::from_utf8(b).unwrap() }
@@ -2166,6 +2245,102 @@ mod tests {
         assert_eq!("xyz", s(&rec[2]));
 
         assert!(!rdr.read_byte_record(&mut rec).unwrap());
+    }
+
+    #[test]
+    fn read_trimmed_records_and_headers() {
+        let data = b("foo,  bar,\tbaz\n  1,  2,  3\n1\t,\t,3\t\t");
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(true)
+            .trim(Trim::All)
+            .from_reader(data);
+        let mut rec = ByteRecord::new();
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert_eq!("1", s(&rec[0]));
+        assert_eq!("2", s(&rec[1]));
+        assert_eq!("3", s(&rec[2]));
+        let mut rec = StringRecord::new();
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!("1", &rec[0]);
+        assert_eq!("", &rec[1]);
+        assert_eq!("3", &rec[2]);
+        {
+            let headers = rdr.headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!("foo", &headers[0]);
+            assert_eq!("bar", &headers[1]);
+            assert_eq!("baz", &headers[2]);
+        }
+    }
+
+    #[test]
+    fn read_trimmed_header() {
+        let data = b("foo,  bar,\tbaz\n  1,  2,  3\n1\t,\t,3\t\t");
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(true)
+            .trim(Trim::Headers)
+            .from_reader(data);
+        let mut rec = ByteRecord::new();
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert_eq!("  1", s(&rec[0]));
+        assert_eq!("  2", s(&rec[1]));
+        assert_eq!("  3", s(&rec[2]));
+        {
+            let headers = rdr.headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!("foo", &headers[0]);
+            assert_eq!("bar", &headers[1]);
+            assert_eq!("baz", &headers[2]);
+        }
+    }
+
+    #[test]
+    fn read_trimed_header_invalid_utf8() {
+        let data = &b"foo,  b\xFFar,\tbaz\na,b,c\nd,e,f"[..];
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(true)
+            .trim(Trim::Headers)
+            .from_reader(data);
+        let mut rec = StringRecord::new();
+
+        let _ = rdr.read_record(&mut rec);  // force the headers to be read
+        // Check the byte headers are trimmed and string headers are still errors
+        {
+            let headers = rdr.byte_headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!(b"foo", &headers[0]);
+            assert_eq!(b"b\xFFar", &headers[1]);
+            assert_eq!(b"baz", &headers[2]);
+        }
+        match *rdr.headers().unwrap_err().kind() {
+            ErrorKind::Utf8 { pos: Some(ref pos), ref err } => {
+                assert_eq!(pos, &newpos(0, 1, 0));
+                assert_eq!(err.field(), 1);
+                assert_eq!(err.valid_up_to(), 3);
+            }
+            ref err => panic!("match failed, got {:?}", err),
+        }
+    }
+
+    #[test]
+    fn read_trimmed_records() {
+        let data = b("foo,  bar,\tbaz\n  1,  2,  3\n1\t,\t,3\t\t");
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(true)
+            .trim(Trim::Fields)
+            .from_reader(data);
+        let mut rec = ByteRecord::new();
+        assert!(rdr.read_byte_record(&mut rec).unwrap());
+        assert_eq!("1", s(&rec[0]));
+        assert_eq!("2", s(&rec[1]));
+        assert_eq!("3", s(&rec[2]));
+        {
+            let headers = rdr.headers().unwrap();
+            assert_eq!(3, headers.len());
+            assert_eq!("foo", &headers[0]);
+            assert_eq!("  bar", &headers[1]);
+            assert_eq!("\tbaz", &headers[2]);
+        }
     }
 
     #[test]

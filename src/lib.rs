@@ -286,6 +286,42 @@ impl Default for Terminator {
     }
 }
 
+/// The whitespace preservation behaviour when reading CSV data.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Trim {
+    /// Preserves fields and headers. This is the default.
+    None,
+    /// Trim whitespace from headers.
+    Headers,
+    /// Trim whitespace from fields, but not headers.
+    Fields,
+    /// Trim whitespace from fields and headers.
+    All,
+    /// Hints that destructuring should not be exhaustive.
+    ///
+    /// This enum may grow additional variants, so this makes sure clients
+    /// don't count on exhaustive matching. (Otherwise, adding a new variant
+    /// could break existing code.)
+    #[doc(hidden)]
+    __Nonexhaustive,
+}
+
+impl Trim {
+    fn should_trim_fields(&self) -> bool {
+        self == &Trim::Fields || self == &Trim::All
+    }
+
+    fn should_trim_headers(&self) -> bool {
+        self == &Trim::Headers || self == &Trim::All
+    }
+}
+
+impl Default for Trim {
+    fn default() -> Trim {
+        Trim::None
+    }
+}
+
 /// A custom Serde deserializer for possibly invalid `Option<T>` fields.
 ///
 /// When deserializing CSV data, it is sometimes desirable to simply ignore
