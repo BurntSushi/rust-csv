@@ -28,6 +28,12 @@ and this to your crate root:
 extern crate csv_core;
 ```
 
+### Build features
+
+This crate by default links with `libc`, which is done via the `libc` feature.
+Disabling this feature will drop `csv-core`'s dependency on `libc`.
+
+
 ### Example: reading CSV
 
 This example shows how to count the number of fields and records in CSV data.
