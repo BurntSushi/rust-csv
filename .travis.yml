@@ -5,14 +5,4 @@ rust:
   - stable
   - beta
   - nightly
-script:
-  - ./ci/check-copy cookbook
-  - ./ci/check-copy tutorial
-  - cargo build --verbose
-  - cargo test --verbose
-  - cargo test --verbose --manifest-path csv-core/Cargo.toml
-  - cargo test --verbose --manifest-path csv-index/Cargo.toml
-  - cargo doc
-  - if [ "$TRAVIS_RUST_VERSION" = "nightly" ]; then
-      cargo bench --verbose --no-run;
-    fi
+script: ci/script.sh

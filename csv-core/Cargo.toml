@@ -10,6 +10,7 @@ readme = "README.md"
 keywords = ["csv", "comma", "parser", "delimited", "no_std"]
 license = "Unlicense/MIT"
 categories = ["encoding", "no-std", "parser-implementations"]
+workspace = ".."
 
 [badges]
 travis-ci = { repository = "BurntSushi/rust-csv" }
@@ -27,9 +28,3 @@ memchr = { version = "2", default-features = false }
 
 [dev-dependencies]
 arrayvec = { version = "0.3", default-features = false }
-
-[profile.release]
-debug = true
-
-[profile.bench]
-debug = true

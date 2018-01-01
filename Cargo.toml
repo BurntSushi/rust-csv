@@ -15,11 +15,14 @@ categories = ["encoding", "parser-implementations"]
 travis-ci = { repository = "BurntSushi/rust-csv" }
 appveyor = { repository = "BurntSushi/rust-csv" }
 
+[workspace]
+members = ["csv-core", "csv-index"]
+
 [lib]
 bench = false
 
 [dependencies]
-csv-core = { path = "csv-core", version = "0.1.3" }
+csv-core = { path = "csv-core", version = "0.1.4" }
 serde = "1.0.7"
 
 [dev-dependencies]
