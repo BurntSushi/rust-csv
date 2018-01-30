@@ -417,6 +417,52 @@ impl ByteRecord {
         self.truncate(0);
     }
 
+    /// Trim the fields of this record so that leading and trailing whitespace is removed.
+    ///
+    /// Note that the whitespace trimmed is currently only the ASCII space and tab.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use csv::ByteRecord;
+    ///
+    /// let mut record = ByteRecord::from(vec!["  ", "\tfoo", "bar  ", "b a z"]);
+    /// record.trim();
+    /// assert_eq!(record, vec!["", "foo", "bar", "b a z"]);
+    /// ```
+    pub fn trim(&mut self) {
+        // TODO: try the recursive approach from StringRecord. Need to emulate trim_matches
+        let mut trimmed = 0;
+
+        for field in 0..self.len() {
+            self.0.bounds.ends[field] -= trimmed;
+            let bound = self.0.bounds.get(field).unwrap();
+
+            let front_whitespace = self.count_leading_whitespace(bound.clone());
+
+            let mut back_whitespace = 0;
+            if front_whitespace < bound.end - bound.start {
+                back_whitespace = self.count_leading_whitespace(bound.clone().rev());
+            }
+
+            self.0.fields.drain(bound.end - back_whitespace..bound.end);
+            self.0.fields.drain(bound.start..bound.start + front_whitespace);
+            self.0.bounds.ends[field] -= front_whitespace + back_whitespace;
+            trimmed += front_whitespace + back_whitespace;
+        }
+    }
+
+    fn count_leading_whitespace<R: Iterator<Item=usize>>(&self, range: R) -> usize {
+        let mut count = 0;
+        for i in range {
+            if self.0.fields[i] != b' ' && self.0.fields[i] != b'\t' && self.0.fields[i] != b'\n' && self.0.fields[i] != b'\r' && self.0.fields[i] != b'\x0c' {
+                break;
+            }
+            count += 1;
+        }
+        count
+    }
+
     /// Add a new field to this record.
     ///
     /// # Example
@@ -840,6 +886,36 @@ mod tests {
         assert_eq!(rec.len(), 0);
         assert_eq!(rec.get(0), None);
         assert_eq!(rec.get(1), None);
+    }
+
+    #[test]
+    fn whitespace_only_record_trimmed() {
+        let mut rec = ByteRecord::new();
+        rec.push_field(b" \t\n\r\x0c");
+
+        rec.trim();
+
+        assert_eq!(rec.get(0), Some(b("")));
+    }
+
+    #[test]
+    fn trim_does_not_panic_on_empty_records_1() {
+        let mut rec = ByteRecord::new();
+        rec.push_field(b"");
+        rec.trim();
+
+        assert_eq!(rec.get(0), Some(b("")));
+    }
+
+    #[test]
+    fn trim_does_not_panic_on_empty_records_2() {
+        let mut rec = ByteRecord::new();
+        rec.push_field(b"");
+        rec.push_field(b"");
+        rec.trim();
+
+        assert_eq!(rec.get(0), Some(b("")));
+        assert_eq!(rec.get(1), Some(b("")));
     }
 
     #[test]

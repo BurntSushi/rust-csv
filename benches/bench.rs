@@ -11,7 +11,7 @@ use std::io;
 use serde::de::DeserializeOwned;
 use test::Bencher;
 
-use csv::{ByteRecord, Reader, ReaderBuilder, StringRecord, Writer};
+use csv::{ByteRecord, Reader, ReaderBuilder, StringRecord, Writer, Trim};
 
 static NFL: &'static str =
     include_str!("../examples/data/bench/nfl.csv");
@@ -128,6 +128,24 @@ macro_rules! bench {
     };
 }
 
+macro_rules! bench_trimmed {
+    ($name:ident, $data:ident, $counter:ident, $result:expr) => {
+        #[bench]
+        fn $name(b: &mut Bencher) {
+            let data = $data.as_bytes();
+            b.bytes = data.len() as u64;
+            b.iter(|| {
+                let mut rdr = ReaderBuilder::new()
+                    .has_headers(false)
+                    .trim(Trim::All)
+                    .from_reader(data);
+                assert_eq!($counter(&mut rdr), $result);
+            })
+        }
+    };
+}
+
+
 macro_rules! bench_serde {
     (no_headers,
      $name:ident, $data:ident, $counter:ident, $type:ty, $result:expr) => {
@@ -213,7 +231,9 @@ bench_serde_borrowed_bytes!(
 bench_serde_borrowed_str!(
     count_nfl_deserialize_borrowed_str, NFL, NFLRowBorrowed, true, 9999);
 bench!(count_nfl_iter_bytes, NFL, count_iter_bytes, 130000);
+bench_trimmed!(count_nfl_iter_bytes_trimmed, NFL, count_iter_bytes, 130000);
 bench!(count_nfl_iter_str, NFL, count_iter_str, 130000);
+bench_trimmed!(count_nfl_iter_str_trimmed, NFL, count_iter_str, 130000);
 bench!(count_nfl_read_bytes, NFL, count_read_bytes, 130000);
 bench!(count_nfl_read_str, NFL, count_read_str, 130000);
 bench_serde!(
