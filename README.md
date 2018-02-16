@@ -2,7 +2,7 @@ csv
 ===
 A fast and flexible CSV reader and writer for Rust, with support for Serde.
 
-[![Linux build status](https://api.travis-ci.org/BurntSushi/rust-csv.png)](https://travis-ci.org/BurntSushi/rust-csv)
+[![Linux build status](https://api.travis-ci.org/BurntSushi/rust-csv.svg)](https://travis-ci.org/BurntSushi/rust-csv)
 [![Windows build status](https://ci.appveyor.com/api/projects/status/github/BurntSushi/rust-csv?svg=true)](https://ci.appveyor.com/project/BurntSushi/rust-csv)
 [![](http://meritbadge.herokuapp.com/csv)](https://crates.io/crates/csv)
 
