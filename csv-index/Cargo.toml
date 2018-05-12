@@ -1,6 +1,6 @@
 [package]
 name = "csv-index"
-version = "0.1.4"  #:version
+version = "0.1.5"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 description = "On disk CSV indexing data structures."
 documentation = "https://docs.rs/csv-index"
