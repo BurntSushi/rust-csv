@@ -1129,4 +1129,35 @@ mod tests {
             .collect();
         assert_eq!(got, expected);
     }
+
+    #[test]
+    fn flatten() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Input {
+            x: f64,
+            y: f64,
+        }
+
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Properties {
+            prop1: f64,
+            prop2: f64,
+        }
+
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Row {
+            #[serde(flatten)]
+            input: Input,
+            #[serde(flatten)]
+            properties: Properties,
+        }
+
+        let header = StringRecord::from(vec!["x", "y", "prop1", "prop2"]);
+        let record = StringRecord::from(vec!["1", "2", "3", "4"]);
+        let got: Row = record.deserialize(Some(&header)).unwrap();
+        assert_eq!(got, Row {
+            input: Input { x: 1.0, y: 2.0 },
+            properties: Properties { prop1: 3.0, prop2: 4.0 },
+        });
+    }
 }
