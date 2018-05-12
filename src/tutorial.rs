@@ -11,7 +11,7 @@ useful. There is also a
 of examples for those that prefer more information density.
 
 For an introduction to Rust, please see the
-[official book](https://doc.rust-lang.org/beta/book/second-edition/).
+[official book](https://doc.rust-lang.org/book/second-edition/).
 If you haven't written any Rust code yet but have written code in another
 language, then this tutorial might be accessible to you without needing to read
 the book first.
@@ -53,7 +53,7 @@ $ cd csvtutor
 ```
 
 Once inside `csvtutor`, open `Cargo.toml` in your favorite text editor and add
-`csv = "1.0.0-beta.5"` to your `[dependencies]` section. At this point, your
+`csv = "1"` to your `[dependencies]` section. At this point, your
 `Cargo.toml` should look something like this:
 
 ```text
@@ -63,7 +63,7 @@ version = "0.1.0"
 authors = ["Your Name"]
 
 [dependencies]
-csv = "1.0.0-beta.5"
+csv = "1"
 ```
 
 Next, let's build your project. Since you added the `csv` crate as a
@@ -147,9 +147,9 @@ comfortable with things like `Result` and `try!`/`?` in Rust, then you can
 safely skip this section.**
 
 Note that
-[The Rust Programming Language Book](https://doc.rust-lang.org/beta/book/second-edition/)
+[The Rust Programming Language Book](https://doc.rust-lang.org/book/second-edition/)
 contains an
-[introduction to general error handling](https://doc.rust-lang.org/beta/book/second-edition/ch09-00-error-handling.html).
+[introduction to general error handling](https://doc.rust-lang.org/book/second-edition/ch09-00-error-handling.html).
 For a deeper dive, see
 [my blog post on error handling in Rust](http://blog.burntsushi.net/rust-error-handling/).
 The blog post is especially important if you plan on building Rust libraries.

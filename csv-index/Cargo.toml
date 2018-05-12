@@ -21,4 +21,4 @@ bench = false
 
 [dependencies]
 byteorder = "1"
-csv = { path = "..", version = "1.0.0-beta.5" }
+csv = { path = "..", version = "1" }
