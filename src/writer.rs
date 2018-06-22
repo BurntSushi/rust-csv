@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::fs::File;
 use std::io;
 use std::path::Path;
@@ -951,6 +952,44 @@ impl<W: io::Write> Writer<W> {
         self.write_terminator()
     }
 
+    /// Write a single record.
+    ///
+    /// This method accepts something that can be turned into an iterator that
+    /// yields elements that implement the Display trait, which includes most
+    /// primitive types such as integers and strings.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// extern crate csv;
+    ///
+    /// use std::fmt::Display;
+    /// use std::error::Error;
+    /// use csv::Writer;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<Error>> {
+    ///     let mut wtr = Writer::from_writer(vec![]);
+    ///     let rec: &[&Display] = &[&1, &2.2, &"abc"];
+    ///     wtr.write_disp_record(rec);
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "1,2.2,abc\n");
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn write_disp_record<I, T>(&mut self, record: I) -> Result<()>
+    where
+        I: IntoIterator<Item = T>,
+        for<'a> &'a T: Display,
+    {
+        for field in record.into_iter() {
+            let s = format!("{}", &field);
+            self.write_field_impl(s.as_bytes())?;
+        }
+        self.write_terminator()
+    }
+
     /// Write a single `ByteRecord`.
     ///
     /// This method accepts a borrowed `ByteRecord` and writes its contents
@@ -1230,6 +1269,7 @@ impl Buffer {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Display;
     use byte_record::ByteRecord;
     use error::ErrorKind;
     use string_record::StringRecord;
@@ -1246,6 +1286,15 @@ mod tests {
         wtr.write_record(&["a", "b", "c"]).unwrap();
 
         assert_eq!(wtr_as_string(wtr), "a,b,c\n");
+    }
+
+    #[test]
+    fn one_disp_record() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        let l: &[&Display] = &[&1, &"abc"];
+        wtr.write_disp_record(l).unwrap();
+
+        assert_eq!(wtr_as_string(wtr), "1,abc\n");
     }
 
     #[test]
