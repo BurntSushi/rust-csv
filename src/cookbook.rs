@@ -71,7 +71,7 @@ This is like the previous example, except it shows how to deserialize each
 record into a struct type that you define.
 
 For more examples and details on how Serde deserialization works, see the
-[`Reader::deserialize`](struct.Reader.html#method.deserialize)
+[`Reader::deserialize`](../struct.Reader.html#method.deserialize)
 method.
 
 ```no_run
