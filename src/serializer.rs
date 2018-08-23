@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::{self, Write};
 use std::io;
 use std::mem;
 
@@ -11,7 +11,7 @@ use serde::ser::{
 };
 
 use error::{Error, ErrorKind, new_error};
-use writer::Writer;
+use writer::{Writer, SingleFieldWriter};
 
 /// Serialize the given value to the given writer, and return an error if
 /// anything went wrong.
@@ -34,6 +34,12 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     type SerializeStruct = Self;
     type SerializeStructVariant = Self;
 
+    fn collect_str<T: ?Sized + fmt::Display>(self, v: &T) -> Result<(), Error> {
+        let mut sfw = SingleFieldWriter::start_field(self.wtr)?;
+        let _ = write!(sfw, "{}", v);
+        sfw.take_formatting_error()
+    }
+
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         if v {
             self.wtr.write_field("true")
@@ -43,47 +49,47 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     }
 
     fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
-        self.wtr.write_field(v.to_string().as_bytes())
+        self.collect_str(&v)
     }
 
     fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
-        self.wtr.write_field(v.to_string().as_bytes())
+        self.collect_str(&v)
     }
 
     fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
-        self.wtr.write_field(v.to_string().as_bytes())
+        self.collect_str(&v)
     }
 
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        self.wtr.write_field(v.to_string().as_bytes())
+        self.collect_str(&v)
     }
 
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
-        self.wtr.write_field(v.to_string().as_bytes())
+        self.collect_str(&v)
     }
 
     fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
-        self.wtr.write_field(v.to_string().as_bytes())
+        self.collect_str(&v)
     }
 
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-        self.wtr.write_field(v.to_string().as_bytes())
+        self.collect_str(&v)
     }
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
-        self.wtr.write_field(v.to_string().as_bytes())
+        self.collect_str(&v)
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
-        self.wtr.write_field(v.to_string().as_bytes())
+        self.collect_str(&v)
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
-        self.wtr.write_field(v.to_string().as_bytes())
+        self.collect_str(&v)
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
-        self.wtr.write_field(v.to_string().as_bytes())
+        self.collect_str(&v)
     }
 
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
