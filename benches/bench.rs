@@ -11,7 +11,7 @@ use std::io;
 use serde::de::DeserializeOwned;
 use test::Bencher;
 
-use csv::{ByteRecord, Reader, ReaderBuilder, StringRecord, Writer, Trim};
+use csv::{ByteRecord, Reader, ReaderBuilder, StringRecord, Writer, WriterBuilder, Trim};
 
 static NFL: &'static str =
     include_str!("../examples/data/bench/nfl.csv");
@@ -22,7 +22,7 @@ static POP: &'static str =
 static MBTA: &'static str =
     include_str!("../examples/data/bench/gtfs-mbta-stop-times.csv");
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct NFLRowOwned {
     gameid: String,
     qtr: i32,
@@ -39,7 +39,7 @@ struct NFLRowOwned {
     season: i32,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct NFLRowBorrowed<'a> {
     gameid: &'a str,
     qtr: i32,
@@ -56,13 +56,13 @@ struct NFLRowBorrowed<'a> {
     season: i32,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct GAMERowOwned(String, String, String, String, i32, String);
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct GAMERowBorrowed<'a>(&'a str, &'a str, &'a str, &'a str, i32, &'a str);
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 struct POPRowOwned {
     country: String,
@@ -74,7 +74,7 @@ struct POPRowOwned {
     longitude: f64,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 struct POPRowBorrowed<'a> {
     country: &'a str,
@@ -86,7 +86,7 @@ struct POPRowBorrowed<'a> {
     longitude: f64,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct MBTARowOwned {
     trip_id: String,
     arrival_time: String,
@@ -99,7 +99,7 @@ struct MBTARowOwned {
     timepoint: i32,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct MBTARowBorrowed<'a> {
     trip_id: &'a str,
     arrival_time: &'a str,
@@ -110,6 +110,18 @@ struct MBTARowBorrowed<'a> {
     pickup_type: i32,
     drop_off_type: i32,
     timepoint: i32,
+}
+
+#[derive(Default)]
+struct ByteCounter {
+    count: usize
+}
+impl io::Write for ByteCounter {
+    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        self.count += data.len();
+        Ok(data.len())
+    }
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
 }
 
 macro_rules! bench {
@@ -148,9 +160,9 @@ macro_rules! bench_trimmed {
 
 macro_rules! bench_serde {
     (no_headers,
-     $name:ident, $data:ident, $counter:ident, $type:ty, $result:expr) => {
+     $name_de:ident, $name_ser:ident, $data:ident, $counter:ident, $type:ty, $result:expr) => {
         #[bench]
-        fn $name(b: &mut Bencher) {
+        fn $name_de(b: &mut Bencher) {
             let data = $data.as_bytes();
             b.bytes = data.len() as u64;
             b.iter(|| {
@@ -160,10 +172,35 @@ macro_rules! bench_serde {
                 assert_eq!($counter::<_, $type>(&mut rdr), $result);
             })
         }
-    };
-    ($name:ident, $data:ident, $counter:ident, $type:ty, $result:expr) => {
         #[bench]
-        fn $name(b: &mut Bencher) {
+        fn $name_ser(b: &mut Bencher) {
+            let data = $data.as_bytes();
+            let values = ReaderBuilder::new()
+                .has_headers(false)
+                .from_reader(data)
+                .deserialize()
+                .collect::<Result<Vec<$type>, _>>()
+                .unwrap();
+
+            let do_it = || {
+                let mut counter = ByteCounter::default();
+                {
+                    let mut wtr = WriterBuilder::new()
+                        .has_headers(false)
+                        .from_writer(&mut counter);
+                    for val in &values {
+                        wtr.serialize(val).unwrap();
+                    }
+                }
+                counter.count
+            };
+            b.bytes = do_it() as u64;
+            b.iter(do_it)
+        }
+    };
+    ($name_de:ident, $name_ser:ident, $data:ident, $counter:ident, $type:ty, $result:expr) => {
+        #[bench]
+        fn $name_de(b: &mut Bencher) {
             let data = $data.as_bytes();
             b.bytes = data.len() as u64;
             b.iter(|| {
@@ -172,6 +209,31 @@ macro_rules! bench_serde {
                     .from_reader(data);
                 assert_eq!($counter::<_, $type>(&mut rdr), $result);
             })
+        }
+        #[bench]
+        fn $name_ser(b: &mut Bencher) {
+            let data = $data.as_bytes();
+            let values = ReaderBuilder::new()
+                .has_headers(true)
+                .from_reader(data)
+                .deserialize()
+                .collect::<Result<Vec<$type>, _>>()
+                .unwrap();
+
+            let do_it = || {
+                let mut counter = ByteCounter::default();
+                {
+                    let mut wtr = WriterBuilder::new()
+                        .has_headers(true)
+                        .from_writer(&mut counter);
+                    for val in &values {
+                        wtr.serialize(val).unwrap();
+                    }
+                }
+                counter.count
+            };
+            b.bytes = do_it() as u64;
+            b.iter(do_it)
         }
     };
 }
@@ -222,9 +284,11 @@ macro_rules! bench_serde_borrowed_str {
 
 bench_serde!(
     count_nfl_deserialize_owned_bytes,
+    count_nfl_serialize_owned_bytes,
     NFL, count_deserialize_owned_bytes, NFLRowOwned, 9999);
 bench_serde!(
     count_nfl_deserialize_owned_str,
+    count_nfl_serialize_owned_str,
     NFL, count_deserialize_owned_str, NFLRowOwned, 9999);
 bench_serde_borrowed_bytes!(
     count_nfl_deserialize_borrowed_bytes, NFL, NFLRowBorrowed, true, 9999);
@@ -239,10 +303,12 @@ bench!(count_nfl_read_str, NFL, count_read_str, 130000);
 bench_serde!(
     no_headers,
     count_game_deserialize_owned_bytes,
+    count_game_serialize_owned_bytes,
     GAME, count_deserialize_owned_bytes, GAMERowOwned, 100000);
 bench_serde!(
     no_headers,
     count_game_deserialize_owned_str,
+    count_game_serialize_owned_str,
     GAME, count_deserialize_owned_str, GAMERowOwned, 100000);
 bench_serde_borrowed_bytes!(
     count_game_deserialize_borrowed_bytes,
@@ -256,9 +322,11 @@ bench!(count_game_read_bytes, GAME, count_read_bytes, 600000);
 bench!(count_game_read_str, GAME, count_read_str, 600000);
 bench_serde!(
     count_pop_deserialize_owned_bytes,
+    count_pop_serialize_owned_bytes,
     POP, count_deserialize_owned_bytes, POPRowOwned, 20000);
 bench_serde!(
     count_pop_deserialize_owned_str,
+    count_pop_serialize_owned_str,
     POP, count_deserialize_owned_str, POPRowOwned, 20000);
 bench_serde_borrowed_bytes!(
     count_pop_deserialize_borrowed_bytes,
@@ -272,9 +340,11 @@ bench!(count_pop_read_bytes, POP, count_read_bytes, 140007);
 bench!(count_pop_read_str, POP, count_read_str, 140007);
 bench_serde!(
     count_mbta_deserialize_owned_bytes,
+    count_mbta_serialize_owned_bytes,
     MBTA, count_deserialize_owned_bytes, MBTARowOwned, 9999);
 bench_serde!(
     count_mbta_deserialize_owned_str,
+    count_mbta_serialize_owned_str,
     MBTA, count_deserialize_owned_str, MBTARowOwned, 9999);
 bench_serde_borrowed_bytes!(
     count_mbta_deserialize_borrowed_bytes,
