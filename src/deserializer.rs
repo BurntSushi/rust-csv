@@ -415,8 +415,6 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
     ) -> Result<V::Value, Self::Error> {
         self.next_field_bytes()
             .and_then(|f| visitor.visit_byte_buf(f.to_vec()))
-        // self.next_field()
-            // .and_then(|f| visitor.visit_byte_buf(f.as_bytes().to_vec()))
     }
 
     fn deserialize_option<V: Visitor<'de>>(
