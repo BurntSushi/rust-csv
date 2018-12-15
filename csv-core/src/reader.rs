@@ -990,6 +990,8 @@ impl Reader {
             StartRecord => {
                 if self.term.equals(c) {
                     (StartRecord, NfaInputAction::Discard)
+                } else if self.comment == Some(c) {
+                    (InComment, NfaInputAction::Discard)
                 } else {
                     (StartField, NfaInputAction::Epsilon)
                 }
@@ -1004,8 +1006,6 @@ impl Reader {
                     (EndFieldDelim, NfaInputAction::Discard)
                 } else if self.term.equals(c) {
                     (EndFieldTerm, NfaInputAction::Epsilon)
-                } else if self.comment == Some(c) {
-                    (InComment, NfaInputAction::Discard)
                 } else {
                     (InField, NfaInputAction::CopyToOutput)
                 }
@@ -1623,6 +1623,10 @@ mod tests {
         "foo\n# hi\nbar\n",
         csv![["foo"], ["# hi"], ["bar"]],
         |b: &mut ReaderBuilder| { b.comment(Some(b'\n')); });
+    parses_to!(comment_4, "foo,b#ar,baz", csv![["foo", "b#ar", "baz"]],
+               |b: &mut ReaderBuilder| { b.comment(Some(b'#')); });
+    parses_to!(comment_5, "foo,#bar,baz", csv![["foo", "#bar", "baz"]],
+               |b: &mut ReaderBuilder| { b.comment(Some(b'#')); });
 
     macro_rules! assert_read {
         (
