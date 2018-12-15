@@ -74,7 +74,7 @@ pub struct StringRecord(ByteRecord);
 
 impl PartialEq for StringRecord {
     fn eq(&self, other: &StringRecord) -> bool {
-        self.as_slice() == other.as_slice()
+        self.iter().zip(other.iter()).all(|e| e.0 == e.1)
     }
 }
 
