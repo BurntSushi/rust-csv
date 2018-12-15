@@ -754,7 +754,7 @@ mod tests {
     use std::collections::HashMap;
 
     use serde::de::DeserializeOwned;
-    use serde_bytes::ByteBuf;
+    use serde_bytes::{self, ByteBuf};
 
     use byte_record::ByteRecord;
     use error::Error;
