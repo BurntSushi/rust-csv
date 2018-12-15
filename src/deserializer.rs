@@ -413,8 +413,10 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        self.next_field()
-            .and_then(|f| visitor.visit_byte_buf(f.as_bytes().to_vec()))
+        self.next_field_bytes()
+            .and_then(|f| visitor.visit_byte_buf(f.to_vec()))
+        // self.next_field()
+            // .and_then(|f| visitor.visit_byte_buf(f.as_bytes().to_vec()))
     }
 
     fn deserialize_option<V: Visitor<'de>>(
@@ -773,6 +775,10 @@ mod tests {
         let headers = StringRecord::from(headers);
         let record = StringRecord::from(fields);
         deserialize_string_record(&record, Some(&headers))
+    }
+
+    fn b<'a, T: AsRef<[u8]> + ?Sized>(bytes: &'a T) -> &'a [u8] {
+        bytes.as_ref()
     }
 
     #[test]
@@ -1158,6 +1164,30 @@ mod tests {
         assert_eq!(got, Row {
             input: Input { x: 1.0, y: 2.0 },
             properties: Properties { prop1: 3.0, prop2: 4.0 },
+        });
+    }
+
+    #[test]
+    fn partially_invalid_utf8() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Row {
+            h1: String,
+            #[serde(with = "serde_bytes")]
+            h2: Vec<u8>,
+            h3: String,
+        }
+
+        let headers = ByteRecord::from(vec![b"h1", b"h2", b"h3"]);
+        let record = ByteRecord::from(vec![
+            b(b"baz"), b(b"foo\xFFbar"), b(b"quux"),
+        ]);
+        let got: Row = deserialize_byte_record(
+            &record, Some(&headers),
+        ).unwrap();
+        assert_eq!(got, Row {
+            h1: "baz".to_string(),
+            h2: b"foo\xFFbar".to_vec(),
+            h3: "quux".to_string(),
         });
     }
 }
