@@ -94,7 +94,13 @@ pub fn eq<I, T>(record: &ByteRecord, other: I) -> bool
 /// it.
 ///
 /// If you are using the Serde (de)serialization APIs, then you probably never
-/// need to interact with a `ByteRecord` or a `StringRecord`.
+/// need to interact with a `ByteRecord` or a `StringRecord`. However, there
+/// are some circumstances in which you might need to use a raw record type
+/// while still using Serde. For example, if you need to deserialize possibly
+/// invalid UTF-8 fields, then you'll need to first read your record into a
+/// `ByteRecord`, and then use `ByteRecord::deserialize` to run Serde. Another
+/// reason for using the raw record deserialization APIs is if you're using
+/// Serde to read into borrowed data such as a `&'a str` or a `&'a [u8]`.
 ///
 /// Two `ByteRecord`s are compared on the basis of their field data. Any
 /// position information associated with the records is ignored.
