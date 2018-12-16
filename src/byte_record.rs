@@ -109,6 +109,9 @@ pub struct ByteRecord(Box<ByteRecordInner>);
 
 impl PartialEq for ByteRecord {
     fn eq(&self, other: &ByteRecord) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
         self.iter().zip(other.iter()).all(|e| e.0 == e.1)
     }
 }
@@ -1143,5 +1146,26 @@ mod tests {
         assert_eq!(it.next(), Some(b("baz")));
         assert_eq!(it.next_back(), None);
         assert_eq!(it.next(), None);
+    }
+
+    // Check that record equality respects field boundaries.
+    //
+    // Regression test for #138.
+    #[test]
+    fn eq_field_boundaries() {
+        let test1 = ByteRecord::from(vec!["12","34"]);
+        let test2 = ByteRecord::from(vec!["123","4"]);
+
+        assert_ne!(test1, test2);
+    }
+
+    // Check that record equality respects number of fields.
+    //
+    // Regression test for #138.
+    #[test]
+    fn eq_record_len() {
+        let test1 = ByteRecord::from(vec!["12","34", "56"]);
+        let test2 = ByteRecord::from(vec!["12","34"]);
+        assert_ne!(test1, test2);
     }
 }

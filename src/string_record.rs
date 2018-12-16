@@ -74,7 +74,7 @@ pub struct StringRecord(ByteRecord);
 
 impl PartialEq for StringRecord {
     fn eq(&self, other: &StringRecord) -> bool {
-        self.iter().zip(other.iter()).all(|e| e.0 == e.1)
+        byte_record::eq(&self.0, &other.0)
     }
 }
 
@@ -808,5 +808,26 @@ mod tests {
         ]);
         rec.trim();
         assert_eq!(rec.get(0), Some(""));
+    }
+
+    // Check that record equality respects field boundaries.
+    //
+    // Regression test for #138.
+    #[test]
+    fn eq_field_boundaries() {
+        let test1 = StringRecord::from(vec!["12","34"]);
+        let test2 = StringRecord::from(vec!["123","4"]);
+
+        assert_ne!(test1, test2);
+    }
+
+    // Check that record equality respects number of fields.
+    //
+    // Regression test for #138.
+    #[test]
+    fn eq_record_len() {
+        let test1 = StringRecord::from(vec!["12","34", "56"]);
+        let test2 = StringRecord::from(vec!["12","34"]);
+        assert_ne!(test1, test2);
     }
 }

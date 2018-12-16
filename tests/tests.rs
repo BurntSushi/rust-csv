@@ -2,9 +2,6 @@
 
 extern crate csv;
 
-use csv::ByteRecord;
-use csv::StringRecord;
-
 use std::env;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -336,24 +333,6 @@ fn tutorial_perf_core_01() {
     let mut cmd = cmd_for_example("tutorial-perf-core-01");
     let out = cmd_output_with(&mut cmd, WORLDPOP.as_bytes());
     assert_eq!(out.stdout(), "11\n");
-}
-
-///Check for correctness of ```impl PartialEq for ByteRecord``` (Issue #138)
-#[test]
-fn byte_record_eq_field_boundaries() {
-    let test1 = ByteRecord::from(vec!["12","34"]);
-    let test2 = ByteRecord::from(vec!["123","4"]);
-
-    assert_ne!(test1, test2);
-}
-
-///Check for correctness of ```impl PartialEq for StringRecord``` (Issue #138)
-#[test]
-fn string_record_eq_field_boundaries() {
-    let test1 = StringRecord::from(vec!["12","34"]);
-    let test2 = StringRecord::from(vec!["123","4"]);
-
-    assert_ne!(test1, test2);
 }
 
 // Helper functions follow.
