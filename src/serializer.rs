@@ -15,7 +15,10 @@ use writer::{Writer, SingleFieldWriter};
 
 /// Serialize the given value to the given writer, and return an error if
 /// anything went wrong.
-pub fn serialize<S: Serialize, W: io::Write>(wtr: &mut Writer<W>, value: S) -> Result<(), Error> {
+pub fn serialize<S: Serialize, W: io::Write>(
+    wtr: &mut Writer<W>,
+    value: S,
+) -> Result<(), Error> {
     value.serialize(&mut SeRecord { wtr: wtr })
 }
 
@@ -34,7 +37,10 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     type SerializeStruct = Self;
     type SerializeStructVariant = Self;
 
-    fn collect_str<T: ?Sized + fmt::Display>(self, v: &T) -> Result<(), Error> {
+    fn collect_str<T: ?Sized + fmt::Display>(
+        self,
+        v: &T,
+    ) -> Result<(), Error> {
         let mut sfw = SingleFieldWriter::start_field(self.wtr)?;
         let _ = write!(sfw, "{}", v);
         sfw.take_formatting_error()
@@ -340,14 +346,16 @@ impl SerdeError for Error {
 
 fn error_scalar_outside_struct<T: fmt::Display>(name: T) -> Error {
     Error::custom(format!(
-        "cannot serialize {} scalar outside struct when writing headers from structs",
+        "cannot serialize {} scalar outside struct \
+         when writing headers from structs",
         name
     ))
 }
 
 fn error_container_inside_struct<T: fmt::Display>(name: T) -> Error {
     Error::custom(format!(
-        "cannot serialize {} container inside struct when writing headers from structs",
+        "cannot serialize {} container inside struct \
+         when writing headers from structs",
         name
     ))
 }
@@ -415,7 +423,8 @@ enum HeaderState {
     /// The serializer still has not encountered a struct field. If one is
     /// encountered (headers need to be written), return the enclosed error.
     ErrorIfWrite(Error),
-    /// The serializer encountered one or more struct fields (and wrote their names).
+    /// The serializer encountered one or more struct fields (and wrote their
+    /// names).
     EncounteredStructField,
     /// The serializer is currently in a struct field value.
     InStructField,
@@ -442,8 +451,12 @@ impl<'w, W: io::Write> SeHeader<'w, W> {
         }
     }
 
-    fn handle_scalar<T: fmt::Display>(&mut self, name: T) -> Result<(), Error> {
+    fn handle_scalar<T: fmt::Display>(
+        &mut self,
+        name: T,
+    ) -> Result<(), Error> {
         use self::HeaderState::*;
+
         match self.state {
             Write => {
                 self.state = ErrorIfWrite(error_scalar_outside_struct(name));
@@ -454,7 +467,10 @@ impl<'w, W: io::Write> SeHeader<'w, W> {
         }
     }
 
-    fn handle_container<T: fmt::Display>(&mut self, name: T) -> Result<&mut Self, Error> {
+    fn handle_container<T: fmt::Display>(
+        &mut self,
+        name: T,
+    ) -> Result<&mut Self, Error> {
         if let HeaderState::InStructField = self.state {
             Err(error_container_inside_struct(name))
         } else {
@@ -534,7 +550,10 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
         self.handle_scalar("None")
     }
 
-    fn serialize_some<T: ?Sized + Serialize>(self, _value: &T) -> Result<Self::Ok, Self::Error> {
+    fn serialize_some<T: ?Sized + Serialize>(
+        self,
+        _value: &T,
+    ) -> Result<Self::Ok, Self::Error> {
         self.handle_scalar("Some(_)")
     }
 
@@ -542,7 +561,10 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
         self.handle_scalar("()")
     }
 
-    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(
+        self,
+        name: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
         self.handle_scalar(name)
     }
 
@@ -573,11 +595,17 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
         self.handle_scalar(format!("{}::{}(_)", name, variant))
     }
 
-    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(
+        self,
+        _len: Option<usize>,
+    ) -> Result<Self::SerializeSeq, Self::Error> {
         self.handle_container("sequence")
     }
 
-    fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(
+        self,
+        _len: usize,
+    ) -> Result<Self::SerializeTuple, Self::Error> {
         self.handle_container("tuple")
     }
 
@@ -601,7 +629,10 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
         ))
     }
 
-    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(
+        self,
+        _len: Option<usize>,
+    ) -> Result<Self::SerializeMap, Self::Error> {
         // The right behavior for serializing maps isn't clear.
         Err(Error::custom(
             "serializing maps is not supported, \
@@ -635,7 +666,10 @@ impl<'a, 'w, W: io::Write> SerializeSeq for &'a mut SeHeader<'w, W> {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_element<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
+    fn serialize_element<T: ?Sized + Serialize>(
+        &mut self,
+        value: &T,
+    ) -> Result<(), Self::Error> {
         value.serialize(&mut **self)
     }
 
@@ -648,7 +682,10 @@ impl<'a, 'w, W: io::Write> SerializeTuple for &'a mut SeHeader<'w, W> {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_element<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
+    fn serialize_element<T: ?Sized + Serialize>(
+        &mut self,
+        value: &T,
+    ) -> Result<(), Self::Error> {
         value.serialize(&mut **self)
     }
 
@@ -661,7 +698,10 @@ impl<'a, 'w, W: io::Write> SerializeTupleStruct for &'a mut SeHeader<'w, W> {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_field<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
+    fn serialize_field<T: ?Sized + Serialize>(
+        &mut self,
+        value: &T,
+    ) -> Result<(), Self::Error> {
         value.serialize(&mut **self)
     }
 
@@ -674,7 +714,10 @@ impl<'a, 'w, W: io::Write> SerializeTupleVariant for &'a mut SeHeader<'w, W> {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_field<T: ?Sized + Serialize>(&mut self, _value: &T) -> Result<(), Self::Error> {
+    fn serialize_field<T: ?Sized + Serialize>(
+        &mut self,
+        _value: &T,
+    ) -> Result<(), Self::Error> {
         unreachable!()
     }
 
@@ -687,11 +730,17 @@ impl<'a, 'w, W: io::Write> SerializeMap for &'a mut SeHeader<'w, W> {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_key<T: ?Sized + Serialize>(&mut self, _key: &T) -> Result<(), Self::Error> {
+    fn serialize_key<T: ?Sized + Serialize>(
+        &mut self,
+        _key: &T,
+    ) -> Result<(), Self::Error> {
         unreachable!()
     }
 
-    fn serialize_value<T: ?Sized + Serialize>(&mut self, _value: &T) -> Result<(), Self::Error> {
+    fn serialize_value<T: ?Sized + Serialize>(
+        &mut self,
+        _value: &T,
+    ) -> Result<(), Self::Error> {
         unreachable!()
     }
 
@@ -710,7 +759,10 @@ impl<'a, 'w, W: io::Write> SerializeStruct for &'a mut SeHeader<'w, W> {
         value: &T,
     ) -> Result<(), Self::Error> {
         // Grab old state and update state to `EncounteredStructField`.
-        let old_state = mem::replace(&mut self.state, HeaderState::EncounteredStructField);
+        let old_state = mem::replace(
+            &mut self.state,
+            HeaderState::EncounteredStructField,
+        );
         if let HeaderState::ErrorIfWrite(err) = old_state {
             return Err(err);
         }

@@ -118,7 +118,9 @@ impl StdError for Error {
         match *self.0 {
             ErrorKind::Io(ref err) => err.description(),
             ErrorKind::Utf8 { ref err, .. } => err.description(),
-            ErrorKind::UnequalLengths{..} => "record of different length found",
+            ErrorKind::UnequalLengths{..} => {
+                "record of different length found"
+            }
             ErrorKind::Seek => "headers unavailable on seeked CSV reader",
             ErrorKind::Serialize(ref err) => err,
             ErrorKind::Deserialize { ref err, .. } => err.description(),

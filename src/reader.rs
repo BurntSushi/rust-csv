@@ -2303,8 +2303,9 @@ mod tests {
             .from_reader(data);
         let mut rec = StringRecord::new();
 
-        let _ = rdr.read_record(&mut rec);  // force the headers to be read
-        // Check the byte headers are trimmed and string headers are still errors
+        // force the headers to be read
+        let _ = rdr.read_record(&mut rec);
+        // Check the byte headers are trimmed
         {
             let headers = rdr.byte_headers().unwrap();
             assert_eq!(3, headers.len());
