@@ -313,6 +313,7 @@ impl<W: ::std::any::Any> StdError for IntoInnerError<W> {
         self.err.description()
     }
 
+    #[allow(deprecated)]
     fn cause(&self) -> Option<&StdError> {
         self.err.cause()
     }
