@@ -34,7 +34,7 @@ and
 For data that may be invalid UTF-8, `ByteRecord` is suitable.
 
 Finally, the set of errors is described by the
-[`Error`](enum.Error.html)
+[`Error`](struct.Error.html)
 type.
 
 The rest of the types in this crate mostly correspond to more detailed errors,
