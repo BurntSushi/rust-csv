@@ -496,7 +496,7 @@ pub fn is_non_numeric(input: &[u8]) -> bool {
     // I suppose this could be faster if we wrote validators of numbers instead
     // of using the actual parser, but that's probably a lot of work for a bit
     // of a niche feature.
-    !s.parse::<f64>().is_ok() && !s.parse::<i64>().is_ok()
+    !s.parse::<f64>().is_ok() && !s.parse::<i128>().is_ok()
 }
 
 /// Escape quotes `input` and writes the result to `output`.
