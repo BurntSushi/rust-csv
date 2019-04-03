@@ -211,10 +211,14 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
             visitor.visit_bool(true)
         } else if x == "false" {
             visitor.visit_bool(false)
-        } else if let Some(n) = try_positive_integer(x) {
+        } else if let Some(n) = try_positive_integer_64(x) {
             visitor.visit_u64(n)
-        } else if let Some(n) = try_negative_integer(x) {
+        } else if let Some(n) = try_negative_integer_64(x) {
             visitor.visit_i64(n)
+        } else if let Some(n) = try_positive_integer(x) {
+            visitor.visit_u128(n)
+        } else if let Some(n) = try_negative_integer(x) {
+            visitor.visit_i128(n)
         } else if let Some(n) = try_float(x) {
             visitor.visit_f64(n)
         } else {
@@ -297,10 +301,14 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
             visitor.visit_bool(true)
         } else if x == b"false" {
             visitor.visit_bool(false)
-        } else if let Some(n) = try_positive_integer_bytes(x) {
+        } else if let Some(n) = try_positive_integer_bytes_64(x) {
             visitor.visit_u64(n)
-        } else if let Some(n) = try_negative_integer_bytes(x) {
+        } else if let Some(n) = try_negative_integer_bytes_64(x) {
             visitor.visit_i64(n)
+        }else if let Some(n) = try_positive_integer_bytes(x) {
+            visitor.visit_u128(n)
+        } else if let Some(n) = try_negative_integer_bytes(x) {
+            visitor.visit_i128(n)
         } else if let Some(n) = try_float_bytes(x) {
             visitor.visit_f64(n)
         } else if let Ok(s) = str::from_utf8(x) {
@@ -349,10 +357,12 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
     deserialize_int!(deserialize_u16, visit_u16);
     deserialize_int!(deserialize_u32, visit_u32);
     deserialize_int!(deserialize_u64, visit_u64);
+    deserialize_int!(deserialize_u128, visit_u128);
     deserialize_int!(deserialize_i8, visit_i8);
     deserialize_int!(deserialize_i16, visit_i16);
     deserialize_int!(deserialize_i32, visit_i32);
     deserialize_int!(deserialize_i64, visit_i64);
+    deserialize_int!(deserialize_i128, visit_i128);
 
     fn deserialize_f32<V: Visitor<'de>>(
         self,
@@ -723,11 +733,19 @@ impl DeserializeErrorKind {
     }
 }
 
-fn try_positive_integer(s: &str) -> Option<u64> {
+fn try_positive_integer(s: &str) -> Option<u128> {
     s.parse().ok()
 }
 
-fn try_negative_integer(s: &str) -> Option<i64> {
+fn try_negative_integer(s: &str) -> Option<i128> {
+    s.parse().ok()
+}
+
+fn try_positive_integer_64(s: &str) -> Option<u64> {
+    s.parse().ok()
+}
+
+fn try_negative_integer_64(s: &str) -> Option<i64> {
     s.parse().ok()
 }
 
@@ -735,11 +753,19 @@ fn try_float(s: &str) -> Option<f64> {
     s.parse().ok()
 }
 
-fn try_positive_integer_bytes(s: &[u8]) -> Option<u64> {
+fn try_positive_integer_bytes_64(s: &[u8]) -> Option<u64> {
     str::from_utf8(s).ok().and_then(|s| s.parse().ok())
 }
 
-fn try_negative_integer_bytes(s: &[u8]) -> Option<i64> {
+fn try_negative_integer_bytes_64(s: &[u8]) -> Option<i64> {
+    str::from_utf8(s).ok().and_then(|s| s.parse().ok())
+}
+
+fn try_positive_integer_bytes(s: &[u8]) -> Option<u128> {
+    str::from_utf8(s).ok().and_then(|s| s.parse().ok())
+}
+
+fn try_negative_integer_bytes(s: &[u8]) -> Option<i128> {
     str::from_utf8(s).ok().and_then(|s| s.parse().ok())
 }
 
@@ -906,6 +932,12 @@ mod tests {
     fn one_field() {
         let got: i32 = de(&["42"]).unwrap();
         assert_eq!(got, 42);
+    }
+
+    #[test]
+    fn one_field_128() {
+        let got: i128 = de(&["2010223372036854775808"]).unwrap();
+        assert_eq!(got, 2010223372036854775808);
     }
 
     #[test]

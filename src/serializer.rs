@@ -70,6 +70,10 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         self.collect_str(&v)
     }
 
+    fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
+        self.collect_str(&v)
+    }    
+
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
         self.collect_str(&v)
     }
@@ -83,6 +87,10 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     }
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
+        self.collect_str(&v)
+    }
+
+    fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
         self.collect_str(&v)
     }
 
@@ -510,6 +518,10 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
         self.handle_scalar(v)
     }
 
+    fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
+        self.handle_scalar(v)
+    }    
+
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
         self.handle_scalar(v)
     }
@@ -523,6 +535,10 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
     }
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
+        self.handle_scalar(v)
+    }
+
+    fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
         self.handle_scalar(v)
     }
 
@@ -849,6 +865,24 @@ mod tests {
     #[test]
     fn integer() {
         let got = serialize(12345);
+        assert_eq!(got, "12345\n");
+        let (wrote, got) = serialize_header(12345);
+        assert!(!wrote);
+        assert_eq!(got, "");
+    }
+
+    #[test]
+    fn integer_u128() {
+        let got = serialize(12345_u128);
+        assert_eq!(got, "12345\n");
+        let (wrote, got) = serialize_header(12345);
+        assert!(!wrote);
+        assert_eq!(got, "");
+    }
+
+    #[test]
+    fn integer_i128() {
+        let got = serialize(12345_i128);
         assert_eq!(got, "12345\n");
         let (wrote, got) = serialize_header(12345);
         assert!(!wrote);

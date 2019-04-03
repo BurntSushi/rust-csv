@@ -765,7 +765,7 @@ impl<W: io::Write> Writer<W> {
     /// | Name | Example Type | Example Value | Output |
     /// | ---- | ---- | ---- | ---- |
     /// | boolean | `bool` | `true` | `true` |
-    /// | integers | `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64` | `5` | `5` |
+    /// | integers | `i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, `u128` | `5` | `5` |
     /// | floats | `f32`, `f64` | `3.14` | `3.14` |
     /// | character | `char` | `'☃'` | `☃` |
     /// | string | `&str` | `"hi"` | `hi` |
