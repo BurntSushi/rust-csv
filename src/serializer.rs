@@ -873,8 +873,8 @@ mod tests {
 
     #[test]
     fn integer_u128() {
-        let got = serialize(12345_u128);
-        assert_eq!(got, "12345\n");
+        let got = serialize(i128::max_value() as u128 + 1);
+        assert_eq!(got, "170141183460469231731687303715884105728\n");
         let (wrote, got) = serialize_header(12345);
         assert!(!wrote);
         assert_eq!(got, "");
@@ -882,8 +882,8 @@ mod tests {
 
     #[test]
     fn integer_i128() {
-        let got = serialize(12345_i128);
-        assert_eq!(got, "12345\n");
+        let got = serialize(i128::max_value());
+        assert_eq!(got, "170141183460469231731687303715884105727\n");
         let (wrote, got) = serialize_header(12345);
         assert!(!wrote);
         assert_eq!(got, "");
@@ -1117,6 +1117,18 @@ mod tests {
 
         let got = serialize(Foo { x: true, y: 5, z: "hi".into() });
         assert_eq!(got, "true,5,hi\n");
+    }
+
+    #[test]
+    fn struct_no_headers_128() {
+        #[derive(Serialize)]
+        struct Foo {
+            x: i128,
+            y: u128,
+        }
+
+        let got = serialize(Foo { x: i128::max_value(), y: u128::max_value() });
+        assert_eq!(got, "170141183460469231731687303715884105727,340282366920938463463374607431768211455\n");
     }
 
     #[test]

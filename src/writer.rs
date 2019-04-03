@@ -1437,6 +1437,22 @@ mod tests {
     }
 
     #[test]
+    fn serialize_no_headers_128() {
+        #[derive(Serialize)]
+        struct Row {
+            foo: i128,
+            bar: f64,
+            baz: bool,
+        }
+
+        let mut wtr = WriterBuilder::new()
+            .has_headers(false)
+            .from_writer(vec![]);
+        wtr.serialize(Row { foo: 9_223_372_036_854_775_808, bar: 42.5, baz: true }).unwrap();
+        assert_eq!(wtr_as_string(wtr), "9223372036854775808,42.5,true\n");
+    }
+
+    #[test]
     fn serialize_tuple() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.serialize((true, 1.3, "hi")).unwrap();
