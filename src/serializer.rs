@@ -1,7 +1,9 @@
-use std::fmt::{self, Write};
+use std::fmt;
 use std::io;
 use std::mem;
 
+use itoa;
+use ryu;
 use serde::ser::{
     Error as SerdeError,
     Serialize, Serializer,
@@ -11,7 +13,7 @@ use serde::ser::{
 };
 
 use error::{Error, ErrorKind, new_error};
-use writer::{Writer, SingleFieldWriter};
+use writer::Writer;
 
 /// Serialize the given value to the given writer, and return an error if
 /// anything went wrong.
@@ -37,15 +39,6 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     type SerializeStruct = Self;
     type SerializeStructVariant = Self;
 
-    fn collect_str<T: ?Sized + fmt::Display>(
-        self,
-        v: &T,
-    ) -> Result<(), Error> {
-        let mut sfw = SingleFieldWriter::start_field(self.wtr)?;
-        let _ = write!(sfw, "{}", v);
-        sfw.take_formatting_error()
-    }
-
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         if v {
             self.wtr.write_field("true")
@@ -55,47 +48,57 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     }
 
     fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
-        self.collect_str(&v)
+        let mut buffer = itoa::Buffer::new();
+        self.wtr.write_field(buffer.format(v))
     }
 
     fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
-        self.collect_str(&v)
+        let mut buffer = itoa::Buffer::new();
+        self.wtr.write_field(buffer.format(v))
     }
 
     fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
-        self.collect_str(&v)
+        let mut buffer = itoa::Buffer::new();
+        self.wtr.write_field(buffer.format(v))
     }
 
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        self.collect_str(&v)
+        let mut buffer = itoa::Buffer::new();
+        self.wtr.write_field(buffer.format(v))
     }
 
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
-        self.collect_str(&v)
+        let mut buffer = itoa::Buffer::new();
+        self.wtr.write_field(buffer.format(v))
     }
 
     fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
-        self.collect_str(&v)
+        let mut buffer = itoa::Buffer::new();
+        self.wtr.write_field(buffer.format(v))
     }
 
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-        self.collect_str(&v)
+        let mut buffer = itoa::Buffer::new();
+        self.wtr.write_field(buffer.format(v))
     }
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
-        self.collect_str(&v)
+        let mut buffer = itoa::Buffer::new();
+        self.wtr.write_field(buffer.format(v))
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
-        self.collect_str(&v)
+        let mut buffer = ryu::Buffer::new();
+        self.wtr.write_field(buffer.format(v))
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
-        self.collect_str(&v)
+        let mut buffer = ryu::Buffer::new();
+        self.wtr.write_field(buffer.format(v))
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
-        self.collect_str(&v)
+        self.wtr.write_field(v.encode_utf8(&mut [0; 4]))
     }
 
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
@@ -1168,7 +1171,7 @@ mod tests {
         let row = (
             Foo {
                 label: "hi".to_string(),
-                num: 5.,
+                num: 5.0,
             },
             Bar {
                 label2: true,
@@ -1182,7 +1185,7 @@ mod tests {
         );
 
         let got = serialize(row.clone());
-        assert_eq!(got, "hi,5,true,3,,baz,2.3\n");
+        assert_eq!(got, "hi,5.0,true,3,,baz,2.3\n");
 
         let (wrote, got) = serialize_header(row.clone());
         assert!(wrote);
@@ -1200,12 +1203,12 @@ mod tests {
             3.14,
             Foo {
                 label: "hi".to_string(),
-                num: 5.,
+                num: 5.0,
             },
         );
 
         let got = serialize(row.clone());
-        assert_eq!(got, "3.14,hi,5\n");
+        assert_eq!(got, "3.14,hi,5.0\n");
 
         let err = serialize_header_err(row.clone());
         match *err.kind() {
@@ -1224,13 +1227,13 @@ mod tests {
         let row = (
             Foo {
                 label: "hi".to_string(),
-                num: 5.,
+                num: 5.0,
             },
             3.14,
         );
 
         let got = serialize(row.clone());
-        assert_eq!(got, "hi,5,3.14\n");
+        assert_eq!(got, "hi,5.0,3.14\n");
 
         let err = serialize_header_err(row.clone());
         match *err.kind() {
@@ -1249,7 +1252,7 @@ mod tests {
         let row = vec![
             Foo {
                 label: "hi".to_string(),
-                num: 5.,
+                num: 5.0,
             },
             Foo {
                 label: "baz".to_string(),
@@ -1258,7 +1261,7 @@ mod tests {
         ];
 
         let got = serialize(row.clone());
-        assert_eq!(got, "hi,5,baz,2.3\n");
+        assert_eq!(got, "hi,5.0,baz,2.3\n");
 
         let (wrote, got) = serialize_header(row.clone());
         assert!(wrote);
@@ -1284,7 +1287,7 @@ mod tests {
             (
                 Foo {
                     label: "hi".to_string(),
-                    num: 5.,
+                    num: 5.0,
                 },
                 Bar {
                     label2: Baz(true),
@@ -1301,7 +1304,7 @@ mod tests {
         );
 
         let got = serialize(row.clone());
-        assert_eq!(got, "hi,5,true,3,,baz,2.3\n");
+        assert_eq!(got, "hi,5.0,true,3,,baz,2.3\n");
 
         let (wrote, got) = serialize_header(row.clone());
         assert!(wrote);

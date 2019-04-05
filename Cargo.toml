@@ -24,6 +24,8 @@ bench = false
 
 [dependencies]
 csv-core = { path = "csv-core", version = "0.1.4" }
+itoa = "0.4.3"
+ryu = "0.2.7"
 serde = "1.0.55"
 
 [dev-dependencies]

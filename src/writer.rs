@@ -1,7 +1,5 @@
-use std::fmt;
 use std::fs::File;
 use std::io;
-use std::mem;
 use std::path::Path;
 use std::result;
 
@@ -1085,8 +1083,22 @@ impl<W: io::Write> Writer<W> {
     /// into write_record.
     #[inline(always)]
     fn write_field_impl<T: AsRef<[u8]>>(&mut self, field: T) -> Result<()> {
-        let mut sfw = SingleFieldWriter::start_field(self)?;
-        sfw.append(field.as_ref())
+        if self.state.fields_written > 0 {
+            self.write_delimiter()?;
+        }
+        let mut field = field.as_ref();
+        loop {
+            let (res, nin, nout) = self.core.field(field, self.buf.writable());
+            field = &field[nin..];
+            self.buf.written(nout);
+            match res {
+                WriteResult::InputEmpty => {
+                    self.state.fields_written += 1;
+                    return Ok(());
+                }
+                WriteResult::OutputFull => self.flush()?,
+            }
+        }
     }
 
     /// Flush the contents of the internal buffer to the underlying writer.
@@ -1183,67 +1195,6 @@ impl<W: io::Write> Writer<W> {
             }
         }
         Ok(())
-    }
-}
-
-/// A structure to allow progressively writing a single field, and thus
-/// constructing a field from types implementing fmt::* traits directly
-/// into a Writer's internal buffer.
-///
-/// This is public within this module so it can be used elsewhere
-/// within this crate (serialization, in particular), but isn't
-/// exposed for public use. If an error occurs using the fmt
-/// interface, the csv::Error is saved inside this type in a sticky
-/// way (i.e. further formatting calls do nothing and return
-/// fmt::Error too) and is accessible via take_formatting_error, which
-/// clears it.
-pub struct SingleFieldWriter<'a, W: io::Write + 'a> {
-    wtr: &'a mut Writer<W>,
-    error: Result<()>,
-}
-
-impl<'a, W: io::Write> SingleFieldWriter<'a, W> {
-    pub fn start_field(wtr: &'a mut Writer<W>) -> Result<Self> {
-        if wtr.state.fields_written > 0 {
-            wtr.write_delimiter()?;
-        }
-
-        Ok(SingleFieldWriter { wtr: wtr, error: Ok(()) })
-    }
-
-    pub fn append(&mut self, mut data: &[u8]) -> Result<()> {
-        loop {
-            let (res, nin, nout) = self.wtr.core.field(data, self.wtr.buf.writable());
-            data = &data[nin..];
-            self.wtr.buf.written(nout);
-            match res {
-                WriteResult::InputEmpty => {
-                    return Ok(());
-                }
-                WriteResult::OutputFull => self.wtr.flush()?,
-            }
-        }
-    }
-
-    pub fn take_formatting_error(&mut self) -> Result<()> {
-        mem::replace(&mut self.error, Ok(()))
-    }
-}
-impl<'a, W: io::Write> fmt::Write for SingleFieldWriter<'a, W> {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        if self.error.is_err() { return Err(fmt::Error) }
-
-        self.error = self.append(s.as_bytes());
-        if self.error.is_ok() {
-            Ok(())
-        } else {
-            Err(fmt::Error)
-        }
-    }
-}
-impl<'a, W: io::Write> Drop for SingleFieldWriter<'a, W> {
-    fn drop(&mut self) {
-        self.wtr.state.fields_written += 1;
     }
 }
 

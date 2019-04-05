@@ -169,6 +169,8 @@ $ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
 #![deny(missing_docs)]
 
 extern crate csv_core;
+extern crate itoa;
+extern crate ryu;
 extern crate serde;
 #[cfg(test)]
 extern crate serde_bytes;

@@ -475,7 +475,7 @@ impl StringRecord {
         // TODO: We could likely do this in place, but for now, we allocate.
         let mut trimmed = StringRecord::with_capacity(
             self.as_slice().len(), self.len());
-        for mut field in &*self {
+        for field in &*self {
             trimmed.push_field(field.trim());
         }
         *self = trimmed;
