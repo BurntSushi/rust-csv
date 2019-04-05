@@ -1448,7 +1448,11 @@ mod tests {
         let mut wtr = WriterBuilder::new()
             .has_headers(false)
             .from_writer(vec![]);
-        wtr.serialize(Row { foo: 9_223_372_036_854_775_808, bar: 42.5, baz: true }).unwrap();
+        wtr.serialize(Row {
+            foo: 9_223_372_036_854_775_808,
+            bar: 42.5,
+            baz: true,
+        });
         assert_eq!(wtr_as_string(wtr), "9223372036854775808,42.5,true\n");
     }
 
