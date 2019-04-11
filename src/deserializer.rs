@@ -312,14 +312,19 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
 }
 
 macro_rules! deserialize_int {
-    ($method:ident, $visit:ident) => {
+    ($method:ident, $visit:ident, $inttype:ty) => {
         fn $method<V: Visitor<'de>>(
             self,
             visitor: V,
         ) -> Result<V::Value, Self::Error> {
-            visitor.$visit(
-                self.next_field()?
-                    .parse().map_err(|err| self.error(DEK::ParseInt(err)))?)
+            let field = self.next_field()?; 
+            let num = if field.starts_with("0x") {
+                <$inttype>::from_str_radix( &field[2..], 16 )
+            } else {
+                field.parse()
+            };
+
+            visitor.$visit( num.map_err(|err| self.error(DEK::ParseInt(err)))?)
         }
     }
 }
@@ -345,14 +350,14 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
                 .parse().map_err(|err| self.error(DEK::ParseBool(err)))?)
     }
 
-    deserialize_int!(deserialize_u8, visit_u8);
-    deserialize_int!(deserialize_u16, visit_u16);
-    deserialize_int!(deserialize_u32, visit_u32);
-    deserialize_int!(deserialize_u64, visit_u64);
-    deserialize_int!(deserialize_i8, visit_i8);
-    deserialize_int!(deserialize_i16, visit_i16);
-    deserialize_int!(deserialize_i32, visit_i32);
-    deserialize_int!(deserialize_i64, visit_i64);
+    deserialize_int!(deserialize_u8, visit_u8, u8);
+    deserialize_int!(deserialize_u16, visit_u16, u16);
+    deserialize_int!(deserialize_u32, visit_u32, u32);
+    deserialize_int!(deserialize_u64, visit_u64, u64);
+    deserialize_int!(deserialize_i8, visit_i8, i8);
+    deserialize_int!(deserialize_i16, visit_i16, i16);
+    deserialize_int!(deserialize_i32, visit_i32, i32);
+    deserialize_int!(deserialize_i64, visit_i64, i64);
 
     fn deserialize_f32<V: Visitor<'de>>(
         self,
@@ -951,6 +956,23 @@ mod tests {
     fn simple_seq() {
         let got: Vec<i32> = de(&["1", "5", "10"]).unwrap();
         assert_eq!(got, vec![1, 5, 10]);
+    }
+
+    #[test]
+    fn simple_hex_seq() {
+        let got: Vec<i32> = de(&["0x7F", "0xA9", "0x10"]).unwrap();
+        assert_eq!(got, vec![0x7F, 0xA9, 0x10]);
+    }
+
+    #[test]
+    fn mixed_hex_seq() {
+        let got: Vec<i32> = de(&["0x7F", "0xA9", "10"]).unwrap();
+        assert_eq!(got, vec![0x7F, 0xA9, 10]);
+    }
+
+    #[test]
+    fn bad_hex_seq() {
+        assert!(de::<Vec<u8>>(&["7F", "0xA9", "10"]).is_err());
     }
 
     #[test]
