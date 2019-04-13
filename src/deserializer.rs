@@ -320,11 +320,11 @@ macro_rules! deserialize_int {
             let field = self.next_field()?; 
             let num = 
                 if field.starts_with("0x") {
-                    <$inttype>::from_str_radix( &field[2..], 16 )
+                    <$inttype>::from_str_radix(&field[2..], 16)
                 } else {
                     field.parse()
                 };
-            visitor.$visit( num.map_err(|err| self.error(DEK::ParseInt(err)))?)
+            visitor.$visit(num.map_err(|err| self.error(DEK::ParseInt(err)))?)
         }
     }
 }
