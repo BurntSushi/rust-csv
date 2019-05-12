@@ -1014,8 +1014,8 @@ mod tests {
 
     #[test]
     fn bytes() {
-        let got: Vec<u8> = de::<ByteBuf>(&["foobar"]).unwrap().into();
-        assert_eq!(got, b"foobar".to_vec());
+        let got = de::<ByteBuf>(&["foobar"]).unwrap();
+        assert_eq!(got, b"foobar");
     }
 
     #[test]

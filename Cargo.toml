@@ -30,7 +30,7 @@ serde = "1.0.55"
 
 [dev-dependencies]
 serde_derive = "1.0.55"
-serde_bytes = "0.10.4"
+serde_bytes = "0.11"
 
 [profile.release]
 debug = true
