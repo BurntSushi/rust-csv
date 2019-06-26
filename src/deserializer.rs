@@ -12,7 +12,7 @@ use serde::de::{
 };
 
 use crate::byte_record::{ByteRecord, ByteRecordIter};
-use crate::error::{new_error, Error, ErrorKind};
+use crate::error::{Error, ErrorKind};
 use crate::string_record::{StringRecord, StringRecordIter};
 
 use self::DeserializeErrorKind as DEK;
@@ -27,7 +27,7 @@ pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
         field: 0,
     });
     D::deserialize(&mut deser).map_err(|err| {
-        new_error(ErrorKind::Deserialize {
+        Error::new(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
             err: err,
         })
@@ -44,7 +44,7 @@ pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
         field: 0,
     });
     D::deserialize(&mut deser).map_err(|err| {
-        new_error(ErrorKind::Deserialize {
+        Error::new(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
             err: err,
         })

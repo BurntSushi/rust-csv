@@ -12,79 +12,6 @@ use crate::deserializer::deserialize_byte_record;
 use crate::error::{new_utf8_error, Result, Utf8Error};
 use crate::string_record::StringRecord;
 
-/// Retrieve the underlying parts of a byte record.
-#[inline]
-pub fn as_parts(record: &mut ByteRecord) -> (&mut Vec<u8>, &mut Vec<usize>) {
-    // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-    // (&mut record.fields, &mut record.bounds.ends)
-    let inner = &mut *record.0;
-    (&mut inner.fields, &mut inner.bounds.ends)
-}
-
-/// Set the number of fields in the given record record.
-#[inline]
-pub fn set_len(record: &mut ByteRecord, len: usize) {
-    // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-    record.0.bounds.len = len;
-}
-
-/// Expand the capacity for storing fields.
-#[inline]
-pub fn expand_fields(record: &mut ByteRecord) {
-    // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-    let new_len = record.0.fields.len().checked_mul(2).unwrap();
-    record.0.fields.resize(cmp::max(4, new_len), 0);
-}
-
-/// Expand the capacity for storing field ending positions.
-#[inline]
-pub fn expand_ends(record: &mut ByteRecord) {
-    // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-    record.0.bounds.expand();
-}
-
-/// Validate the given record as UTF-8.
-///
-/// If it's not UTF-8, return an error.
-#[inline]
-pub fn validate(record: &ByteRecord) -> result::Result<(), Utf8Error> {
-    // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-
-    // If the entire buffer is ASCII, then we have nothing to fear.
-    if record.0.fields[..record.0.bounds.end()].iter().all(|&b| b <= 0x7F) {
-        return Ok(());
-    }
-    // Otherwise, we must check each field individually to ensure that
-    // it's valid UTF-8.
-    for (i, field) in record.iter().enumerate() {
-        if let Err(err) = str::from_utf8(field) {
-            return Err(new_utf8_error(i, err.valid_up_to()));
-        }
-    }
-    Ok(())
-}
-
-/// Compare the given byte record with the iterator of fields for equality.
-pub fn eq<I, T>(record: &ByteRecord, other: I) -> bool
-where
-    I: IntoIterator<Item = T>,
-    T: AsRef<[u8]>,
-{
-    let mut it_record = record.iter();
-    let mut it_other = other.into_iter();
-    loop {
-        match (it_record.next(), it_other.next()) {
-            (None, None) => return true,
-            (None, Some(_)) | (Some(_), None) => return false,
-            (Some(x), Some(y)) => {
-                if x != y.as_ref() {
-                    return false;
-                }
-            }
-        }
-    }
-}
-
 /// A single CSV record stored as raw bytes.
 ///
 /// A byte record permits reading or writing CSV rows that are not UTF-8.
@@ -118,25 +45,25 @@ impl PartialEq for ByteRecord {
 
 impl<T: AsRef<[u8]>> PartialEq<Vec<T>> for ByteRecord {
     fn eq(&self, other: &Vec<T>) -> bool {
-        eq(self, other)
+        self.iter_eq(other)
     }
 }
 
 impl<'a, T: AsRef<[u8]>> PartialEq<Vec<T>> for &'a ByteRecord {
     fn eq(&self, other: &Vec<T>) -> bool {
-        eq(self, other)
+        self.iter_eq(other)
     }
 }
 
 impl<T: AsRef<[u8]>> PartialEq<[T]> for ByteRecord {
     fn eq(&self, other: &[T]) -> bool {
-        eq(self, other)
+        self.iter_eq(other)
     }
 }
 
 impl<'a, T: AsRef<[u8]>> PartialEq<[T]> for &'a ByteRecord {
     fn eq(&self, other: &[T]) -> bool {
-        eq(self, other)
+        self.iter_eq(other)
     }
 }
 
@@ -488,7 +415,7 @@ impl ByteRecord {
     pub fn push_field(&mut self, field: &[u8]) {
         let (s, e) = (self.0.bounds.end(), self.0.bounds.end() + field.len());
         while e > self.0.fields.len() {
-            expand_fields(self);
+            self.expand_fields();
         }
         self.0.fields[s..e].copy_from_slice(field);
         self.0.bounds.add(e);
@@ -592,6 +519,72 @@ impl ByteRecord {
     #[inline]
     pub fn as_slice(&self) -> &[u8] {
         &self.0.fields[..self.0.bounds.end()]
+    }
+
+    /// Retrieve the underlying parts of a byte record.
+    #[inline]
+    pub(crate) fn as_parts(&mut self) -> (&mut Vec<u8>, &mut Vec<usize>) {
+        let inner = &mut *self.0;
+        (&mut inner.fields, &mut inner.bounds.ends)
+    }
+
+    /// Set the number of fields in the given record record.
+    #[inline]
+    pub(crate) fn set_len(&mut self, len: usize) {
+        self.0.bounds.len = len;
+    }
+
+    /// Expand the capacity for storing fields.
+    #[inline]
+    pub(crate) fn expand_fields(&mut self) {
+        let new_len = self.0.fields.len().checked_mul(2).unwrap();
+        self.0.fields.resize(cmp::max(4, new_len), 0);
+    }
+
+    /// Expand the capacity for storing field ending positions.
+    #[inline]
+    pub(crate) fn expand_ends(&mut self) {
+        self.0.bounds.expand();
+    }
+
+    /// Validate the given record as UTF-8.
+    ///
+    /// If it's not UTF-8, return an error.
+    #[inline]
+    pub(crate) fn validate(&self) -> result::Result<(), Utf8Error> {
+        // If the entire buffer is ASCII, then we have nothing to fear.
+        if self.0.fields[..self.0.bounds.end()].iter().all(|&b| b <= 0x7F) {
+            return Ok(());
+        }
+        // Otherwise, we must check each field individually to ensure that
+        // it's valid UTF-8.
+        for (i, field) in self.iter().enumerate() {
+            if let Err(err) = str::from_utf8(field) {
+                return Err(new_utf8_error(i, err.valid_up_to()));
+            }
+        }
+        Ok(())
+    }
+
+    /// Compare the given byte record with the iterator of fields for equality.
+    pub(crate) fn iter_eq<I, T>(&self, other: I) -> bool
+    where
+        I: IntoIterator<Item = T>,
+        T: AsRef<[u8]>,
+    {
+        let mut it_record = self.iter();
+        let mut it_other = other.into_iter();
+        loop {
+            match (it_record.next(), it_other.next()) {
+                (None, None) => return true,
+                (None, Some(_)) | (Some(_), None) => return false,
+                (Some(x), Some(y)) => {
+                    if x != y.as_ref() {
+                        return false;
+                    }
+                }
+            }
+        }
     }
 }
 
