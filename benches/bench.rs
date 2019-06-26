@@ -11,12 +11,13 @@ use std::io;
 use serde::de::DeserializeOwned;
 use test::Bencher;
 
-use csv::{ByteRecord, Reader, ReaderBuilder, StringRecord, Writer, WriterBuilder, Trim};
+use csv::{
+    ByteRecord, Reader, ReaderBuilder, StringRecord, Trim, Writer,
+    WriterBuilder,
+};
 
-static NFL: &'static str =
-    include_str!("../examples/data/bench/nfl.csv");
-static GAME: &'static str =
-    include_str!("../examples/data/bench/game.csv");
+static NFL: &'static str = include_str!("../examples/data/bench/nfl.csv");
+static GAME: &'static str = include_str!("../examples/data/bench/game.csv");
 static POP: &'static str =
     include_str!("../examples/data/bench/worldcitiespop.csv");
 static MBTA: &'static str =
@@ -114,14 +115,16 @@ struct MBTARowBorrowed<'a> {
 
 #[derive(Default)]
 struct ByteCounter {
-    count: usize
+    count: usize,
 }
 impl io::Write for ByteCounter {
     fn write(&mut self, data: &[u8]) -> io::Result<usize> {
         self.count += data.len();
         Ok(data.len())
     }
-    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 macro_rules! bench {
@@ -131,9 +134,8 @@ macro_rules! bench {
             let data = $data.as_bytes();
             b.bytes = data.len() as u64;
             b.iter(|| {
-                let mut rdr = ReaderBuilder::new()
-                    .has_headers(false)
-                    .from_reader(data);
+                let mut rdr =
+                    ReaderBuilder::new().has_headers(false).from_reader(data);
                 assert_eq!($counter(&mut rdr), $result);
             })
         }
@@ -157,7 +159,6 @@ macro_rules! bench_trimmed {
     };
 }
 
-
 macro_rules! bench_serde {
     (no_headers,
      $name_de:ident, $name_ser:ident, $data:ident, $counter:ident, $type:ty, $result:expr) => {
@@ -166,9 +167,8 @@ macro_rules! bench_serde {
             let data = $data.as_bytes();
             b.bytes = data.len() as u64;
             b.iter(|| {
-                let mut rdr = ReaderBuilder::new()
-                    .has_headers(false)
-                    .from_reader(data);
+                let mut rdr =
+                    ReaderBuilder::new().has_headers(false).from_reader(data);
                 assert_eq!($counter::<_, $type>(&mut rdr), $result);
             })
         }
@@ -204,9 +204,8 @@ macro_rules! bench_serde {
             let data = $data.as_bytes();
             b.bytes = data.len() as u64;
             b.iter(|| {
-                let mut rdr = ReaderBuilder::new()
-                    .has_headers(true)
-                    .from_reader(data);
+                let mut rdr =
+                    ReaderBuilder::new().has_headers(true).from_reader(data);
                 assert_eq!($counter::<_, $type>(&mut rdr), $result);
             })
         }
@@ -257,7 +256,7 @@ macro_rules! bench_serde_borrowed_bytes {
                 count
             })
         }
-    }
+    };
 }
 
 macro_rules! bench_serde_borrowed_str {
@@ -279,21 +278,39 @@ macro_rules! bench_serde_borrowed_str {
                 count
             })
         }
-    }
+    };
 }
 
 bench_serde!(
     count_nfl_deserialize_owned_bytes,
     count_nfl_serialize_owned_bytes,
-    NFL, count_deserialize_owned_bytes, NFLRowOwned, 9999);
+    NFL,
+    count_deserialize_owned_bytes,
+    NFLRowOwned,
+    9999
+);
 bench_serde!(
     count_nfl_deserialize_owned_str,
     count_nfl_serialize_owned_str,
-    NFL, count_deserialize_owned_str, NFLRowOwned, 9999);
+    NFL,
+    count_deserialize_owned_str,
+    NFLRowOwned,
+    9999
+);
 bench_serde_borrowed_bytes!(
-    count_nfl_deserialize_borrowed_bytes, NFL, NFLRowBorrowed, true, 9999);
+    count_nfl_deserialize_borrowed_bytes,
+    NFL,
+    NFLRowBorrowed,
+    true,
+    9999
+);
 bench_serde_borrowed_str!(
-    count_nfl_deserialize_borrowed_str, NFL, NFLRowBorrowed, true, 9999);
+    count_nfl_deserialize_borrowed_str,
+    NFL,
+    NFLRowBorrowed,
+    true,
+    9999
+);
 bench!(count_nfl_iter_bytes, NFL, count_iter_bytes, 130000);
 bench_trimmed!(count_nfl_iter_bytes_trimmed, NFL, count_iter_bytes, 130000);
 bench!(count_nfl_iter_str, NFL, count_iter_str, 130000);
@@ -304,18 +321,34 @@ bench_serde!(
     no_headers,
     count_game_deserialize_owned_bytes,
     count_game_serialize_owned_bytes,
-    GAME, count_deserialize_owned_bytes, GAMERowOwned, 100000);
+    GAME,
+    count_deserialize_owned_bytes,
+    GAMERowOwned,
+    100000
+);
 bench_serde!(
     no_headers,
     count_game_deserialize_owned_str,
     count_game_serialize_owned_str,
-    GAME, count_deserialize_owned_str, GAMERowOwned, 100000);
+    GAME,
+    count_deserialize_owned_str,
+    GAMERowOwned,
+    100000
+);
 bench_serde_borrowed_bytes!(
     count_game_deserialize_borrowed_bytes,
-    GAME, GAMERowBorrowed, true, 100000);
+    GAME,
+    GAMERowBorrowed,
+    true,
+    100000
+);
 bench_serde_borrowed_str!(
     count_game_deserialize_borrowed_str,
-    GAME, GAMERowBorrowed, true, 100000);
+    GAME,
+    GAMERowBorrowed,
+    true,
+    100000
+);
 bench!(count_game_iter_bytes, GAME, count_iter_bytes, 600000);
 bench!(count_game_iter_str, GAME, count_iter_str, 600000);
 bench!(count_game_read_bytes, GAME, count_read_bytes, 600000);
@@ -323,17 +356,33 @@ bench!(count_game_read_str, GAME, count_read_str, 600000);
 bench_serde!(
     count_pop_deserialize_owned_bytes,
     count_pop_serialize_owned_bytes,
-    POP, count_deserialize_owned_bytes, POPRowOwned, 20000);
+    POP,
+    count_deserialize_owned_bytes,
+    POPRowOwned,
+    20000
+);
 bench_serde!(
     count_pop_deserialize_owned_str,
     count_pop_serialize_owned_str,
-    POP, count_deserialize_owned_str, POPRowOwned, 20000);
+    POP,
+    count_deserialize_owned_str,
+    POPRowOwned,
+    20000
+);
 bench_serde_borrowed_bytes!(
     count_pop_deserialize_borrowed_bytes,
-    POP, POPRowBorrowed, true, 20000);
+    POP,
+    POPRowBorrowed,
+    true,
+    20000
+);
 bench_serde_borrowed_str!(
     count_pop_deserialize_borrowed_str,
-    POP, POPRowBorrowed, true, 20000);
+    POP,
+    POPRowBorrowed,
+    true,
+    20000
+);
 bench!(count_pop_iter_bytes, POP, count_iter_bytes, 140007);
 bench!(count_pop_iter_str, POP, count_iter_str, 140007);
 bench!(count_pop_read_bytes, POP, count_read_bytes, 140007);
@@ -341,17 +390,33 @@ bench!(count_pop_read_str, POP, count_read_str, 140007);
 bench_serde!(
     count_mbta_deserialize_owned_bytes,
     count_mbta_serialize_owned_bytes,
-    MBTA, count_deserialize_owned_bytes, MBTARowOwned, 9999);
+    MBTA,
+    count_deserialize_owned_bytes,
+    MBTARowOwned,
+    9999
+);
 bench_serde!(
     count_mbta_deserialize_owned_str,
     count_mbta_serialize_owned_str,
-    MBTA, count_deserialize_owned_str, MBTARowOwned, 9999);
+    MBTA,
+    count_deserialize_owned_str,
+    MBTARowOwned,
+    9999
+);
 bench_serde_borrowed_bytes!(
     count_mbta_deserialize_borrowed_bytes,
-    MBTA, MBTARowBorrowed, true, 9999);
+    MBTA,
+    MBTARowBorrowed,
+    true,
+    9999
+);
 bench_serde_borrowed_str!(
     count_mbta_deserialize_borrowed_str,
-    MBTA, MBTARowBorrowed, true, 9999);
+    MBTA,
+    MBTARowBorrowed,
+    true,
+    9999
+);
 bench!(count_mbta_iter_bytes, MBTA, count_iter_bytes, 90000);
 bench!(count_mbta_iter_str, MBTA, count_iter_str, 90000);
 bench!(count_mbta_read_bytes, MBTA, count_read_bytes, 90000);
@@ -373,7 +438,7 @@ macro_rules! bench_write {
                 assert!(wtr.flush().is_ok());
             })
         }
-    }
+    };
 }
 
 macro_rules! bench_write_bytes {
@@ -392,14 +457,16 @@ macro_rules! bench_write_bytes {
                 assert!(wtr.flush().is_ok());
             })
         }
-    }
+    };
 }
 
 bench_write!(write_nfl_record, NFL);
 bench_write_bytes!(write_nfl_bytes, NFL);
 
 fn count_deserialize_owned_bytes<R, D>(rdr: &mut Reader<R>) -> u64
-    where R: io::Read, D: DeserializeOwned
+where
+    R: io::Read,
+    D: DeserializeOwned,
 {
     let mut count = 0;
     let mut rec = ByteRecord::new();
@@ -411,7 +478,9 @@ fn count_deserialize_owned_bytes<R, D>(rdr: &mut Reader<R>) -> u64
 }
 
 fn count_deserialize_owned_str<R, D>(rdr: &mut Reader<R>) -> u64
-    where R: io::Read, D: DeserializeOwned
+where
+    R: io::Read,
+    D: DeserializeOwned,
 {
     let mut count = 0;
     for rec in rdr.deserialize::<D>() {
@@ -456,10 +525,6 @@ fn count_read_str<R: io::Read>(rdr: &mut Reader<R>) -> u64 {
 }
 
 fn collect_records(data: &[u8]) -> Vec<ByteRecord> {
-    let mut rdr = ReaderBuilder::new()
-        .has_headers(false)
-        .from_reader(data);
-    rdr.byte_records()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap()
+    let mut rdr = ReaderBuilder::new().has_headers(false).from_reader(data);
+    rdr.byte_records().collect::<Result<Vec<_>, _>>().unwrap()
 }

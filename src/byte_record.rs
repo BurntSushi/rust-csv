@@ -9,14 +9,12 @@ use std::str;
 use serde::de::Deserialize;
 
 use deserializer::deserialize_byte_record;
-use error::{Result, Utf8Error, new_utf8_error};
+use error::{new_utf8_error, Result, Utf8Error};
 use string_record::StringRecord;
 
 /// Retrieve the underlying parts of a byte record.
 #[inline]
-pub fn as_parts(
-    record: &mut ByteRecord,
-) -> (&mut Vec<u8>, &mut Vec<usize>) {
+pub fn as_parts(record: &mut ByteRecord) -> (&mut Vec<u8>, &mut Vec<usize>) {
     // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
     // (&mut record.fields, &mut record.bounds.ends)
     let inner = &mut *record.0;
@@ -68,7 +66,9 @@ pub fn validate(record: &ByteRecord) -> result::Result<(), Utf8Error> {
 
 /// Compare the given byte record with the iterator of fields for equality.
 pub fn eq<I, T>(record: &ByteRecord, other: I) -> bool
-    where I: IntoIterator<Item=T>, T: AsRef<[u8]>
+where
+    I: IntoIterator<Item = T>,
+    T: AsRef<[u8]>,
 {
     let mut it_record = record.iter();
     let mut it_other = other.into_iter();
@@ -144,10 +144,8 @@ impl fmt::Debug for ByteRecord {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut fields = vec![];
         for field in self {
-            let escaped: Vec<u8> = field
-                .iter()
-                .flat_map(|&b| ascii::escape_default(b))
-                .collect();
+            let escaped: Vec<u8> =
+                field.iter().flat_map(|&b| ascii::escape_default(b)).collect();
             fields.push(String::from_utf8(escaped).unwrap());
         }
         write!(f, "ByteRecord({:?})", fields)
@@ -449,12 +447,11 @@ impl ByteRecord {
             self.0.bounds.ends[field] -= trimmed;
             let bound = self.0.bounds.get(field).unwrap();
             let front_space = self.count_leading_whitespace(bound.clone());
-            let back_space =
-                if front_space < bound.end - bound.start {
-                    self.count_leading_whitespace(bound.clone().rev())
-                } else {
-                    0
-                };
+            let back_space = if front_space < bound.end - bound.start {
+                self.count_leading_whitespace(bound.clone().rev())
+            } else {
+                0
+            };
 
             self.0.fields.drain(bound.end - back_space..bound.end);
             self.0.fields.drain(bound.start..bound.start + front_space);
@@ -466,7 +463,8 @@ impl ByteRecord {
     /// Returns amount of leading whitespace starting in the given range.
     /// Whitespace is not counted past the end of the range.
     fn count_leading_whitespace<R>(&self, range: R) -> usize
-    where R: Iterator<Item=usize>
+    where
+        R: Iterator<Item = usize>,
     {
         let mut count = 0;
         for i in range {
@@ -625,11 +623,20 @@ impl Position {
     }
 
     /// The byte offset, starting at `0`, of this position.
-    #[inline] pub fn byte(&self) -> u64 { self.byte }
+    #[inline]
+    pub fn byte(&self) -> u64 {
+        self.byte
+    }
     /// The line number, starting at `1`, of this position.
-    #[inline] pub fn line(&self) -> u64 { self.line }
+    #[inline]
+    pub fn line(&self) -> u64 {
+        self.line
+    }
     /// The record index, starting with the first record at `0`.
-    #[inline] pub fn record(&self) -> u64 { self.record }
+    #[inline]
+    pub fn record(&self) -> u64 {
+        self.record
+    }
 
     /// Set the byte offset of this position.
     #[inline]
@@ -742,12 +749,16 @@ impl Bounds {
 impl ops::Index<usize> for ByteRecord {
     type Output = [u8];
     #[inline]
-    fn index(&self, i: usize) -> &[u8] { self.get(i).unwrap() }
+    fn index(&self, i: usize) -> &[u8] {
+        self.get(i).unwrap()
+    }
 }
 
 impl From<StringRecord> for ByteRecord {
     #[inline]
-    fn from(record: StringRecord) -> ByteRecord { record.into_byte_record() }
+    fn from(record: StringRecord) -> ByteRecord {
+        record.into_byte_record()
+    }
 }
 
 impl<T: AsRef<[u8]>> From<Vec<T>> for ByteRecord {
@@ -766,7 +777,7 @@ impl<'a, T: AsRef<[u8]>> From<&'a [T]> for ByteRecord {
 
 impl<T: AsRef<[u8]>> FromIterator<T> for ByteRecord {
     #[inline]
-    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> ByteRecord {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> ByteRecord {
         let mut record = ByteRecord::new();
         record.extend(iter);
         record
@@ -775,7 +786,7 @@ impl<T: AsRef<[u8]>> FromIterator<T> for ByteRecord {
 
 impl<T: AsRef<[u8]>> Extend<T> for ByteRecord {
     #[inline]
-    fn extend<I: IntoIterator<Item=T>>(&mut self, iter: I) {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for x in iter {
             self.push_field(x.as_ref());
         }
@@ -852,7 +863,8 @@ impl<'r> DoubleEndedIterator for ByteRecordIter<'r> {
             None
         } else {
             self.i_reverse -= 1;
-            let start = self.i_reverse
+            let start = self
+                .i_reverse
                 .checked_sub(1)
                 .map(|i| self.r.0.bounds.ends()[i])
                 .unwrap_or(0);
@@ -869,7 +881,9 @@ mod tests {
 
     use super::ByteRecord;
 
-    fn b(s: &str) -> &[u8] { s.as_bytes() }
+    fn b(s: &str) -> &[u8] {
+        s.as_bytes()
+    }
 
     #[test]
     fn record_1() {
@@ -1115,9 +1129,8 @@ mod tests {
     fn iter() {
         let data = vec!["foo", "bar", "baz", "quux", "wat"];
         let rec = ByteRecord::from(&*data);
-        let got: Vec<&str> = rec.iter()
-            .map(|x| ::std::str::from_utf8(x).unwrap())
-            .collect();
+        let got: Vec<&str> =
+            rec.iter().map(|x| ::std::str::from_utf8(x).unwrap()).collect();
         assert_eq!(data, got);
     }
 
@@ -1125,7 +1138,8 @@ mod tests {
     fn iter_reverse() {
         let mut data = vec!["foo", "bar", "baz", "quux", "wat"];
         let rec = ByteRecord::from(&*data);
-        let got: Vec<&str> = rec.iter()
+        let got: Vec<&str> = rec
+            .iter()
             .rev()
             .map(|x| ::std::str::from_utf8(x).unwrap())
             .collect();
@@ -1153,8 +1167,8 @@ mod tests {
     // Regression test for #138.
     #[test]
     fn eq_field_boundaries() {
-        let test1 = ByteRecord::from(vec!["12","34"]);
-        let test2 = ByteRecord::from(vec!["123","4"]);
+        let test1 = ByteRecord::from(vec!["12", "34"]);
+        let test2 = ByteRecord::from(vec!["123", "4"]);
 
         assert_ne!(test1, test2);
     }
@@ -1164,8 +1178,8 @@ mod tests {
     // Regression test for #138.
     #[test]
     fn eq_record_len() {
-        let test1 = ByteRecord::from(vec!["12","34", "56"]);
-        let test2 = ByteRecord::from(vec!["12","34"]);
+        let test1 = ByteRecord::from(vec!["12", "34", "56"]);
+        let test2 = ByteRecord::from(vec!["12", "34"]);
         assert_ne!(test1, test2);
     }
 }

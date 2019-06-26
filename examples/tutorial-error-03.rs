@@ -20,7 +20,7 @@ fn run() -> Result<(), Box<Error>> {
         match result {
             Err(err) => return Err(From::from(err)),
             Ok(record) => {
-              println!("{:?}", record);
+                println!("{:?}", record);
             }
         }
     }

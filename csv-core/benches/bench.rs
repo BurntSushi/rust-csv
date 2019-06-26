@@ -9,8 +9,10 @@ use csv_core::{Reader, ReaderBuilder};
 
 static NFL: &'static str = include_str!("../../examples/data/bench/nfl.csv");
 static GAME: &'static str = include_str!("../../examples/data/bench/game.csv");
-static POP: &'static str = include_str!("../../examples/data/bench/worldcitiespop.csv");
-static MBTA: &'static str = include_str!("../../examples/data/bench/gtfs-mbta-stop-times.csv");
+static POP: &'static str =
+    include_str!("../../examples/data/bench/worldcitiespop.csv");
+static MBTA: &'static str =
+    include_str!("../../examples/data/bench/gtfs-mbta-stop-times.csv");
 
 macro_rules! bench {
     ($name:ident, $data:ident, $counter:ident, $result:expr) => {
@@ -64,7 +66,9 @@ fn count_fields(rdr: &mut Reader, mut data: &[u8]) -> u64 {
         match res {
             InputEmpty => {}
             OutputFull => panic!("field too large"),
-            Field{..} => { count += 1; }
+            Field { .. } => {
+                count += 1;
+            }
             End => break,
         }
     }

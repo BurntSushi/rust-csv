@@ -1,6 +1,6 @@
 use std::io;
 
-use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use csv;
 
 /// A simple index for random access to CSV records.
@@ -101,8 +101,7 @@ impl<W: io::Write> RandomAccessSimple<W> {
     pub fn create<R: io::Read>(
         rdr: &mut csv::Reader<R>,
         mut wtr: W,
-    ) -> csv::Result<()>
-    {
+    ) -> csv::Result<()> {
         // If the reader is configured to read a header, then read that
         // first. (The CSV reader otherwise won't yield the header record
         // when calling `read_byte_record`.)
@@ -163,10 +162,7 @@ impl<R: io::Read + io::Seek> RandomAccessSimple<R> {
     pub fn open(mut rdr: R) -> csv::Result<RandomAccessSimple<R>> {
         rdr.seek(io::SeekFrom::End(-8))?;
         let len = rdr.read_u64::<BigEndian>()?;
-        Ok(RandomAccessSimple {
-            rdr: rdr,
-            len: len,
-        })
+        Ok(RandomAccessSimple { rdr: rdr, len: len })
     }
 
     /// Get the position of the record at index `i`.
@@ -228,7 +224,9 @@ impl<R: io::Read + io::Seek> RandomAccessSimple<R> {
     pub fn get(&mut self, i: u64) -> csv::Result<csv::Position> {
         if i >= self.len {
             let msg = format!(
-                "invalid record index {} (there are {} records)", i, self.len);
+                "invalid record index {} (there are {} records)",
+                i, self.len
+            );
             let err = io::Error::new(io::ErrorKind::Other, msg);
             return Err(csv::Error::from(err));
         }
@@ -302,12 +300,15 @@ mod tests {
 
     #[test]
     fn headers_many_fields() {
-        let mut idx = Indexed::new(true, "\
+        let mut idx = Indexed::new(
+            true,
+            "\
 h1,h2,h3
 a,b,c
 d,e,f
 g,h,i
-");
+",
+        );
         assert_eq!(idx.idx.len(), 4);
         assert_eq!(idx.read_at(0), vec!["h1", "h2", "h3"]);
         assert_eq!(idx.read_at(1), vec!["a", "b", "c"]);
@@ -327,12 +328,15 @@ g,h,i
 
     #[test]
     fn no_headers_many_fields() {
-        let mut idx = Indexed::new(false, "\
+        let mut idx = Indexed::new(
+            false,
+            "\
 h1,h2,h3
 a,b,c
 d,e,f
 g,h,i
-");
+",
+        );
         assert_eq!(idx.idx.len(), 4);
         assert_eq!(idx.read_at(0), vec!["h1", "h2", "h3"]);
         assert_eq!(idx.read_at(1), vec!["a", "b", "c"]);
@@ -342,7 +346,9 @@ g,h,i
 
     #[test]
     fn headers_one_field_newlines() {
-        let mut idx = Indexed::new(true, "
+        let mut idx = Indexed::new(
+            true,
+            "
 
 
 
@@ -366,7 +372,8 @@ c
 
 
 
-");
+",
+        );
         assert_eq!(idx.idx.len(), 4);
         assert_eq!(idx.read_at(0), vec!["h1"]);
         assert_eq!(idx.read_at(1), vec!["a"]);

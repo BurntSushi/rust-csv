@@ -8,7 +8,7 @@ use std::process;
 
 // By default, struct field names are deserialized based on the position of
 // a corresponding field in the CSV data's header record.
-#[derive(Debug,Deserialize)]
+#[derive(Debug, Deserialize)]
 struct Record {
     city: String,
     region: String,

@@ -185,10 +185,7 @@ impl ReaderBuilder {
     /// A record terminator can be any single byte. The default is a special
     /// value, `Terminator::CRLF`, which treats any occurrence of `\r`, `\n`
     /// or `\r\n` as a single record terminator.
-    pub fn terminator(
-        &mut self,
-        term: Terminator,
-    ) -> &mut ReaderBuilder {
+    pub fn terminator(&mut self, term: Terminator) -> &mut ReaderBuilder {
         self.rdr.term = term;
         self
     }
@@ -470,9 +467,7 @@ impl NfaState {
     /// Returns true if this state indicates that a record has been parsed.
     fn is_record_final(&self) -> bool {
         match *self {
-            NfaState::End
-            | NfaState::EndRecord
-            | NfaState::CRLF => true,
+            NfaState::End | NfaState::EndRecord | NfaState::CRLF => true,
             _ => false,
         }
     }
@@ -616,9 +611,9 @@ impl Reader {
     /// buffered. Hopefully that won't happen very often.
     fn strip_utf8_bom<'a>(&self, input: &'a [u8]) -> (&'a [u8], usize) {
         let (input, nin) = if {
-            !self.has_read &&
-                input.len() >= 3 &&
-                &input[0..3] == b"\xef\xbb\xbf"
+            !self.has_read
+                && input.len() >= 3
+                && &input[0..3] == b"\xef\xbb\xbf"
         } {
             (&input[3..], 3)
         } else {
@@ -636,8 +631,8 @@ impl Reader {
     ) -> (ReadRecordResult, usize, usize, usize) {
         if input.is_empty() {
             let s = self.transition_final_dfa(self.dfa_state);
-            let res = self.dfa.new_read_record_result(
-                s, true, false, false, false);
+            let res =
+                self.dfa.new_read_record_result(s, true, false, false, false);
             // This part is a little tricky. When reading the final record,
             // the last result the caller will get is an InputEmpty, and while
             // they'll have everything they need in `output`, they'll be
@@ -686,15 +681,18 @@ impl Reader {
                 }
             }
             if state == self.dfa.in_field || state == self.dfa.in_quoted {
-                self.dfa.classes.scan_and_copy(
-                    input, &mut nin, output, &mut nout);
+                self.dfa
+                    .classes
+                    .scan_and_copy(input, &mut nin, output, &mut nout);
             }
         }
         let res = self.dfa.new_read_record_result(
-            state, false,
+            state,
+            false,
             nin >= input.len(),
             nout >= output.len(),
-            nend >= ends.len());
+            nend >= ends.len(),
+        );
         self.dfa_state = state;
         if res.is_record() {
             self.output_pos = 0;
@@ -713,7 +711,11 @@ impl Reader {
         if input.is_empty() {
             self.dfa_state = self.transition_final_dfa(self.dfa_state);
             let res = self.dfa.new_read_field_result(
-                self.dfa_state, true, false, false);
+                self.dfa_state,
+                true,
+                false,
+                false,
+            );
             return (res, 0, 0);
         }
         if output.is_empty() {
@@ -736,7 +738,11 @@ impl Reader {
             }
         }
         let res = self.dfa.new_read_field_result(
-            state, false, nin >= input.len(), nout >= output.len());
+            state,
+            false,
+            nin >= input.len(),
+            nout >= output.len(),
+        );
         self.dfa_state = state;
         (res, nin, nout)
     }
@@ -820,8 +826,7 @@ impl Reader {
             for c in (0..256).map(|c| c as u8) {
                 let mut nfa_result = (state, NfaInputAction::Epsilon);
                 // Consume NFA states until we hit a non-epsilon transition.
-                while
-                    nfa_result.0 != NfaState::End
+                while nfa_result.0 != NfaState::End
                     && nfa_result.1 == NfaInputAction::Epsilon
                 {
                     nfa_result = self.transition_nfa(nfa_result.0, c);
@@ -829,7 +834,11 @@ impl Reader {
                 let from = self.dfa.new_state(state);
                 let to = self.dfa.new_state(nfa_result.0);
                 self.dfa.set(
-                    from, c, to, nfa_result.1 == NfaInputAction::CopyToOutput);
+                    from,
+                    c,
+                    to,
+                    nfa_result.1 == NfaInputAction::CopyToOutput,
+                );
             }
         }
         self.dfa_state = self.dfa.new_state(NfaState::StartRecord);
@@ -882,10 +891,10 @@ impl Reader {
                     output[nout] = input[nin];
                     nout += 1;
                     nin += 1;
-                },
+                }
                 NfaInputAction::Discard => {
                     nin += 1;
-                },
+                }
                 NfaInputAction::Epsilon => {}
             }
             state = s;
@@ -901,7 +910,8 @@ impl Reader {
             state,
             nin >= input.len(),
             nout >= output.len(),
-            nend >= ends.len());
+            nend >= ends.len(),
+        );
         self.nfa_state = state;
         self.output_pos = if res.is_record() { 0 } else { nout };
         (res, nin, nout, nend)
@@ -932,11 +942,11 @@ impl Reader {
                     output[nout] = input[nin];
                     nout += 1;
                     nin += 1;
-                },
+                }
                 NfaInputAction::Discard => {
                     nin += 1;
-                },
-                NfaInputAction::Epsilon => ()
+                }
+                NfaInputAction::Epsilon => (),
             }
             state = s;
             if state.is_field_final() {
@@ -944,7 +954,10 @@ impl Reader {
             }
         }
         let res = ReadFieldResult::from_nfa(
-            state, nin >= input.len(), nout >= output.len());
+            state,
+            nin >= input.len(),
+            nout >= output.len(),
+        );
         self.nfa_state = state;
         (res, nin, nout)
     }
@@ -955,22 +968,12 @@ impl Reader {
     fn transition_final_nfa(&self, state: NfaState) -> NfaState {
         use self::NfaState::*;
         match state {
-            End
-            | StartRecord
-            | EndRecord
-            | InComment
-            | CRLF => End,
-            StartField
-            | EndFieldDelim
-            | EndFieldTerm
-            | InField
-            | InQuotedField
-            | InEscapedQuote
-            | InDoubleEscapedQuote
+            End | StartRecord | EndRecord | InComment | CRLF => End,
+            StartField | EndFieldDelim | EndFieldTerm | InField
+            | InQuotedField | InEscapedQuote | InDoubleEscapedQuote
             | InRecordTerm => EndRecord,
         }
     }
-
 
     /// Compute the next NFA state given the current NFA state and the current
     /// input byte.
@@ -996,9 +999,7 @@ impl Reader {
                     (StartField, NfaInputAction::Epsilon)
                 }
             }
-            EndRecord => {
-                (StartRecord, NfaInputAction::Epsilon)
-            }
+            EndRecord => (StartRecord, NfaInputAction::Epsilon),
             StartField => {
                 if self.quoting && self.quote == c {
                     (InQuotedField, NfaInputAction::Discard)
@@ -1010,12 +1011,8 @@ impl Reader {
                     (InField, NfaInputAction::CopyToOutput)
                 }
             }
-            EndFieldDelim => {
-                (StartField, NfaInputAction::Epsilon)
-            }
-            EndFieldTerm => {
-                (InRecordTerm, NfaInputAction::Epsilon)
-            }
+            EndFieldDelim => (StartField, NfaInputAction::Epsilon),
+            EndFieldTerm => (InRecordTerm, NfaInputAction::Epsilon),
             InField => {
                 if self.delimiter == c {
                     (EndFieldDelim, NfaInputAction::Discard)
@@ -1034,9 +1031,7 @@ impl Reader {
                     (InQuotedField, NfaInputAction::CopyToOutput)
                 }
             }
-            InEscapedQuote => {
-                (InQuotedField, NfaInputAction::CopyToOutput)
-            }
+            InEscapedQuote => (InQuotedField, NfaInputAction::CopyToOutput),
             InDoubleEscapedQuote => {
                 if self.quoting && self.double_quote && self.quote == c {
                     (InQuotedField, NfaInputAction::CopyToOutput)
@@ -1268,8 +1263,7 @@ impl DfaClasses {
         output: &mut [u8],
         nout: &mut usize,
     ) {
-        while
-            *nin < input.len()
+        while *nin < input.len()
             && *nout < output.len()
             && self.classes[input[*nin] as usize] == 0
         {
@@ -1310,7 +1304,8 @@ impl fmt::Debug for DfaClasses {
         write!(
             f,
             "DfaClasses {{ classes: N/A, next_class: {:?} }}",
-            self.next_class)
+            self.next_class
+        )
     }
 }
 
@@ -1336,16 +1331,16 @@ mod tests {
 
     use arrayvec::{ArrayString, ArrayVec};
 
-    use super::{
-        Reader, ReaderBuilder, ReadFieldResult, Terminator,
-    };
+    use super::{ReadFieldResult, Reader, ReaderBuilder, Terminator};
 
     type Csv = ArrayVec<[Row; 10]>;
     type Row = ArrayVec<[Field; 10]>;
     type Field = ArrayString<[u8; 10]>;
 
     // OMG I HATE BYTE STRING LITERALS SO MUCH.
-    fn b(s: &str) -> &[u8] { s.as_bytes() }
+    fn b(s: &str) -> &[u8] {
+        s.as_bytes()
+    }
 
     macro_rules! csv {
         ($([$($field:expr),*]),*) => {{
@@ -1450,7 +1445,10 @@ mod tests {
         let (mut outpos, mut endpos) = (0, 0);
         loop {
             let (res, nin, nout, nend) = rdr.read_record(
-                data, &mut record[outpos..], &mut ends[endpos..]);
+                data,
+                &mut record[outpos..],
+                &mut ends[endpos..],
+            );
             data = &data[nin..];
             outpos += nout;
             endpos += nend;
@@ -1496,78 +1494,111 @@ mod tests {
     parses_to!(many_rows_one_field, "a\nb", csv![["a"], ["b"]]);
     parses_to!(
         many_rows_many_fields,
-       "a,b,c\nx,y,z", csv![["a", "b", "c"], ["x", "y", "z"]]);
+        "a,b,c\nx,y,z",
+        csv![["a", "b", "c"], ["x", "y", "z"]]
+    );
     parses_to!(
         many_rows_trailing_comma,
-        "a,b,\nx,y,", csv![["a", "b", ""], ["x", "y", ""]]);
+        "a,b,\nx,y,",
+        csv![["a", "b", ""], ["x", "y", ""]]
+    );
     parses_to!(many_rows_one_field_lf, "a\nb\n", csv![["a"], ["b"]]);
     parses_to!(
         many_rows_many_fields_lf,
-        "a,b,c\nx,y,z\n", csv![["a", "b", "c"], ["x", "y", "z"]]);
+        "a,b,c\nx,y,z\n",
+        csv![["a", "b", "c"], ["x", "y", "z"]]
+    );
     parses_to!(
         many_rows_trailing_comma_lf,
-        "a,b,\nx,y,\n", csv![["a", "b", ""], ["x", "y", ""]]);
+        "a,b,\nx,y,\n",
+        csv![["a", "b", ""], ["x", "y", ""]]
+    );
     parses_to!(many_rows_one_field_crlf, "a\r\nb\r\n", csv![["a"], ["b"]]);
     parses_to!(
         many_rows_many_fields_crlf,
         "a,b,c\r\nx,y,z\r\n",
-        csv![["a", "b", "c"], ["x", "y", "z"]]);
-    parses_to!(many_rows_trailing_comma_crlf,
-               "a,b,\r\nx,y,\r\n", csv![["a", "b", ""], ["x", "y", ""]]);
+        csv![["a", "b", "c"], ["x", "y", "z"]]
+    );
+    parses_to!(
+        many_rows_trailing_comma_crlf,
+        "a,b,\r\nx,y,\r\n",
+        csv![["a", "b", ""], ["x", "y", ""]]
+    );
     parses_to!(many_rows_one_field_cr, "a\rb\r", csv![["a"], ["b"]]);
     parses_to!(
         many_rows_many_fields_cr,
-        "a,b,c\rx,y,z\r", csv![["a", "b", "c"], ["x", "y", "z"]]);
+        "a,b,c\rx,y,z\r",
+        csv![["a", "b", "c"], ["x", "y", "z"]]
+    );
     parses_to!(
         many_rows_trailing_comma_cr,
-        "a,b,\rx,y,\r", csv![["a", "b", ""], ["x", "y", ""]]);
+        "a,b,\rx,y,\r",
+        csv![["a", "b", ""], ["x", "y", ""]]
+    );
 
     parses_to!(
         trailing_lines_no_record,
         "\n\n\na,b,c\nx,y,z\n\n\n",
-        csv![["a", "b", "c"], ["x", "y", "z"]]);
+        csv![["a", "b", "c"], ["x", "y", "z"]]
+    );
     parses_to!(
         trailing_lines_no_record_cr,
         "\r\r\ra,b,c\rx,y,z\r\r\r",
-        csv![["a", "b", "c"], ["x", "y", "z"]]);
+        csv![["a", "b", "c"], ["x", "y", "z"]]
+    );
     parses_to!(
         trailing_lines_no_record_crlf,
         "\r\n\r\n\r\na,b,c\r\nx,y,z\r\n\r\n\r\n",
-        csv![["a", "b", "c"], ["x", "y", "z"]]);
+        csv![["a", "b", "c"], ["x", "y", "z"]]
+    );
 
     parses_to!(empty, "", csv![]);
     parses_to!(empty_lines, "\n\n\n\n", csv![]);
     parses_to!(
-        empty_lines_interspersed, "\n\na,b\n\n\nx,y\n\n\nm,n\n",
-        csv![["a", "b"], ["x", "y"], ["m", "n"]]);
+        empty_lines_interspersed,
+        "\n\na,b\n\n\nx,y\n\n\nm,n\n",
+        csv![["a", "b"], ["x", "y"], ["m", "n"]]
+    );
     parses_to!(empty_lines_crlf, "\r\n\r\n\r\n\r\n", csv![]);
     parses_to!(
         empty_lines_interspersed_crlf,
         "\r\n\r\na,b\r\n\r\n\r\nx,y\r\n\r\n\r\nm,n\r\n",
-        csv![["a", "b"], ["x", "y"], ["m", "n"]]);
+        csv![["a", "b"], ["x", "y"], ["m", "n"]]
+    );
     parses_to!(empty_lines_mixed, "\r\n\n\r\n\n", csv![]);
     parses_to!(
         empty_lines_interspersed_mixed,
         "\n\r\na,b\r\n\n\r\nx,y\r\n\n\r\nm,n\r\n",
-        csv![["a", "b"], ["x", "y"], ["m", "n"]]);
+        csv![["a", "b"], ["x", "y"], ["m", "n"]]
+    );
     parses_to!(empty_lines_cr, "\r\r\r\r", csv![]);
     parses_to!(
-        empty_lines_interspersed_cr, "\r\ra,b\r\r\rx,y\r\r\rm,n\r",
-        csv![["a", "b"], ["x", "y"], ["m", "n"]]);
+        empty_lines_interspersed_cr,
+        "\r\ra,b\r\r\rx,y\r\r\rm,n\r",
+        csv![["a", "b"], ["x", "y"], ["m", "n"]]
+    );
 
     parses_to!(
-        term_weird, "zza,bzc,dzz",
+        term_weird,
+        "zza,bzc,dzz",
         csv![["a", "b"], ["c", "d"]],
-        |b: &mut ReaderBuilder| { b.terminator(Terminator::Any(b'z')); });
+        |b: &mut ReaderBuilder| {
+            b.terminator(Terminator::Any(b'z'));
+        }
+    );
 
     parses_to!(
-        ascii_delimited, "a\x1fb\x1ec\x1fd",
+        ascii_delimited,
+        "a\x1fb\x1ec\x1fd",
         csv![["a", "b"], ["c", "d"]],
-        |b: &mut ReaderBuilder| { b.ascii(); });
+        |b: &mut ReaderBuilder| {
+            b.ascii();
+        }
+    );
 
     parses_to!(bom_at_start, "\u{feff}a", csv![["a"]]);
     parses_to!(bom_in_field, "a\u{feff}", csv![["a\u{feff}"]]);
-    parses_to!(bom_at_field_start, "a,\u{feff}b", csv![["a","\u{feff}b"]]);
+    parses_to!(bom_at_field_start, "a,\u{feff}b", csv![["a", "\u{feff}b"]]);
 
     parses_to!(quote_empty, "\"\"", csv![[""]]);
     parses_to!(quote_lf, "\"\"\n", csv![[""]]);
@@ -1575,21 +1606,46 @@ mod tests {
     parses_to!(quote_inner_space, "\" a \"", csv![[" a "]]);
     parses_to!(quote_outer_space, "  \"a\"  ", csv![["  \"a\"  "]]);
 
-    parses_to!(quote_change, "zaz", csv![["a"]],
-               |b: &mut ReaderBuilder| { b.quote(b'z'); });
+    parses_to!(quote_change, "zaz", csv![["a"]], |b: &mut ReaderBuilder| {
+        b.quote(b'z');
+    });
 
     // This one is pretty hokey.
     // I don't really know what the "right" behavior is.
-    parses_to!(quote_delimiter, ",a,,b", csv![["a,b"]],
-               |b: &mut ReaderBuilder| { b.quote(b','); });
+    parses_to!(
+        quote_delimiter,
+        ",a,,b",
+        csv![["a,b"]],
+        |b: &mut ReaderBuilder| {
+            b.quote(b',');
+        }
+    );
 
     parses_to!(quote_no_escapes, r#""a\"b""#, csv![[r#"a\b""#]]);
-    parses_to!(quote_escapes_no_double, r#""a""b""#, csv![[r#"a"b""#]],
-               |b: &mut ReaderBuilder| { b.double_quote(false); });
-    parses_to!(quote_escapes, r#""a\"b""#, csv![[r#"a"b"#]],
-               |b: &mut ReaderBuilder| { b.escape(Some(b'\\')); });
-    parses_to!(quote_escapes_change, r#""az"b""#, csv![[r#"a"b"#]],
-               |b: &mut ReaderBuilder| { b.escape(Some(b'z')); });
+    parses_to!(
+        quote_escapes_no_double,
+        r#""a""b""#,
+        csv![[r#"a"b""#]],
+        |b: &mut ReaderBuilder| {
+            b.double_quote(false);
+        }
+    );
+    parses_to!(
+        quote_escapes,
+        r#""a\"b""#,
+        csv![[r#"a"b"#]],
+        |b: &mut ReaderBuilder| {
+            b.escape(Some(b'\\'));
+        }
+    );
+    parses_to!(
+        quote_escapes_change,
+        r#""az"b""#,
+        csv![[r#"a"b"#]],
+        |b: &mut ReaderBuilder| {
+            b.escape(Some(b'z'));
+        }
+    );
 
     parses_to!(
         quote_escapes_with_comma,
@@ -1597,36 +1653,78 @@ mod tests {
         csv![[r#""A,B""#]],
         |b: &mut ReaderBuilder| {
             b.escape(Some(b'\\')).double_quote(false);
-        });
+        }
+    );
 
+    parses_to!(
+        quoting_disabled,
+        r#""abc,foo""#,
+        csv![[r#""abc"#, r#"foo""#]],
+        |b: &mut ReaderBuilder| {
+            b.quoting(false);
+        }
+    );
 
-    parses_to!(quoting_disabled, r#""abc,foo""#, csv![[r#""abc"#, r#"foo""#]],
-               |b: &mut ReaderBuilder| { b.quoting(false); });
-
-    parses_to!(delimiter_tabs, "a\tb", csv![["a", "b"]],
-               |b: &mut ReaderBuilder| { b.delimiter(b'\t'); });
-    parses_to!(delimiter_weird, "azb", csv![["a", "b"]],
-               |b: &mut ReaderBuilder| { b.delimiter(b'z'); });
+    parses_to!(
+        delimiter_tabs,
+        "a\tb",
+        csv![["a", "b"]],
+        |b: &mut ReaderBuilder| {
+            b.delimiter(b'\t');
+        }
+    );
+    parses_to!(
+        delimiter_weird,
+        "azb",
+        csv![["a", "b"]],
+        |b: &mut ReaderBuilder| {
+            b.delimiter(b'z');
+        }
+    );
 
     parses_to!(extra_record_crlf_1, "foo\n1\n", csv![["foo"], ["1"]]);
     parses_to!(extra_record_crlf_2, "foo\r\n1\r\n", csv![["foo"], ["1"]]);
 
-    parses_to!(comment_1, "foo\n# hi\nbar\n", csv![["foo"], ["bar"]],
-               |b: &mut ReaderBuilder| { b.comment(Some(b'#')); });
+    parses_to!(
+        comment_1,
+        "foo\n# hi\nbar\n",
+        csv![["foo"], ["bar"]],
+        |b: &mut ReaderBuilder| {
+            b.comment(Some(b'#'));
+        }
+    );
     parses_to!(
         comment_2,
         "foo\n # hi\nbar\n",
         csv![["foo"], [" # hi"], ["bar"]],
-        |b: &mut ReaderBuilder| { b.comment(Some(b'#')); });
+        |b: &mut ReaderBuilder| {
+            b.comment(Some(b'#'));
+        }
+    );
     parses_to!(
         comment_3,
         "foo\n# hi\nbar\n",
         csv![["foo"], ["# hi"], ["bar"]],
-        |b: &mut ReaderBuilder| { b.comment(Some(b'\n')); });
-    parses_to!(comment_4, "foo,b#ar,baz", csv![["foo", "b#ar", "baz"]],
-               |b: &mut ReaderBuilder| { b.comment(Some(b'#')); });
-    parses_to!(comment_5, "foo,#bar,baz", csv![["foo", "#bar", "baz"]],
-               |b: &mut ReaderBuilder| { b.comment(Some(b'#')); });
+        |b: &mut ReaderBuilder| {
+            b.comment(Some(b'\n'));
+        }
+    );
+    parses_to!(
+        comment_4,
+        "foo,b#ar,baz",
+        csv![["foo", "b#ar", "baz"]],
+        |b: &mut ReaderBuilder| {
+            b.comment(Some(b'#'));
+        }
+    );
+    parses_to!(
+        comment_5,
+        "foo,#bar,baz",
+        csv![["foo", "#bar", "baz"]],
+        |b: &mut ReaderBuilder| {
+            b.comment(Some(b'#'));
+        }
+    );
 
     macro_rules! assert_read {
         (
@@ -1774,7 +1872,13 @@ mod tests {
         let mut rdr = Reader::new();
 
         assert_read!(
-            rdr, b("foo,bar"), out, 4, 3, Field { record_end: false });
+            rdr,
+            b("foo,bar"),
+            out,
+            4,
+            3,
+            Field { record_end: false }
+        );
         assert_eq!(&out[..3], b("foo"));
 
         assert_read!(rdr, b("bar"), &mut [], 0, 0, OutputFull);

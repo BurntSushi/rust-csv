@@ -104,11 +104,10 @@ extern crate arrayvec;
 extern crate memchr;
 
 pub use reader::{
-    Reader, ReaderBuilder,
-    ReadFieldResult, ReadFieldNoCopyResult,
-    ReadRecordResult, ReadRecordNoCopyResult,
+    ReadFieldNoCopyResult, ReadFieldResult, ReadRecordNoCopyResult,
+    ReadRecordResult, Reader, ReaderBuilder,
 };
-pub use writer::{Writer, WriterBuilder, WriteResult, is_non_numeric, quote};
+pub use writer::{is_non_numeric, quote, WriteResult, Writer, WriterBuilder};
 
 mod reader;
 mod writer;
