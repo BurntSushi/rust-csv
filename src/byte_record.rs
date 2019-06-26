@@ -1,11 +1,10 @@
-use std::ascii;
 use std::cmp;
 use std::fmt;
 use std::iter::FromIterator;
 use std::ops::{self, Range};
 use std::result;
-use std::str;
 
+use bstr::{BString, ByteSlice};
 use serde::de::Deserialize;
 
 use crate::deserializer::deserialize_byte_record;
@@ -71,9 +70,7 @@ impl fmt::Debug for ByteRecord {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut fields = vec![];
         for field in self {
-            let escaped: Vec<u8> =
-                field.iter().flat_map(|&b| ascii::escape_default(b)).collect();
-            fields.push(String::from_utf8(escaped).unwrap());
+            fields.push(BString::from(field.to_vec()));
         }
         write!(f, "ByteRecord({:?})", fields)
     }
@@ -365,39 +362,18 @@ impl ByteRecord {
     /// assert_eq!(record, vec!["", "foo", "bar", "b a z"]);
     /// ```
     pub fn trim(&mut self) {
-        let mut trimmed = 0;
-        for field in 0..self.len() {
-            self.0.bounds.ends[field] -= trimmed;
-            let bound = self.0.bounds.get(field).unwrap();
-            let front_space = self.count_leading_whitespace(bound.clone());
-            let back_space = if front_space < bound.end - bound.start {
-                self.count_leading_whitespace(bound.clone().rev())
-            } else {
-                0
-            };
-
-            self.0.fields.drain(bound.end - back_space..bound.end);
-            self.0.fields.drain(bound.start..bound.start + front_space);
-            self.0.bounds.ends[field] -= front_space + back_space;
-            trimmed += front_space + back_space;
+        let length = self.len();
+        if length == 0 {
+            return;
         }
-    }
-
-    /// Returns amount of leading whitespace starting in the given range.
-    /// Whitespace is not counted past the end of the range.
-    fn count_leading_whitespace<R>(&self, range: R) -> usize
-    where
-        R: Iterator<Item = usize>,
-    {
-        let mut count = 0;
-        for i in range {
-            match self.0.fields[i] {
-                b'\t' | b'\n' | b'\x0B' | b'\x0C' | b'\r' | b' ' => {}
-                _ => break,
-            }
-            count += 1;
+        // TODO: We could likely do this in place, but for now, we allocate.
+        let mut trimmed =
+            ByteRecord::with_capacity(self.as_slice().len(), self.len());
+        trimmed.set_position(self.position().cloned());
+        for field in &*self {
+            trimmed.push_field(field.trim());
         }
-        count
+        *self = trimmed;
     }
 
     /// Add a new field to this record.
@@ -553,13 +529,13 @@ impl ByteRecord {
     #[inline]
     pub(crate) fn validate(&self) -> result::Result<(), Utf8Error> {
         // If the entire buffer is ASCII, then we have nothing to fear.
-        if self.0.fields[..self.0.bounds.end()].iter().all(|&b| b <= 0x7F) {
+        if self.0.fields[..self.0.bounds.end()].is_ascii() {
             return Ok(());
         }
         // Otherwise, we must check each field individually to ensure that
         // it's valid UTF-8.
         for (i, field) in self.iter().enumerate() {
-            if let Err(err) = str::from_utf8(field) {
+            if let Err(err) = field.to_str() {
                 return Err(new_utf8_error(i, err.valid_up_to()));
             }
         }
