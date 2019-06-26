@@ -46,6 +46,14 @@ impl Error {
             _ => false,
         }
     }
+
+    /// Return the position for this error, if one exists.
+    ///
+    /// This is a convenience function that permits callers to easily access
+    /// the position on an error without doing case analysis on `ErrorKind`.
+    pub fn position(&self) -> Option<&Position> {
+        self.0.position()
+    }
 }
 
 /// The specific type of an error.
@@ -97,6 +105,21 @@ pub enum ErrorKind {
     /// could break existing code.)
     #[doc(hidden)]
     __Nonexhaustive,
+}
+
+impl ErrorKind {
+    /// Return the position for this error, if one exists.
+    ///
+    /// This is a convenience function that permits callers to easily access
+    /// the position on an error without doing case analysis on `ErrorKind`.
+    pub fn position(&self) -> Option<&Position> {
+        match *self {
+            ErrorKind::Utf8 { ref pos, .. } => pos.as_ref(),
+            ErrorKind::UnequalLengths { ref pos, .. } => pos.as_ref(),
+            ErrorKind::Deserialize { ref pos, .. } => pos.as_ref(),
+            _ => None,
+        }
+    }
 }
 
 impl From<io::Error> for Error {
