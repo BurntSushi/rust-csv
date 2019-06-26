@@ -4,13 +4,11 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::result;
 
-use csv_core::{
-    Reader as CoreReader, ReaderBuilder as CoreReaderBuilder,
-};
+use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
 use serde::de::DeserializeOwned;
 
 use byte_record::{self, ByteRecord, Position};
-use error::{ErrorKind, Result, Utf8Error, new_error};
+use error::{new_error, ErrorKind, Result, Utf8Error};
 use string_record::{self, StringRecord};
 use {Terminator, Trim};
 
@@ -36,7 +34,7 @@ pub struct ReaderBuilder {
 impl Default for ReaderBuilder {
     fn default() -> ReaderBuilder {
         ReaderBuilder {
-            capacity: 8 * (1<<10),
+            capacity: 8 * (1 << 10),
             flexible: false,
             has_headers: true,
             trim: Trim::default(),
@@ -404,10 +402,7 @@ impl ReaderBuilder {
     ///     }
     /// }
     /// ```
-    pub fn terminator(
-        &mut self,
-        term: Terminator,
-    ) -> &mut ReaderBuilder {
+    pub fn terminator(&mut self, term: Terminator) -> &mut ReaderBuilder {
         self.builder.terminator(term.to_core());
         self
     }
@@ -1065,7 +1060,8 @@ impl<R: io::Read> Reader<R> {
     /// }
     /// ```
     pub fn deserialize<D>(&mut self) -> DeserializeRecordsIter<R, D>
-            where D: DeserializeOwned
+    where
+        D: DeserializeOwned,
     {
         DeserializeRecordsIter::new(self)
     }
@@ -1129,7 +1125,8 @@ impl<R: io::Read> Reader<R> {
     /// }
     /// ```
     pub fn into_deserialize<D>(self) -> DeserializeRecordsIntoIter<R, D>
-            where D: DeserializeOwned
+    where
+        D: DeserializeOwned,
     {
         DeserializeRecordsIntoIter::new(self)
     }
@@ -1674,11 +1671,15 @@ impl<R: io::Read> Reader<R> {
                 let input = self.rdr.fill_buf()?;
                 let (fields, ends) = byte_record::as_parts(record);
                 self.core.read_record(
-                    input, &mut fields[outlen..], &mut ends[endlen..])
+                    input,
+                    &mut fields[outlen..],
+                    &mut ends[endlen..],
+                )
             };
             self.rdr.consume(nin);
             let byte = self.state.cur_pos.byte();
-            self.state.cur_pos
+            self.state
+                .cur_pos
                 .set_byte(byte + nin as u64)
                 .set_line(self.core.line());
             outlen += nout;
@@ -1955,12 +1956,11 @@ pub struct DeserializeRecordsIntoIter<R, D> {
 
 impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
     fn new(mut rdr: Reader<R>) -> DeserializeRecordsIntoIter<R, D> {
-        let headers =
-            if !rdr.state.has_headers {
-                None
-            } else {
-                rdr.headers().ok().map(Clone::clone)
-            };
+        let headers = if !rdr.state.has_headers {
+            None
+        } else {
+            rdr.headers().ok().map(Clone::clone)
+        };
         DeserializeRecordsIntoIter {
             rdr: rdr,
             rec: StringRecord::new(),
@@ -1985,8 +1985,8 @@ impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
     }
 }
 
-impl<R: io::Read, D: DeserializeOwned>
-    Iterator for DeserializeRecordsIntoIter<R, D>
+impl<R: io::Read, D: DeserializeOwned> Iterator
+    for DeserializeRecordsIntoIter<R, D>
 {
     type Item = Result<D>;
 
@@ -2014,12 +2014,11 @@ pub struct DeserializeRecordsIter<'r, R: 'r, D> {
 
 impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
     fn new(rdr: &'r mut Reader<R>) -> DeserializeRecordsIter<'r, R, D> {
-        let headers =
-            if !rdr.state.has_headers {
-                None
-            } else {
-                rdr.headers().ok().map(Clone::clone)
-            };
+        let headers = if !rdr.state.has_headers {
+            None
+        } else {
+            rdr.headers().ok().map(Clone::clone)
+        };
         DeserializeRecordsIter {
             rdr: rdr,
             rec: StringRecord::new(),
@@ -2039,8 +2038,8 @@ impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
     }
 }
 
-impl<'r, R: io::Read, D: DeserializeOwned>
-    Iterator for DeserializeRecordsIter<'r, R, D>
+impl<'r, R: io::Read, D: DeserializeOwned> Iterator
+    for DeserializeRecordsIter<'r, R, D>
 {
     type Item = Result<D>;
 
@@ -2213,10 +2212,14 @@ mod tests {
     use error::ErrorKind;
     use string_record::StringRecord;
 
-    use super::{ReaderBuilder, Position, Trim};
+    use super::{Position, ReaderBuilder, Trim};
 
-    fn b(s: &str) -> &[u8] { s.as_bytes() }
-    fn s(b: &[u8]) -> &str { ::std::str::from_utf8(b).unwrap() }
+    fn b(s: &str) -> &[u8] {
+        s.as_bytes()
+    }
+    fn s(b: &[u8]) -> &str {
+        ::std::str::from_utf8(b).unwrap()
+    }
 
     fn newpos(byte: u64, line: u64, record: u64) -> Position {
         let mut p = Position::new();
@@ -2227,9 +2230,8 @@ mod tests {
     #[test]
     fn read_byte_record() {
         let data = b("foo,\"b,ar\",baz\nabc,mno,xyz");
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(false)
-            .from_reader(data);
+        let mut rdr =
+            ReaderBuilder::new().has_headers(false).from_reader(data);
         let mut rec = ByteRecord::new();
 
         assert!(rdr.read_byte_record(&mut rec).unwrap());
@@ -2347,9 +2349,8 @@ mod tests {
     #[test]
     fn read_record_unequal_fails() {
         let data = b("foo\nbar,baz");
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(false)
-            .from_reader(data);
+        let mut rdr =
+            ReaderBuilder::new().has_headers(false).from_reader(data);
         let mut rec = ByteRecord::new();
 
         assert!(rdr.read_byte_record(&mut rec).unwrap());
@@ -2357,18 +2358,16 @@ mod tests {
         assert_eq!("foo", s(&rec[0]));
 
         match rdr.read_byte_record(&mut rec) {
-            Err(err) => {
-                match *err.kind() {
-                    ErrorKind::UnequalLengths {
-                        expected_len: 1,
-                        ref pos,
-                        len: 2,
-                    } => {
-                        assert_eq!(pos, &Some(newpos(4, 2, 1)));
-                    }
-                    ref wrong => panic!("match failed, got {:?}", wrong),
+            Err(err) => match *err.kind() {
+                ErrorKind::UnequalLengths {
+                    expected_len: 1,
+                    ref pos,
+                    len: 2,
+                } => {
+                    assert_eq!(pos, &Some(newpos(4, 2, 1)));
                 }
-            }
+                ref wrong => panic!("match failed, got {:?}", wrong),
+            },
             wrong => panic!("match failed, got {:?}", wrong),
         }
     }
@@ -2399,9 +2398,8 @@ mod tests {
     #[test]
     fn read_record_unequal_continue() {
         let data = b("foo\nbar,baz\nquux");
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(false)
-            .from_reader(data);
+        let mut rdr =
+            ReaderBuilder::new().has_headers(false).from_reader(data);
         let mut rec = ByteRecord::new();
 
         assert!(rdr.read_byte_record(&mut rec).unwrap());
@@ -2409,18 +2407,16 @@ mod tests {
         assert_eq!("foo", s(&rec[0]));
 
         match rdr.read_byte_record(&mut rec) {
-            Err(err) => {
-                match err.kind() {
-                    &ErrorKind::UnequalLengths {
-                        expected_len: 1,
-                        ref pos,
-                        len: 2,
-                    } => {
-                        assert_eq!(pos, &Some(newpos(4, 2, 1)));
-                    }
-                    wrong => panic!("match failed, got {:?}", wrong),
+            Err(err) => match err.kind() {
+                &ErrorKind::UnequalLengths {
+                    expected_len: 1,
+                    ref pos,
+                    len: 2,
+                } => {
+                    assert_eq!(pos, &Some(newpos(4, 2, 1)));
                 }
-            }
+                wrong => panic!("match failed, got {:?}", wrong),
+            },
             wrong => panic!("match failed, got {:?}", wrong),
         }
 
@@ -2501,9 +2497,8 @@ mod tests {
     #[test]
     fn read_record_no_headers_before() {
         let data = b("foo,bar,baz\na,b,c\nd,e,f");
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(false)
-            .from_reader(data);
+        let mut rdr =
+            ReaderBuilder::new().has_headers(false).from_reader(data);
         let mut rec = StringRecord::new();
 
         {
@@ -2532,9 +2527,8 @@ mod tests {
     #[test]
     fn read_record_no_headers_after() {
         let data = b("foo,bar,baz\na,b,c\nd,e,f");
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(false)
-            .from_reader(data);
+        let mut rdr =
+            ReaderBuilder::new().has_headers(false).from_reader(data);
         let mut rec = StringRecord::new();
 
         assert!(rdr.read_record(&mut rec).unwrap());
@@ -2561,8 +2555,7 @@ mod tests {
     #[test]
     fn seek() {
         let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
-        let mut rdr = ReaderBuilder::new()
-            .from_reader(io::Cursor::new(data));
+        let mut rdr = ReaderBuilder::new().from_reader(io::Cursor::new(data));
         rdr.seek(newpos(18, 3, 2)).unwrap();
 
         let mut rec = StringRecord::new();
@@ -2587,8 +2580,7 @@ mod tests {
     #[test]
     fn seek_headers_after() {
         let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
-        let mut rdr = ReaderBuilder::new()
-            .from_reader(io::Cursor::new(data));
+        let mut rdr = ReaderBuilder::new().from_reader(io::Cursor::new(data));
         rdr.seek(newpos(18, 3, 2)).unwrap();
         assert_eq!(rdr.headers().unwrap(), vec!["foo", "bar", "baz"]);
     }
@@ -2598,8 +2590,7 @@ mod tests {
     #[test]
     fn seek_headers_before_after() {
         let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
-        let mut rdr = ReaderBuilder::new()
-            .from_reader(io::Cursor::new(data));
+        let mut rdr = ReaderBuilder::new().from_reader(io::Cursor::new(data));
         let headers = rdr.headers().unwrap().clone();
         rdr.seek(newpos(18, 3, 2)).unwrap();
         assert_eq!(&headers, rdr.headers().unwrap());
@@ -2611,8 +2602,7 @@ mod tests {
     #[test]
     fn seek_headers_no_actual_seek() {
         let data = b("foo,bar,baz\na,b,c\nd,e,f\ng,h,i");
-        let mut rdr = ReaderBuilder::new()
-            .from_reader(io::Cursor::new(data));
+        let mut rdr = ReaderBuilder::new().from_reader(io::Cursor::new(data));
         rdr.seek(Position::new()).unwrap();
         assert_eq!("foo", &rdr.headers().unwrap()[0]);
     }
@@ -2661,9 +2651,8 @@ mod tests {
     // Test that reading the first record on empty data works.
     #[test]
     fn no_headers_on_empty_data() {
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(false)
-            .from_reader("".as_bytes());
+        let mut rdr =
+            ReaderBuilder::new().has_headers(false).from_reader("".as_bytes());
         assert_eq!(rdr.records().count(), 0);
     }
 
@@ -2671,9 +2660,8 @@ mod tests {
     // we've tried to read headers before hand.
     #[test]
     fn no_headers_on_empty_data_after_headers() {
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(false)
-            .from_reader("".as_bytes());
+        let mut rdr =
+            ReaderBuilder::new().has_headers(false).from_reader("".as_bytes());
         assert_eq!(rdr.headers().unwrap().len(), 0);
         assert_eq!(rdr.records().count(), 0);
     }

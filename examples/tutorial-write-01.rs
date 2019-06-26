@@ -9,8 +9,20 @@ fn run() -> Result<(), Box<Error>> {
     // Since we're writing records manually, we must explicitly write our
     // header record. A header record is written the same way that other
     // records are written.
-    wtr.write_record(&["City", "State", "Population", "Latitude", "Longitude"])?;
-    wtr.write_record(&["Davidsons Landing", "AK", "", "65.2419444", "-165.2716667"])?;
+    wtr.write_record(&[
+        "City",
+        "State",
+        "Population",
+        "Latitude",
+        "Longitude",
+    ])?;
+    wtr.write_record(&[
+        "Davidsons Landing",
+        "AK",
+        "",
+        "65.2419444",
+        "-165.2716667",
+    ])?;
     wtr.write_record(&["Kenai", "AK", "7610", "60.5544444", "-151.2583333"])?;
     wtr.write_record(&["Oakman", "AL", "", "33.7133333", "-87.3886111"])?;
 

@@ -3,7 +3,7 @@ extern crate csv_core;
 use std::io::{self, Read};
 use std::process;
 
-use csv_core::{Reader, ReadFieldResult};
+use csv_core::{ReadFieldResult, Reader};
 
 fn run(mut data: &[u8]) -> Option<u64> {
     let mut rdr = Reader::new();

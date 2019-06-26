@@ -7,10 +7,12 @@ use std::str;
 
 use serde::de::Deserialize;
 
-use deserializer::deserialize_string_record;
-use error::{ErrorKind, FromUtf8Error, Result, new_error, new_from_utf8_error};
-use reader::Reader;
 use byte_record::{self, ByteRecord, ByteRecordIter, Position};
+use deserializer::deserialize_string_record;
+use error::{
+    new_error, new_from_utf8_error, ErrorKind, FromUtf8Error, Result,
+};
+use reader::Reader;
 
 /// A safe function for reading CSV data into a `StringRecord`.
 ///
@@ -235,8 +237,8 @@ impl StringRecord {
             return StringRecord(record);
         }
         // TODO: We can be faster here. Not sure if it's worth it.
-        let mut str_record = StringRecord::with_capacity(
-            record.as_slice().len(), record.len());
+        let mut str_record =
+            StringRecord::with_capacity(record.as_slice().len(), record.len());
         for field in &record {
             str_record.push_field(&String::from_utf8_lossy(field));
         }
@@ -473,8 +475,8 @@ impl StringRecord {
             return;
         }
         // TODO: We could likely do this in place, but for now, we allocate.
-        let mut trimmed = StringRecord::with_capacity(
-            self.as_slice().len(), self.len());
+        let mut trimmed =
+            StringRecord::with_capacity(self.as_slice().len(), self.len());
         for field in &*self {
             trimmed.push_field(field.trim());
         }
@@ -656,7 +658,9 @@ impl StringRecord {
 impl ops::Index<usize> for StringRecord {
     type Output = str;
     #[inline]
-    fn index(&self, i: usize) -> &str { self.get(i).unwrap() }
+    fn index(&self, i: usize) -> &str {
+        self.get(i).unwrap()
+    }
 }
 
 impl<T: AsRef<str>> From<Vec<T>> for StringRecord {
@@ -675,7 +679,7 @@ impl<'a, T: AsRef<str>> From<&'a [T]> for StringRecord {
 
 impl<T: AsRef<str>> FromIterator<T> for StringRecord {
     #[inline]
-    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> StringRecord {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> StringRecord {
         let mut record = StringRecord::new();
         record.extend(iter);
         record
@@ -684,7 +688,7 @@ impl<T: AsRef<str>> FromIterator<T> for StringRecord {
 
 impl<T: AsRef<str>> Extend<T> for StringRecord {
     #[inline]
-    fn extend<I: IntoIterator<Item=T>>(&mut self, iter: I) {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for x in iter {
             self.push_field(x.as_ref());
         }
@@ -815,8 +819,8 @@ mod tests {
     // Regression test for #138.
     #[test]
     fn eq_field_boundaries() {
-        let test1 = StringRecord::from(vec!["12","34"]);
-        let test2 = StringRecord::from(vec!["123","4"]);
+        let test1 = StringRecord::from(vec!["12", "34"]);
+        let test2 = StringRecord::from(vec!["123", "4"]);
 
         assert_ne!(test1, test2);
     }
@@ -826,8 +830,8 @@ mod tests {
     // Regression test for #138.
     #[test]
     fn eq_record_len() {
-        let test1 = StringRecord::from(vec!["12","34", "56"]);
-        let test2 = StringRecord::from(vec!["12","34"]);
+        let test1 = StringRecord::from(vec!["12", "34", "56"]);
+        let test2 = StringRecord::from(vec!["12", "34"]);
         assert_ne!(test1, test2);
     }
 }

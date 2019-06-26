@@ -118,7 +118,7 @@ impl StdError for Error {
         match *self.0 {
             ErrorKind::Io(ref err) => err.description(),
             ErrorKind::Utf8 { ref err, .. } => err.description(),
-            ErrorKind::UnequalLengths{..} => {
+            ErrorKind::UnequalLengths { .. } => {
                 "record of different length found"
             }
             ErrorKind::Seek => "headers unavailable on seeked CSV reader",
@@ -132,7 +132,7 @@ impl StdError for Error {
         match *self.0 {
             ErrorKind::Io(ref err) => Some(err),
             ErrorKind::Utf8 { ref err, .. } => Some(err),
-            ErrorKind::UnequalLengths{..} => None,
+            ErrorKind::UnequalLengths { .. } => None,
             ErrorKind::Seek => None,
             ErrorKind::Serialize(_) => None,
             ErrorKind::Deserialize { ref err, .. } => Some(err),
@@ -148,47 +148,61 @@ impl fmt::Display for Error {
             ErrorKind::Utf8 { pos: None, ref err } => {
                 write!(f, "CSV parse error: field {}: {}", err.field(), err)
             }
-            ErrorKind::Utf8 { pos: Some(ref pos), ref err } => {
-                write!(
-                    f,
-                    "CSV parse error: record {} \
-                     (line {}, field: {}, byte: {}): {}",
-                    pos.record(), pos.line(), err.field(), pos.byte(), err)
-            }
+            ErrorKind::Utf8 { pos: Some(ref pos), ref err } => write!(
+                f,
+                "CSV parse error: record {} \
+                 (line {}, field: {}, byte: {}): {}",
+                pos.record(),
+                pos.line(),
+                err.field(),
+                pos.byte(),
+                err
+            ),
             ErrorKind::UnequalLengths { pos: None, expected_len, len } => {
                 write!(
-                    f, "CSV error: \
-                        found record with {} fields, but the previous record \
-                        has {} fields",
-                    len, expected_len)
+                    f,
+                    "CSV error: \
+                     found record with {} fields, but the previous record \
+                     has {} fields",
+                    len, expected_len
+                )
             }
             ErrorKind::UnequalLengths {
-                pos: Some(ref pos), expected_len, len
-            } => {
-                write!(
-                    f, "CSV error: record {} (line: {}, byte: {}): \
-                        found record with {} fields, but the previous record \
-                        has {} fields",
-                    pos.record(), pos.line(), pos.byte(), len, expected_len)
-            }
-            ErrorKind::Seek => {
-                write!(f, "CSV error: cannot access headers of CSV data \
-                           when the parser was seeked before the first record \
-                           could be read")
-            }
+                pos: Some(ref pos),
+                expected_len,
+                len,
+            } => write!(
+                f,
+                "CSV error: record {} (line: {}, byte: {}): \
+                 found record with {} fields, but the previous record \
+                 has {} fields",
+                pos.record(),
+                pos.line(),
+                pos.byte(),
+                len,
+                expected_len
+            ),
+            ErrorKind::Seek => write!(
+                f,
+                "CSV error: cannot access headers of CSV data \
+                 when the parser was seeked before the first record \
+                 could be read"
+            ),
             ErrorKind::Serialize(ref err) => {
                 write!(f, "CSV write error: {}", err)
             }
             ErrorKind::Deserialize { pos: None, ref err } => {
                 write!(f, "CSV deserialize error: {}", err)
             }
-            ErrorKind::Deserialize { pos: Some(ref pos), ref err } => {
-                write!(
-                    f,
-                    "CSV deserialize error: record {} \
-                     (line: {}, byte: {}): {}",
-                    pos.record(), pos.line(), pos.byte(), err)
-            }
+            ErrorKind::Deserialize { pos: Some(ref pos), ref err } => write!(
+                f,
+                "CSV deserialize error: record {} \
+                 (line: {}, byte: {}): {}",
+                pos.record(),
+                pos.line(),
+                pos.byte(),
+                err
+            ),
             _ => unreachable!(),
         }
     }
@@ -228,8 +242,12 @@ impl fmt::Display for FromUtf8Error {
 }
 
 impl StdError for FromUtf8Error {
-    fn description(&self) -> &str { self.err.description() }
-    fn cause(&self) -> Option<&StdError> { Some(&self.err) }
+    fn description(&self) -> &str {
+        self.err.description()
+    }
+    fn cause(&self) -> Option<&StdError> {
+        Some(&self.err)
+    }
 }
 
 /// A UTF-8 validation error.
@@ -254,13 +272,19 @@ pub fn new_utf8_error(field: usize, valid_up_to: usize) -> Utf8Error {
 
 impl Utf8Error {
     /// The field index of a byte record in which UTF-8 validation failed.
-    pub fn field(&self) -> usize { self.field }
+    pub fn field(&self) -> usize {
+        self.field
+    }
     /// The index into the given field up to which valid UTF-8 was verified.
-    pub fn valid_up_to(&self) -> usize { self.valid_up_to }
+    pub fn valid_up_to(&self) -> usize {
+        self.valid_up_to
+    }
 }
 
 impl StdError for Utf8Error {
-    fn description(&self) -> &str { "invalid utf-8 in CSV record" }
+    fn description(&self) -> &str {
+        "invalid utf-8 in CSV record"
+    }
 }
 
 impl fmt::Display for Utf8Error {
@@ -268,8 +292,8 @@ impl fmt::Display for Utf8Error {
         write!(
             f,
             "invalid utf-8: invalid UTF-8 in field {} near byte index {}",
-            self.field,
-            self.valid_up_to)
+            self.field, self.valid_up_to
+        )
     }
 }
 

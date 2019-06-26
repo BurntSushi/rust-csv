@@ -5,14 +5,12 @@ use std::mem;
 use itoa;
 use ryu;
 use serde::ser::{
-    Error as SerdeError,
-    Serialize, Serializer,
-    SerializeSeq, SerializeTuple, SerializeTupleStruct,
-    SerializeTupleVariant, SerializeMap, SerializeStruct,
-    SerializeStructVariant,
+    Error as SerdeError, Serialize, SerializeMap, SerializeSeq,
+    SerializeStruct, SerializeStructVariant, SerializeTuple,
+    SerializeTupleStruct, SerializeTupleVariant, Serializer,
 };
 
-use error::{Error, ErrorKind, new_error};
+use error::{new_error, Error, ErrorKind};
 use writer::Writer;
 
 /// Serialize the given value to the given writer, and return an error if
@@ -198,7 +196,8 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         Err(Error::custom(
             "serializing maps is not supported, \
              if you have a use case, please file an issue at \
-             https://github.com/BurntSushi/rust-csv"))
+             https://github.com/BurntSushi/rust-csv",
+        ))
     }
 
     fn serialize_struct(
@@ -440,10 +439,7 @@ struct SeHeader<'w, W: 'w + io::Write> {
 
 impl<'w, W: io::Write> SeHeader<'w, W> {
     fn new(wtr: &'w mut Writer<W>) -> Self {
-        SeHeader {
-            wtr: wtr,
-            state: HeaderState::Write,
-        }
+        SeHeader { wtr: wtr, state: HeaderState::Write }
     }
 
     fn wrote_header(&self) -> bool {
@@ -627,9 +623,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        Err(Error::custom(
-            "serializing enum tuple variants is not supported",
-        ))
+        Err(Error::custom("serializing enum tuple variants is not supported"))
     }
 
     fn serialize_map(
@@ -659,9 +653,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        Err(Error::custom(
-            "serializing enum struct variants is not supported",
-        ))
+        Err(Error::custom("serializing enum struct variants is not supported"))
     }
 }
 
@@ -762,10 +754,8 @@ impl<'a, 'w, W: io::Write> SerializeStruct for &'a mut SeHeader<'w, W> {
         value: &T,
     ) -> Result<(), Self::Error> {
         // Grab old state and update state to `EncounteredStructField`.
-        let old_state = mem::replace(
-            &mut self.state,
-            HeaderState::EncounteredStructField,
-        );
+        let old_state =
+            mem::replace(&mut self.state, HeaderState::EncounteredStructField);
         if let HeaderState::ErrorIfWrite(err) = old_state {
             return Err(err);
         }
@@ -960,7 +950,11 @@ mod tests {
     #[test]
     fn enum_units() {
         #[derive(Serialize)]
-        enum Wat { Foo, Bar, Baz }
+        enum Wat {
+            Foo,
+            Bar,
+            Baz,
+        }
 
         let got = serialize(Wat::Foo);
         assert_eq!(got, "Foo\n");
@@ -984,7 +978,11 @@ mod tests {
     #[test]
     fn enum_newtypes() {
         #[derive(Serialize)]
-        enum Wat { Foo(i32), Bar(f32), Baz(bool) }
+        enum Wat {
+            Foo(i32),
+            Bar(f32),
+            Baz(bool),
+        }
 
         let got = serialize(Wat::Foo(5));
         assert_eq!(got, "5\n");
@@ -1129,10 +1127,7 @@ mod tests {
 
         let row = Foo {
             label: "foo".into(),
-            nest: Nested {
-                label2: "bar".into(),
-                value: 5,
-            },
+            nest: Nested { label2: "bar".into(), value: 5 },
         };
 
         let got = serialize(row.clone());
@@ -1178,19 +1173,9 @@ mod tests {
             empty: (),
         }
         let row = (
-            Foo {
-                label: "hi".to_string(),
-                num: 5.0,
-            },
-            Bar {
-                label2: true,
-                value: 3,
-                empty: (),
-            },
-            Foo {
-                label: "baz".to_string(),
-                num: 2.3,
-            },
+            Foo { label: "hi".to_string(), num: 5.0 },
+            Bar { label2: true, value: 3, empty: () },
+            Foo { label: "baz".to_string(), num: 2.3 },
         );
 
         let got = serialize(row.clone());
@@ -1208,13 +1193,7 @@ mod tests {
             label: String,
             num: f64,
         }
-        let row = (
-            3.14,
-            Foo {
-                label: "hi".to_string(),
-                num: 5.0,
-            },
-        );
+        let row = (3.14, Foo { label: "hi".to_string(), num: 5.0 });
 
         let got = serialize(row.clone());
         assert_eq!(got, "3.14,hi,5.0\n");
@@ -1233,13 +1212,7 @@ mod tests {
             label: String,
             num: f64,
         }
-        let row = (
-            Foo {
-                label: "hi".to_string(),
-                num: 5.0,
-            },
-            3.14,
-        );
+        let row = (Foo { label: "hi".to_string(), num: 5.0 }, 3.14);
 
         let got = serialize(row.clone());
         assert_eq!(got, "hi,5.0,3.14\n");
@@ -1259,14 +1232,8 @@ mod tests {
             num: f64,
         }
         let row = vec![
-            Foo {
-                label: "hi".to_string(),
-                num: 5.0,
-            },
-            Foo {
-                label: "baz".to_string(),
-                num: 2.3,
-            },
+            Foo { label: "hi".to_string(), num: 5.0 },
+            Foo { label: "baz".to_string(), num: 2.3 },
         ];
 
         let got = serialize(row.clone());
@@ -1294,22 +1261,10 @@ mod tests {
         struct Baz(bool);
         let row = (
             (
-                Foo {
-                    label: "hi".to_string(),
-                    num: 5.0,
-                },
-                Bar {
-                    label2: Baz(true),
-                    value: 3,
-                    empty: (),
-                },
+                Foo { label: "hi".to_string(), num: 5.0 },
+                Bar { label2: Baz(true), value: 3, empty: () },
             ),
-            vec![
-                (Foo {
-                    label: "baz".to_string(),
-                    num: 2.3,
-                },),
-            ],
+            vec![(Foo { label: "baz".to_string(), num: 2.3 },)],
         );
 
         let got = serialize(row.clone());

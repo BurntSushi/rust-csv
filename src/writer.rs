@@ -4,17 +4,14 @@ use std::path::Path;
 use std::result;
 
 use csv_core::{
-    self,
-    Writer as CoreWriter,
+    self, WriteResult, Writer as CoreWriter,
     WriterBuilder as CoreWriterBuilder,
-    WriteResult,
 };
 use serde::Serialize;
 
 use byte_record::ByteRecord;
 use error::{
-    ErrorKind, Result, IntoInnerError,
-    new_error, new_into_inner_error,
+    new_error, new_into_inner_error, ErrorKind, IntoInnerError, Result,
 };
 use serializer::{serialize, serialize_header};
 use {QuoteStyle, Terminator};
@@ -36,7 +33,7 @@ impl Default for WriterBuilder {
     fn default() -> WriterBuilder {
         WriterBuilder {
             builder: CoreWriterBuilder::default(),
-            capacity: 8 * (1<<10),
+            capacity: 8 * (1 << 10),
             flexible: false,
             has_headers: true,
         }
@@ -341,10 +338,7 @@ impl WriterBuilder {
     ///     Ok(())
     /// }
     /// ```
-    pub fn terminator(
-        &mut self,
-        term: Terminator,
-    ) -> &mut WriterBuilder {
+    pub fn terminator(&mut self, term: Terminator) -> &mut WriterBuilder {
         self.builder.terminator(term.to_core());
         self
     }
@@ -633,19 +627,15 @@ impl Writer<File> {
 
 impl<W: io::Write> Writer<W> {
     fn new(builder: &WriterBuilder, wtr: W) -> Writer<W> {
-        let header_state =
-            if builder.has_headers {
-                HeaderState::Write
-            } else {
-                HeaderState::None
-            };
+        let header_state = if builder.has_headers {
+            HeaderState::Write
+        } else {
+            HeaderState::None
+        };
         Writer {
             core: builder.builder.build(),
             wtr: Some(wtr),
-            buf: Buffer {
-                buf: vec![0; builder.capacity],
-                len: 0,
-            },
+            buf: Buffer { buf: vec![0; builder.capacity], len: 0 },
             state: WriterState {
                 header: header_state,
                 flexible: builder.flexible,
@@ -943,7 +933,9 @@ impl<W: io::Write> Writer<W> {
     /// }
     /// ```
     pub fn write_record<I, T>(&mut self, record: I) -> Result<()>
-        where I: IntoIterator<Item=T>, T: AsRef<[u8]>
+    where
+        I: IntoIterator<Item = T>,
+        T: AsRef<[u8]>,
     {
         for field in record.into_iter() {
             self.write_field_impl(field)?;
@@ -1027,7 +1019,8 @@ impl<W: io::Write> Writer<W> {
                     self.buf.writable(),
                     self.core.get_quote(),
                     self.core.get_escape(),
-                    self.core.get_double_quote());
+                    self.core.get_double_quote(),
+                );
                 debug_assert!(res == WriteResult::InputEmpty);
                 debug_assert!(nin == field.len());
                 self.buf.written(nout);
@@ -1327,8 +1320,8 @@ mod tests {
     fn raw_unequal_records_bad() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.write_byte_record(&ByteRecord::from(vec!["a", "b", "c"])).unwrap();
-        let err = wtr.write_byte_record(
-            &ByteRecord::from(vec!["a"])).unwrap_err();
+        let err =
+            wtr.write_byte_record(&ByteRecord::from(vec!["a"])).unwrap_err();
         match *err.kind() {
             ErrorKind::UnequalLengths { ref pos, expected_len, len } => {
                 assert!(pos.is_none());
@@ -1380,9 +1373,8 @@ mod tests {
             baz: bool,
         }
 
-        let mut wtr = WriterBuilder::new()
-            .has_headers(false)
-            .from_writer(vec![]);
+        let mut wtr =
+            WriterBuilder::new().has_headers(false).from_writer(vec![]);
         wtr.serialize(Row { foo: 42, bar: 42.5, baz: true }).unwrap();
         assert_eq!(wtr_as_string(wtr), "42,42.5,true\n");
     }

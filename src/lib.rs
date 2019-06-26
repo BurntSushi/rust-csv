@@ -188,18 +188,17 @@ pub use error::{
     Error, ErrorKind, FromUtf8Error, IntoInnerError, Result, Utf8Error,
 };
 pub use reader::{
-    Reader, ReaderBuilder,
-    DeserializeRecordsIntoIter, DeserializeRecordsIter,
-    StringRecordsIntoIter, StringRecordsIter,
-    ByteRecordsIntoIter, ByteRecordsIter,
+    ByteRecordsIntoIter, ByteRecordsIter, DeserializeRecordsIntoIter,
+    DeserializeRecordsIter, Reader, ReaderBuilder, StringRecordsIntoIter,
+    StringRecordsIter,
 };
 pub use string_record::{StringRecord, StringRecordIter};
 pub use writer::{Writer, WriterBuilder};
 
 mod byte_record;
+pub mod cookbook;
 mod deserializer;
 mod error;
-pub mod cookbook;
 mod reader;
 mod serializer;
 mod string_record;
@@ -383,7 +382,9 @@ impl Default for Trim {
 /// }
 /// ```
 pub fn invalid_option<'de, D, T>(de: D) -> result::Result<Option<T>, D::Error>
-    where D: Deserializer<'de>, Option<T>: Deserialize<'de>
+where
+    D: Deserializer<'de>,
+    Option<T>: Deserialize<'de>,
 {
     Option::<T>::deserialize(de).or_else(|_| Ok(None))
 }

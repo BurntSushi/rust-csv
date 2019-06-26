@@ -1,18 +1,18 @@
-use std::error::{Error as StdError};
+use std::error::Error as StdError;
 use std::fmt;
 use std::iter;
 use std::num;
 use std::str;
 
-use serde::de::{
-    Deserializer, DeserializeSeed, Deserialize, IntoDeserializer,
-    Error as SerdeError, Unexpected,
-    Visitor, EnumAccess, VariantAccess, MapAccess, SeqAccess,
-};
 use serde::de::value::BorrowedBytesDeserializer;
+use serde::de::{
+    Deserialize, DeserializeSeed, Deserializer, EnumAccess,
+    Error as SerdeError, IntoDeserializer, MapAccess, SeqAccess, Unexpected,
+    VariantAccess, Visitor,
+};
 
 use byte_record::{ByteRecord, ByteRecordIter};
-use error::{Error, ErrorKind, new_error};
+use error::{new_error, Error, ErrorKind};
 use string_record::{StringRecord, StringRecordIter};
 
 use self::DeserializeErrorKind as DEK;
@@ -181,7 +181,7 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
             None => Err(DeserializeError {
                 field: None,
                 kind: DEK::UnexpectedEndOfRow,
-            })
+            }),
         }
     }
 
@@ -238,9 +238,10 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
     #[inline]
     fn next_header(&mut self) -> Result<Option<&'r str>, DeserializeError> {
         match self.next_header_bytes() {
-            Ok(Some(field)) => Ok(Some(str::from_utf8(field).map_err(|err| {
-                self.error(DEK::InvalidUtf8(err))
-            })?)),
+            Ok(Some(field)) => Ok(Some(
+                str::from_utf8(field)
+                    .map_err(|err| self.error(DEK::InvalidUtf8(err)))?,
+            )),
             Ok(None) => Ok(None),
             Err(err) => Err(err),
         }
@@ -256,9 +257,8 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
     #[inline]
     fn next_field(&mut self) -> Result<&'r str, DeserializeError> {
         self.next_field_bytes().and_then(|field| {
-            str::from_utf8(field).map_err(|err| {
-                self.error(DEK::InvalidUtf8(err))
-            })
+            str::from_utf8(field)
+                .map_err(|err| self.error(DEK::InvalidUtf8(err)))
         })
     }
 
@@ -272,7 +272,7 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
             None => Err(DeserializeError {
                 field: None,
                 kind: DEK::UnexpectedEndOfRow,
-            })
+            }),
         }
     }
 
@@ -317,8 +317,8 @@ macro_rules! deserialize_int {
             self,
             visitor: V,
         ) -> Result<V::Value, Self::Error> {
-            let field = self.next_field()?; 
-            let num = 
+            let field = self.next_field()?;
+            let num =
                 if field.starts_with("0x") {
                     <$inttype>::from_str_radix(&field[2..], 16)
                 } else {
@@ -347,7 +347,9 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
     ) -> Result<V::Value, Self::Error> {
         visitor.visit_bool(
             self.next_field()?
-                .parse().map_err(|err| self.error(DEK::ParseBool(err)))?)
+                .parse()
+                .map_err(|err| self.error(DEK::ParseBool(err)))?,
+        )
     }
 
     deserialize_int!(deserialize_u8, visit_u8, u8);
@@ -365,7 +367,9 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
     ) -> Result<V::Value, Self::Error> {
         visitor.visit_f32(
             self.next_field()?
-                .parse().map_err(|err| self.error(DEK::ParseFloat(err)))?)
+                .parse()
+                .map_err(|err| self.error(DEK::ParseFloat(err)))?,
+        )
     }
 
     fn deserialize_f64<V: Visitor<'de>>(
@@ -374,7 +378,9 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
     ) -> Result<V::Value, Self::Error> {
         visitor.visit_f64(
             self.next_field()?
-                .parse().map_err(|err| self.error(DEK::ParseFloat(err)))?)
+                .parse()
+                .map_err(|err| self.error(DEK::ParseFloat(err)))?,
+        )
     }
 
     fn deserialize_char<V: Visitor<'de>>(
@@ -386,7 +392,8 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
         if len != 1 {
             return Err(self.error(DEK::Message(format!(
                 "expected single character but got {} characters in '{}'",
-                len, field))));
+                len, field
+            ))));
         }
         visitor.visit_char(field.chars().next().unwrap())
     }
@@ -409,9 +416,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        self.next_field_bytes().and_then(|f| {
-            visitor.visit_borrowed_bytes(f)
-        })
+        self.next_field_bytes().and_then(|f| visitor.visit_borrowed_bytes(f))
     }
 
     fn deserialize_byte_buf<V: Visitor<'de>>(
@@ -550,8 +555,8 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> EnumAccess<'de>
     }
 }
 
-impl<'a, 'de: 'a, T: DeRecord<'de>>
-    VariantAccess<'de> for &'a mut DeRecordWrap<T>
+impl<'a, 'de: 'a, T: DeRecord<'de>> VariantAccess<'de>
+    for &'a mut DeRecordWrap<T>
 {
     type Error = DeserializeError;
 
@@ -586,8 +591,8 @@ impl<'a, 'de: 'a, T: DeRecord<'de>>
     }
 }
 
-impl<'a, 'de: 'a, T: DeRecord<'de>>
-    SeqAccess<'de> for &'a mut DeRecordWrap<T>
+impl<'a, 'de: 'a, T: DeRecord<'de>> SeqAccess<'de>
+    for &'a mut DeRecordWrap<T>
 {
     type Error = DeserializeError;
 
@@ -603,8 +608,8 @@ impl<'a, 'de: 'a, T: DeRecord<'de>>
     }
 }
 
-impl<'a, 'de: 'a, T: DeRecord<'de>>
-    MapAccess<'de> for &'a mut DeRecordWrap<T>
+impl<'a, 'de: 'a, T: DeRecord<'de>> MapAccess<'de>
+    for &'a mut DeRecordWrap<T>
 {
     type Error = DeserializeError;
 
@@ -659,10 +664,7 @@ pub enum DeserializeErrorKind {
 
 impl SerdeError for DeserializeError {
     fn custom<T: fmt::Display>(msg: T) -> DeserializeError {
-        DeserializeError {
-            field: None,
-            kind: DEK::Message(msg.to_string()),
-        }
+        DeserializeError { field: None, kind: DEK::Message(msg.to_string()) }
     }
 }
 
@@ -759,14 +761,12 @@ mod tests {
     use serde::de::DeserializeOwned;
     use serde_bytes::{self, ByteBuf};
 
+    use super::{deserialize_byte_record, deserialize_string_record};
     use byte_record::ByteRecord;
     use error::Error;
     use string_record::StringRecord;
-    use super::{deserialize_byte_record, deserialize_string_record};
 
-    fn de<D: DeserializeOwned>(
-        fields: &[&str],
-    ) -> Result<D, Error> {
+    fn de<D: DeserializeOwned>(fields: &[&str]) -> Result<D, Error> {
         let record = StringRecord::from(fields);
         deserialize_string_record(&record, None)
     }
@@ -793,10 +793,8 @@ mod tests {
             x: String,
         }
 
-        let got: Foo = de_headers(
-            &["x", "y", "z"],
-            &["hi", "42", "1.3"],
-        ).unwrap();
+        let got: Foo =
+            de_headers(&["x", "y", "z"], &["hi", "42", "1.3"]).unwrap();
         assert_eq!(got, Foo { x: "hi".into(), y: 42, z: 1.3 });
     }
 
@@ -812,7 +810,8 @@ mod tests {
         assert!(de_headers::<Foo>(
             &["a", "x", "y", "z"],
             &["foo", "hi", "42", "1.3"],
-        ).is_err());
+        )
+        .is_err());
     }
 
     #[test]
@@ -823,10 +822,7 @@ mod tests {
             y: i32,
             x: String,
         }
-        assert!(de_headers::<Foo>(
-            &["y", "z"],
-            &["42", "1.3"],
-        ).is_err());
+        assert!(de_headers::<Foo>(&["y", "z"], &["42", "1.3"],).is_err());
     }
 
     #[test]
@@ -838,10 +834,7 @@ mod tests {
             x: Option<String>,
         }
 
-        let got: Foo = de_headers(
-            &["y", "z"],
-            &["42", "1.3"],
-        ).unwrap();
+        let got: Foo = de_headers(&["y", "z"], &["42", "1.3"]).unwrap();
         assert_eq!(got, Foo { x: None, y: 42, z: 1.3 });
     }
 
@@ -883,7 +876,7 @@ mod tests {
         assert_eq!(got.unwrap(), Foo);
 
         let got = de_headers::<Bar>(&[], &[]);
-        assert_eq!(got.unwrap(), Bar{});
+        assert_eq!(got.unwrap(), Bar {});
 
         let got = de_headers::<()>(&[], &[]);
         assert_eq!(got.unwrap(), ());
@@ -1062,15 +1055,16 @@ mod tests {
             String(String),
         }
 
-        let got: Row = de_headers(
-            &["x", "y", "z"],
-            &["true", "null", "1"],
-        ).unwrap();
-        assert_eq!(got, Row {
-            x: Boolish::Bool(true),
-            y: Boolish::String("null".into()),
-            z: Boolish::Number(1),
-        });
+        let got: Row =
+            de_headers(&["x", "y", "z"], &["true", "null", "1"]).unwrap();
+        assert_eq!(
+            got,
+            Row {
+                x: Boolish::Bool(true),
+                y: Boolish::String("null".into()),
+                z: Boolish::Number(1),
+            }
+        );
     }
 
     #[test]
@@ -1082,10 +1076,8 @@ mod tests {
             c: Option<i32>,
         }
 
-        let got: Foo = de_headers(
-            &["a", "b", "c"],
-            &["", "foo", "5"],
-        ).unwrap();
+        let got: Foo =
+            de_headers(&["a", "b", "c"], &["", "foo", "5"]).unwrap();
         assert_eq!(got, Foo { a: None, b: "foo".into(), c: Some(5) });
     }
 
@@ -1101,10 +1093,8 @@ mod tests {
             c: Option<i32>,
         }
 
-        let got: Foo = de_headers(
-            &["a", "b", "c"],
-            &["xyz", "", "5"],
-        ).unwrap();
+        let got: Foo =
+            de_headers(&["a", "b", "c"], &["xyz", "", "5"]).unwrap();
         assert_eq!(got, Foo { a: None, b: None, c: Some(5) });
     }
 
@@ -1119,8 +1109,8 @@ mod tests {
 
         let headers = StringRecord::from(vec!["a", "b", "c"]);
         let record = StringRecord::from(vec!["foo", "5", "bar"]);
-        let got: Foo = deserialize_string_record(
-            &record, Some(&headers)).unwrap();
+        let got: Foo =
+            deserialize_string_record(&record, Some(&headers)).unwrap();
         assert_eq!(got, Foo { a: "foo", b: 5, c: "bar" });
     }
 
@@ -1130,13 +1120,11 @@ mod tests {
 
         let headers = StringRecord::from(vec!["a", "b", "c"]);
         let record = StringRecord::from(vec!["aardvark", "bee", "cat"]);
-        let got: HashMap<&str, &str> = deserialize_string_record(
-            &record, Some(&headers)).unwrap();
+        let got: HashMap<&str, &str> =
+            deserialize_string_record(&record, Some(&headers)).unwrap();
 
-        let expected: HashMap<&str, &str> = headers
-            .iter()
-            .zip(&record)
-            .collect();
+        let expected: HashMap<&str, &str> =
+            headers.iter().zip(&record).collect();
         assert_eq!(got, expected);
     }
 
@@ -1146,13 +1134,11 @@ mod tests {
 
         let headers = ByteRecord::from(vec![b"a", b"\xFF", b"c"]);
         let record = ByteRecord::from(vec!["aardvark", "bee", "cat"]);
-        let got: HashMap<&[u8], &[u8]> = deserialize_byte_record(
-            &record, Some(&headers)).unwrap();
+        let got: HashMap<&[u8], &[u8]> =
+            deserialize_byte_record(&record, Some(&headers)).unwrap();
 
-        let expected: HashMap<&[u8], &[u8]> = headers
-            .iter()
-            .zip(&record)
-            .collect();
+        let expected: HashMap<&[u8], &[u8]> =
+            headers.iter().zip(&record).collect();
         assert_eq!(got, expected);
     }
 
@@ -1181,10 +1167,13 @@ mod tests {
         let header = StringRecord::from(vec!["x", "y", "prop1", "prop2"]);
         let record = StringRecord::from(vec!["1", "2", "3", "4"]);
         let got: Row = record.deserialize(Some(&header)).unwrap();
-        assert_eq!(got, Row {
-            input: Input { x: 1.0, y: 2.0 },
-            properties: Properties { prop1: 3.0, prop2: 4.0 },
-        });
+        assert_eq!(
+            got,
+            Row {
+                input: Input { x: 1.0, y: 2.0 },
+                properties: Properties { prop1: 3.0, prop2: 4.0 },
+            }
+        );
     }
 
     #[test]
@@ -1198,16 +1187,17 @@ mod tests {
         }
 
         let headers = ByteRecord::from(vec![b"h1", b"h2", b"h3"]);
-        let record = ByteRecord::from(vec![
-            b(b"baz"), b(b"foo\xFFbar"), b(b"quux"),
-        ]);
-        let got: Row = deserialize_byte_record(
-            &record, Some(&headers),
-        ).unwrap();
-        assert_eq!(got, Row {
-            h1: "baz".to_string(),
-            h2: b"foo\xFFbar".to_vec(),
-            h3: "quux".to_string(),
-        });
+        let record =
+            ByteRecord::from(vec![b(b"baz"), b(b"foo\xFFbar"), b(b"quux")]);
+        let got: Row =
+            deserialize_byte_record(&record, Some(&headers)).unwrap();
+        assert_eq!(
+            got,
+            Row {
+                h1: "baz".to_string(),
+                h2: b"foo\xFFbar".to_vec(),
+                h3: "quux".to_string(),
+            }
+        );
     }
 }

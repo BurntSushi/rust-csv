@@ -23,14 +23,15 @@ fn run() -> Result<(), Box<Error>> {
         println!(
             "city: {:?}, state: {:?}, \
              pop: {:?}, latitude: {:?}, longitude: {:?}",
-            city, state, pop, latitude, longitude);
+            city, state, pop, latitude, longitude
+        );
     }
     Ok(())
 }
 
 fn main() {
-if let Err(err) = run() {
-println!("{}", err);
-process::exit(1);
-}
+    if let Err(err) = run() {
+        println!("{}", err);
+        process::exit(1);
+    }
 }
