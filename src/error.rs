@@ -2,16 +2,9 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 use std::result;
-use std::str;
 
 use crate::byte_record::{ByteRecord, Position};
 use crate::deserializer::DeserializeError;
-
-/// A crate private constructor for `Error`.
-pub fn new_error(kind: ErrorKind) -> Error {
-    // TODO(burntsushi): Use `pub(crate)` when it stabilizes.
-    Error(Box::new(kind))
-}
 
 /// A type alias for `Result<T, csv::Error>`.
 pub type Result<T> = result::Result<T, Error>;
@@ -28,6 +21,11 @@ pub type Result<T> = result::Result<T, Error>;
 pub struct Error(Box<ErrorKind>);
 
 impl Error {
+    /// A crate private constructor for `Error`.
+    pub(crate) fn new(kind: ErrorKind) -> Error {
+        Error(Box::new(kind))
+    }
+
     /// Return the specific type of this error.
     pub fn kind(&self) -> &ErrorKind {
         &self.0
@@ -103,7 +101,7 @@ pub enum ErrorKind {
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
-        new_error(ErrorKind::Io(err))
+        Error::new(ErrorKind::Io(err))
     }
 }
 
@@ -114,21 +112,7 @@ impl From<Error> for io::Error {
 }
 
 impl StdError for Error {
-    fn description(&self) -> &str {
-        match *self.0 {
-            ErrorKind::Io(ref err) => err.description(),
-            ErrorKind::Utf8 { ref err, .. } => err.description(),
-            ErrorKind::UnequalLengths { .. } => {
-                "record of different length found"
-            }
-            ErrorKind::Seek => "headers unavailable on seeked CSV reader",
-            ErrorKind::Serialize(ref err) => err,
-            ErrorKind::Deserialize { ref err, .. } => err.description(),
-            _ => unreachable!(),
-        }
-    }
-
-    fn cause(&self) -> Option<&dyn StdError> {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self.0 {
             ErrorKind::Io(ref err) => Some(err),
             ErrorKind::Utf8 { ref err, .. } => Some(err),
@@ -218,12 +202,12 @@ pub struct FromUtf8Error {
     err: Utf8Error,
 }
 
-/// Create a new FromUtf8Error.
-pub fn new_from_utf8_error(rec: ByteRecord, err: Utf8Error) -> FromUtf8Error {
-    FromUtf8Error { record: rec, err: err }
-}
-
 impl FromUtf8Error {
+    /// Create a new FromUtf8Error.
+    pub(crate) fn new(rec: ByteRecord, err: Utf8Error) -> FromUtf8Error {
+        FromUtf8Error { record: rec, err: err }
+    }
+
     /// Access the underlying `ByteRecord` that failed UTF-8 validation.
     pub fn into_byte_record(self) -> ByteRecord {
         self.record
@@ -242,10 +226,7 @@ impl fmt::Display for FromUtf8Error {
 }
 
 impl StdError for FromUtf8Error {
-    fn description(&self) -> &str {
-        self.err.description()
-    }
-    fn cause(&self) -> Option<&dyn StdError> {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         Some(&self.err)
     }
 }
@@ -281,11 +262,7 @@ impl Utf8Error {
     }
 }
 
-impl StdError for Utf8Error {
-    fn description(&self) -> &str {
-        "invalid utf-8 in CSV record"
-    }
-}
+impl StdError for Utf8Error {}
 
 impl fmt::Display for Utf8Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -309,15 +286,15 @@ pub struct IntoInnerError<W> {
     err: io::Error,
 }
 
-/// Creates a new `IntoInnerError`.
-///
-/// (This is a visibility hack. It's public in this module, but not in the
-/// crate.)
-pub fn new_into_inner_error<W>(wtr: W, err: io::Error) -> IntoInnerError<W> {
-    IntoInnerError { wtr: wtr, err: err }
-}
-
 impl<W> IntoInnerError<W> {
+    /// Creates a new `IntoInnerError`.
+    ///
+    /// (This is a visibility hack. It's public in this module, but not in the
+    /// crate.)
+    pub(crate) fn new(wtr: W, err: io::Error) -> IntoInnerError<W> {
+        IntoInnerError { wtr: wtr, err: err }
+    }
+
     /// Returns the error which caused the call to `into_inner` to fail.
     ///
     /// This error was returned when attempting to flush the internal buffer.
@@ -334,14 +311,9 @@ impl<W> IntoInnerError<W> {
     }
 }
 
-impl<W: ::std::any::Any> StdError for IntoInnerError<W> {
-    fn description(&self) -> &str {
-        self.err.description()
-    }
-
-    #[allow(deprecated)]
-    fn cause(&self) -> Option<&dyn StdError> {
-        self.err.cause()
+impl<W: std::any::Any> StdError for IntoInnerError<W> {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        self.err.source()
     }
 }
 

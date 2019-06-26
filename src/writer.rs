@@ -10,9 +10,7 @@ use csv_core::{
 use serde::Serialize;
 
 use crate::byte_record::ByteRecord;
-use crate::error::{
-    new_error, new_into_inner_error, ErrorKind, IntoInnerError, Result,
-};
+use crate::error::{Error, ErrorKind, IntoInnerError, Result};
 use crate::serializer::{serialize, serialize_header};
 use crate::{QuoteStyle, Terminator};
 
@@ -1073,7 +1071,7 @@ impl<W: io::Write> Writer<W> {
     ) -> result::Result<W, IntoInnerError<Writer<W>>> {
         match self.flush() {
             Ok(()) => Ok(self.wtr.take().unwrap()),
-            Err(err) => Err(new_into_inner_error(self, err)),
+            Err(err) => Err(IntoInnerError::new(self, err)),
         }
     }
 
@@ -1134,7 +1132,7 @@ impl<W: io::Write> Writer<W> {
                         Some(self.state.fields_written);
                 }
                 Some(expected) if expected != self.state.fields_written => {
-                    return Err(new_error(ErrorKind::UnequalLengths {
+                    return Err(Error::new(ErrorKind::UnequalLengths {
                         pos: None,
                         expected_len: expected,
                         len: self.state.fields_written,

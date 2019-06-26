@@ -7,9 +7,9 @@ use std::result;
 use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
 use serde::de::DeserializeOwned;
 
-use crate::byte_record::{self, ByteRecord, Position};
-use crate::error::{new_error, ErrorKind, Result, Utf8Error};
-use crate::string_record::{self, StringRecord};
+use crate::byte_record::{ByteRecord, Position};
+use crate::error::{Error, ErrorKind, Result, Utf8Error};
+use crate::string_record::StringRecord;
 use crate::{Terminator, Trim};
 
 /// Builds a CSV reader with various configuration knobs.
@@ -1304,7 +1304,7 @@ impl<R: io::Read> Reader<R> {
         let headers = self.state.headers.as_ref().unwrap();
         match headers.string_record {
             Ok(ref record) => Ok(record),
-            Err(ref err) => Err(new_error(ErrorKind::Utf8 {
+            Err(ref err) => Err(Error::new(ErrorKind::Utf8 {
                 pos: headers.byte_record.position().map(Clone::clone),
                 err: err.clone(),
             })),
@@ -1503,7 +1503,7 @@ impl<R: io::Read> Reader<R> {
     /// }
     /// ```
     pub fn read_record(&mut self, record: &mut StringRecord) -> Result<bool> {
-        let result = string_record::read(self, record);
+        let result = record.read(self);
         // We need to trim again because trimming string records includes
         // Unicode whitespace. (ByteRecord trimming only includes ASCII
         // whitespace.)
@@ -1605,7 +1605,7 @@ impl<R: io::Read> Reader<R> {
         loop {
             let (res, nin, nout, nend) = {
                 let input = self.rdr.fill_buf()?;
-                let (fields, ends) = byte_record::as_parts(record);
+                let (fields, ends) = record.as_parts();
                 self.core.read_record(
                     input,
                     &mut fields[outlen..],
@@ -1623,15 +1623,15 @@ impl<R: io::Read> Reader<R> {
             match res {
                 InputEmpty => continue,
                 OutputFull => {
-                    byte_record::expand_fields(record);
+                    record.expand_fields();
                     continue;
                 }
                 OutputEndsFull => {
-                    byte_record::expand_ends(record);
+                    record.expand_ends();
                     continue;
                 }
                 Record => {
-                    byte_record::set_len(record, endlen);
+                    record.set_len(endlen);
                     self.state.add_record(record)?;
                     return Ok(true);
                 }
@@ -1860,7 +1860,7 @@ impl ReaderState {
                 None => self.first_field_count = Some(record.len() as u64),
                 Some(expected) => {
                     if record.len() as u64 != expected {
-                        return Err(new_error(ErrorKind::UnequalLengths {
+                        return Err(Error::new(ErrorKind::UnequalLengths {
                             pos: record.position().map(Clone::clone),
                             expected_len: expected,
                             len: record.len() as u64,

@@ -10,7 +10,7 @@ use serde::ser::{
     SerializeTupleStruct, SerializeTupleVariant, Serializer,
 };
 
-use crate::error::{new_error, Error, ErrorKind};
+use crate::error::{Error, ErrorKind};
 use crate::writer::Writer;
 
 /// Serialize the given value to the given writer, and return an error if
@@ -342,7 +342,7 @@ impl<'a, 'w, W: io::Write> SerializeStructVariant for &'a mut SeRecord<'w, W> {
 
 impl SerdeError for Error {
     fn custom<T: fmt::Display>(msg: T) -> Error {
-        new_error(ErrorKind::Serialize(msg.to_string()))
+        Error::new(ErrorKind::Serialize(msg.to_string()))
     }
 }
 
