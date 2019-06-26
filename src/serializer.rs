@@ -868,6 +868,15 @@ mod tests {
     }
 
     #[test]
+    fn float_nan() {
+        let got = serialize(::std::f64::NAN);
+        assert_eq!(got, "NaN\n");
+        let (wrote, got) = serialize_header(::std::f64::NAN);
+        assert!(!wrote);
+        assert_eq!(got, "");
+    }
+
+    #[test]
     fn char() {
         let got = serialize('☃');
         assert_eq!(got, "☃\n");
