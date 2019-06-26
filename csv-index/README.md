@@ -19,7 +19,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-csv-index = "0.2"
+csv-index = "0.1.6"
 ```
 
 ### Example: build a simple random access index

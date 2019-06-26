@@ -1,6 +1,6 @@
 [package]
 name = "csv-index"
-version = "0.1.5"  #:version
+version = "0.1.6"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 description = "On disk CSV indexing data structures."
 documentation = "https://docs.rs/csv-index"
@@ -22,4 +22,4 @@ bench = false
 
 [dependencies]
 byteorder = "1"
-csv = { path = "..", version = "1" }
+csv = { path = "..", version = "1.1.0" }
