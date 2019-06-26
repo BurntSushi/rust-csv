@@ -758,8 +758,8 @@ fn try_float_bytes(s: &[u8]) -> Option<f64> {
 mod tests {
     use std::collections::HashMap;
 
+    use bstr::BString;
     use serde::{de::DeserializeOwned, Deserialize};
-    use serde_bytes::{self, ByteBuf};
 
     use super::{deserialize_byte_record, deserialize_string_record};
     use crate::byte_record::ByteRecord;
@@ -1007,7 +1007,7 @@ mod tests {
 
     #[test]
     fn bytes() {
-        let got: Vec<u8> = de::<ByteBuf>(&["foobar"]).unwrap().into();
+        let got: Vec<u8> = de::<BString>(&["foobar"]).unwrap().into();
         assert_eq!(got, b"foobar".to_vec());
     }
 
@@ -1085,11 +1085,11 @@ mod tests {
     fn option_invalid_field() {
         #[derive(Deserialize, Debug, PartialEq)]
         struct Foo {
-            #[serde(deserialize_with = "::invalid_option")]
+            #[serde(deserialize_with = "crate::invalid_option")]
             a: Option<i32>,
-            #[serde(deserialize_with = "::invalid_option")]
+            #[serde(deserialize_with = "crate::invalid_option")]
             b: Option<i32>,
-            #[serde(deserialize_with = "::invalid_option")]
+            #[serde(deserialize_with = "crate::invalid_option")]
             c: Option<i32>,
         }
 
@@ -1181,8 +1181,7 @@ mod tests {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Row {
             h1: String,
-            #[serde(with = "serde_bytes")]
-            h2: Vec<u8>,
+            h2: BString,
             h3: String,
         }
 
@@ -1195,7 +1194,7 @@ mod tests {
             got,
             Row {
                 h1: "baz".to_string(),
-                h2: b"foo\xFFbar".to_vec(),
+                h2: BString::from(b"foo\xFFbar".to_vec()),
                 h3: "quux".to_string(),
             }
         );

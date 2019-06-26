@@ -793,8 +793,8 @@ impl<'a, 'w, W: io::Write> SerializeStructVariant for &'a mut SeHeader<'w, W> {
 
 #[cfg(test)]
 mod tests {
+    use bstr::ByteSlice;
     use serde::Serialize;
-    use serde_bytes::Bytes;
 
     use crate::error::{Error, ErrorKind};
     use crate::writer::Writer;
@@ -886,7 +886,7 @@ mod tests {
 
     #[test]
     fn bytes() {
-        let got = serialize(Bytes::new(&b"how\nare\n\"you\"?"[..]));
+        let got = serialize(b"how\nare\n\"you\"?".as_bstr());
         assert_eq!(got, "\"how\nare\n\"\"you\"\"?\"\n");
         let (wrote, got) = serialize_header(&b"how\nare\n\"you\"?"[..]);
         assert!(!wrote);
