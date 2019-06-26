@@ -10,8 +10,8 @@ use serde::ser::{
     SerializeTupleStruct, SerializeTupleVariant, Serializer,
 };
 
-use error::{new_error, Error, ErrorKind};
-use writer::Writer;
+use crate::error::{new_error, Error, ErrorKind};
+use crate::writer::Writer;
 
 /// Serialize the given value to the given writer, and return an error if
 /// anything went wrong.
@@ -796,8 +796,8 @@ mod tests {
     use serde::Serialize;
     use serde_bytes::Bytes;
 
-    use error::{Error, ErrorKind};
-    use writer::Writer;
+    use crate::error::{Error, ErrorKind};
+    use crate::writer::Writer;
 
     use super::{SeHeader, SeRecord};
 

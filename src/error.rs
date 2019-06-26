@@ -4,8 +4,8 @@ use std::io;
 use std::result;
 use std::str;
 
-use byte_record::{ByteRecord, Position};
-use deserializer::DeserializeError;
+use crate::byte_record::{ByteRecord, Position};
+use crate::deserializer::DeserializeError;
 
 /// A crate private constructor for `Error`.
 pub fn new_error(kind: ErrorKind) -> Error {
@@ -128,7 +128,7 @@ impl StdError for Error {
         }
     }
 
-    fn cause(&self) -> Option<&StdError> {
+    fn cause(&self) -> Option<&dyn StdError> {
         match *self.0 {
             ErrorKind::Io(ref err) => Some(err),
             ErrorKind::Utf8 { ref err, .. } => Some(err),
@@ -245,7 +245,7 @@ impl StdError for FromUtf8Error {
     fn description(&self) -> &str {
         self.err.description()
     }
-    fn cause(&self) -> Option<&StdError> {
+    fn cause(&self) -> Option<&dyn StdError> {
         Some(&self.err)
     }
 }
@@ -340,7 +340,7 @@ impl<W: ::std::any::Any> StdError for IntoInnerError<W> {
     }
 
     #[allow(deprecated)]
-    fn cause(&self) -> Option<&StdError> {
+    fn cause(&self) -> Option<&dyn StdError> {
         self.err.cause()
     }
 }

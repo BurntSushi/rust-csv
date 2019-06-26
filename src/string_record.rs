@@ -7,12 +7,12 @@ use std::str;
 
 use serde::de::Deserialize;
 
-use byte_record::{self, ByteRecord, ByteRecordIter, Position};
-use deserializer::deserialize_string_record;
-use error::{
+use crate::byte_record::{self, ByteRecord, ByteRecordIter, Position};
+use crate::deserializer::deserialize_string_record;
+use crate::error::{
     new_error, new_from_utf8_error, ErrorKind, FromUtf8Error, Result,
 };
-use reader::Reader;
+use crate::reader::Reader;
 
 /// A safe function for reading CSV data into a `StringRecord`.
 ///
@@ -745,7 +745,7 @@ impl<'r> DoubleEndedIterator for StringRecordIter<'r> {
 
 #[cfg(test)]
 mod tests {
-    use string_record::StringRecord;
+    use crate::string_record::StringRecord;
 
     #[test]
     fn trim_front() {

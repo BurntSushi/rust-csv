@@ -1,6 +1,6 @@
 use core::fmt;
 
-use Terminator;
+use crate::Terminator;
 
 // BE ADVISED
 //
@@ -1435,7 +1435,7 @@ mod tests {
     }
 
     fn parse_by_record(rdr: &mut Reader, data: &str) -> Csv {
-        use ReadRecordResult::*;
+        use crate::ReadRecordResult::*;
 
         let mut data = data.as_bytes();
         let mut record = [0; 1024];
@@ -1742,7 +1742,7 @@ mod tests {
     // straight to End.
     #[test]
     fn stream_empty() {
-        use ReadFieldResult::*;
+        use crate::ReadFieldResult::*;
 
         let mut rdr = Reader::new();
         assert_read!(rdr, &[], &mut [], 0, 0, End);
@@ -1751,7 +1751,7 @@ mod tests {
     // Test that a single space is treated as a single field.
     #[test]
     fn stream_space() {
-        use ReadFieldResult::*;
+        use crate::ReadFieldResult::*;
 
         let mut rdr = Reader::new();
         assert_read!(rdr, b(" "), &mut [0], 1, 1, InputEmpty);
@@ -1762,7 +1762,7 @@ mod tests {
     // Test that a single comma ...
     #[test]
     fn stream_comma() {
-        use ReadFieldResult::*;
+        use crate::ReadFieldResult::*;
 
         let mut rdr = Reader::new();
         assert_read!(rdr, b(","), &mut [0], 1, 0, Field { record_end: false });
@@ -1774,7 +1774,7 @@ mod tests {
     // buffers.
     #[test]
     fn stream_output_chunks() {
-        use ReadFieldResult::*;
+        use crate::ReadFieldResult::*;
 
         let mut inp = b("fooquux");
         let out = &mut [0; 2];
@@ -1805,7 +1805,7 @@ mod tests {
     // buffers.
     #[test]
     fn stream_input_chunks() {
-        use ReadFieldResult::*;
+        use crate::ReadFieldResult::*;
 
         let out = &mut [0; 10];
         let mut rdr = Reader::new();
@@ -1829,7 +1829,7 @@ mod tests {
     // Test we can read doubled quotes correctly in a stream.
     #[test]
     fn stream_doubled_quotes() {
-        use ReadFieldResult::*;
+        use crate::ReadFieldResult::*;
 
         let out = &mut [0; 10];
         let mut rdr = Reader::new();
@@ -1847,7 +1847,7 @@ mod tests {
     // Test we can read escaped quotes correctly in a stream.
     #[test]
     fn stream_escaped_quotes() {
-        use ReadFieldResult::*;
+        use crate::ReadFieldResult::*;
 
         let out = &mut [0; 10];
         let mut builder = ReaderBuilder::new();
@@ -1866,7 +1866,7 @@ mod tests {
     // Test that empty output buffers don't wreak havoc.
     #[test]
     fn stream_empty_output() {
-        use ReadFieldResult::*;
+        use crate::ReadFieldResult::*;
 
         let out = &mut [0; 10];
         let mut rdr = Reader::new();
@@ -1894,7 +1894,7 @@ mod tests {
     // the right thing.
     #[test]
     fn reset_works() {
-        use ReadFieldResult::*;
+        use crate::ReadFieldResult::*;
 
         let out = &mut [0; 10];
         let mut rdr = Reader::new();
@@ -1918,7 +1918,7 @@ mod tests {
     // Test the line number reporting is correct.
     #[test]
     fn line_numbers() {
-        use ReadFieldResult::*;
+        use crate::ReadFieldResult::*;
 
         let out = &mut [0; 10];
         let mut rdr = Reader::new();
@@ -1956,7 +1956,7 @@ mod tests {
     // Test that we can incrementally read a record.
     #[test]
     fn stream_record() {
-        use ReadRecordResult::*;
+        use crate::ReadRecordResult::*;
 
         let mut inp = b("foo,bar\nbaz");
         let out = &mut [0; 1024];
@@ -1981,7 +1981,7 @@ mod tests {
     // we get an appropriate state returned.
     #[test]
     fn stream_record_last_end_output_full() {
-        use ReadRecordResult::*;
+        use crate::ReadRecordResult::*;
 
         let mut inp = b("foo,bar\nbaz");
         let out = &mut [0; 1024];

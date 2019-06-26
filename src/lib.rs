@@ -182,18 +182,18 @@ use std::result;
 
 use serde::{Deserialize, Deserializer};
 
-pub use byte_record::{ByteRecord, ByteRecordIter, Position};
-pub use deserializer::{DeserializeError, DeserializeErrorKind};
-pub use error::{
+pub use crate::byte_record::{ByteRecord, ByteRecordIter, Position};
+pub use crate::deserializer::{DeserializeError, DeserializeErrorKind};
+pub use crate::error::{
     Error, ErrorKind, FromUtf8Error, IntoInnerError, Result, Utf8Error,
 };
-pub use reader::{
+pub use crate::reader::{
     ByteRecordsIntoIter, ByteRecordsIter, DeserializeRecordsIntoIter,
     DeserializeRecordsIter, Reader, ReaderBuilder, StringRecordsIntoIter,
     StringRecordsIter,
 };
-pub use string_record::{StringRecord, StringRecordIter};
-pub use writer::{Writer, WriterBuilder};
+pub use crate::string_record::{StringRecord, StringRecordIter};
+pub use crate::writer::{Writer, WriterBuilder};
 
 mod byte_record;
 pub mod cookbook;

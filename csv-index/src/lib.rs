@@ -84,6 +84,6 @@ amenable to serializing to disk.)
 extern crate byteorder;
 extern crate csv;
 
-pub use simple::RandomAccessSimple;
+pub use crate::simple::RandomAccessSimple;
 
 mod simple;

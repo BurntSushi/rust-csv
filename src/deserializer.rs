@@ -11,9 +11,9 @@ use serde::de::{
     VariantAccess, Visitor,
 };
 
-use byte_record::{ByteRecord, ByteRecordIter};
-use error::{new_error, Error, ErrorKind};
-use string_record::{StringRecord, StringRecordIter};
+use crate::byte_record::{ByteRecord, ByteRecordIter};
+use crate::error::{new_error, Error, ErrorKind};
+use crate::string_record::{StringRecord, StringRecordIter};
 
 use self::DeserializeErrorKind as DEK;
 
@@ -760,11 +760,12 @@ mod tests {
 
     use serde::de::DeserializeOwned;
     use serde_bytes::{self, ByteBuf};
+    use serde_derive::Deserialize;
 
     use super::{deserialize_byte_record, deserialize_string_record};
-    use byte_record::ByteRecord;
-    use error::Error;
-    use string_record::StringRecord;
+    use crate::byte_record::ByteRecord;
+    use crate::error::Error;
+    use crate::string_record::StringRecord;
 
     fn de<D: DeserializeOwned>(fields: &[&str]) -> Result<D, Error> {
         let record = StringRecord::from(fields);

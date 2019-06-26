@@ -20,7 +20,7 @@ struct Record {
     longitude: f64,
 }
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     // Get the query from the positional arguments.
     // If one doesn't exist or isn't an integer, return an error.
     let minimum_pop: u64 = match env::args().nth(1) {

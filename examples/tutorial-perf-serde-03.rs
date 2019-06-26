@@ -19,7 +19,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
-fn run() -> Result<u64, Box<Error>> {
+fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     let mut raw_record = csv::ByteRecord::new();
     let headers = rdr.byte_headers()?.clone();
