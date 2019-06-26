@@ -103,11 +103,11 @@ foo,\"bar,baz\"
 extern crate arrayvec;
 extern crate memchr;
 
-pub use reader::{
+pub use crate::reader::{
     ReadFieldNoCopyResult, ReadFieldResult, ReadRecordNoCopyResult,
     ReadRecordResult, Reader, ReaderBuilder,
 };
-pub use writer::{is_non_numeric, quote, WriteResult, Writer, WriterBuilder};
+pub use crate::writer::{is_non_numeric, quote, WriteResult, Writer, WriterBuilder};
 
 mod reader;
 mod writer;

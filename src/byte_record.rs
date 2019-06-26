@@ -8,9 +8,9 @@ use std::str;
 
 use serde::de::Deserialize;
 
-use deserializer::deserialize_byte_record;
-use error::{new_utf8_error, Result, Utf8Error};
-use string_record::StringRecord;
+use crate::deserializer::deserialize_byte_record;
+use crate::error::{new_utf8_error, Result, Utf8Error};
+use crate::string_record::StringRecord;
 
 /// Retrieve the underlying parts of a byte record.
 #[inline]
@@ -877,7 +877,7 @@ impl<'r> DoubleEndedIterator for ByteRecordIter<'r> {
 
 #[cfg(test)]
 mod tests {
-    use string_record::StringRecord;
+    use crate::string_record::StringRecord;
 
     use super::ByteRecord;
 

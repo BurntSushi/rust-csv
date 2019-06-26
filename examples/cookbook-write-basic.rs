@@ -4,7 +4,7 @@ use std::error::Error;
 use std::io;
 use std::process;
 
-fn example() -> Result<(), Box<Error>> {
+fn example() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
     // When writing records without Serde, the header record is written just

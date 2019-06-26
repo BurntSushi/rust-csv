@@ -9,12 +9,12 @@ use csv_core::{
 };
 use serde::Serialize;
 
-use byte_record::ByteRecord;
-use error::{
+use crate::byte_record::ByteRecord;
+use crate::error::{
     new_error, new_into_inner_error, ErrorKind, IntoInnerError, Result,
 };
-use serializer::{serialize, serialize_header};
-use {QuoteStyle, Terminator};
+use crate::serializer::{serialize, serialize_header};
+use crate::{QuoteStyle, Terminator};
 
 /// Builds a CSV writer with various configuration knobs.
 ///
@@ -1223,9 +1223,9 @@ impl Buffer {
 
 #[cfg(test)]
 mod tests {
-    use byte_record::ByteRecord;
-    use error::ErrorKind;
-    use string_record::StringRecord;
+    use crate::byte_record::ByteRecord;
+    use crate::error::ErrorKind;
+    use crate::string_record::StringRecord;
 
     use super::{Writer, WriterBuilder};
 

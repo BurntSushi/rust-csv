@@ -14,7 +14,7 @@ struct Record {
     population: Option<u64>,
 }
 
-fn example() -> Result<(), Box<Error>> {
+fn example() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
     // When writing records with Serde using structs, the header row is written

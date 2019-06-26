@@ -11,6 +11,7 @@ keywords = ["csv", "comma", "parser", "delimited", "no_std"]
 license = "Unlicense/MIT"
 categories = ["encoding", "no-std", "parser-implementations"]
 workspace = ".."
+edition = "2018"
 
 [badges]
 travis-ci = { repository = "BurntSushi/rust-csv" }

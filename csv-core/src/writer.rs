@@ -3,7 +3,7 @@ use core::str;
 
 use memchr::memchr;
 
-use {QuoteStyle, Terminator};
+use crate::{QuoteStyle, Terminator};
 
 /// A builder for configuring a CSV writer.
 ///
@@ -32,7 +32,7 @@ impl WriterBuilder {
 
     /// Builder a CSV writer from this configuration.
     pub fn build(&self) -> Writer {
-        use Terminator::*;
+        use crate::Terminator::*;
 
         let mut wtr = self.wtr.clone();
         wtr.requires_quotes[self.wtr.delimiter as usize] = true;
@@ -618,8 +618,8 @@ fn moving<T>(x: T) -> T {
 
 #[cfg(test)]
 mod tests {
-    use writer::WriteResult::*;
-    use writer::{quote, QuoteStyle, Writer, WriterBuilder};
+    use crate::writer::WriteResult::*;
+    use crate::writer::{quote, QuoteStyle, Writer, WriterBuilder};
 
     // OMG I HATE BYTE STRING LITERALS SO MUCH.
     fn b(s: &str) -> &[u8] {

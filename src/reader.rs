@@ -7,10 +7,10 @@ use std::result;
 use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
 use serde::de::DeserializeOwned;
 
-use byte_record::{self, ByteRecord, Position};
-use error::{new_error, ErrorKind, Result, Utf8Error};
-use string_record::{self, StringRecord};
-use {Terminator, Trim};
+use crate::byte_record::{self, ByteRecord, Position};
+use crate::error::{new_error, ErrorKind, Result, Utf8Error};
+use crate::string_record::{self, StringRecord};
+use crate::{Terminator, Trim};
 
 /// Builds a CSV reader with various configuration knobs.
 ///
@@ -2208,9 +2208,9 @@ impl<'r, R: io::Read> Iterator for ByteRecordsIter<'r, R> {
 mod tests {
     use std::io;
 
-    use byte_record::ByteRecord;
-    use error::ErrorKind;
-    use string_record::StringRecord;
+    use crate::byte_record::ByteRecord;
+    use crate::error::ErrorKind;
+    use crate::string_record::StringRecord;
 
     use super::{Position, ReaderBuilder, Trim};
 

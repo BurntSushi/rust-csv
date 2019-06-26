@@ -18,7 +18,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
     wtr.serialize(Record {

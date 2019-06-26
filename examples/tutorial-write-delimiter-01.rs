@@ -4,7 +4,7 @@ use std::error::Error;
 use std::io;
 use std::process;
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::WriterBuilder::new()
         .delimiter(b'\t')
         .quote_style(csv::QuoteStyle::NonNumeric)

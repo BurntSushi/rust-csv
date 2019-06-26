@@ -4,7 +4,7 @@ use std::error::Error;
 use std::io;
 use std::process;
 
-fn run() -> Result<u64, Box<Error>> {
+fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     let mut record = csv::ByteRecord::new();
 
