@@ -1,12 +1,9 @@
-extern crate csv;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-
 use std::env;
 use std::error::Error;
 use std::io;
 use std::process;
+
+use serde::{Deserialize, Serialize};
 
 // Unlike previous examples, we derive both Deserialize and Serialize. This
 // means we'll be able to automatically deserialize and serialize this type.

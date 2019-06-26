@@ -10,13 +10,7 @@ and can be used by adding `csv-index` to your dependencies in your project's
 
 ```toml
 [dependencies]
-csv-index = "0.1"
-```
-
-and this to your crate root:
-
-```ignore
-extern crate csv_index;
+csv-index = "0.2"
 ```
 
 # Example: build a simple random access index
@@ -31,16 +25,13 @@ your CSV data has changed since the index was created, then the index will need
 to be regenerated.
 
 ```no_run
-extern crate csv;
-extern crate csv_index;
-
 use std::error::Error;
 use std::fs::File;
 use std::io::{self, Write};
 use csv_index::RandomAccessSimple;
 
 # fn main() { example().unwrap(); }
-fn example() -> Result<(), Box<Error>> {
+fn example() -> Result<(), Box<dyn Error>> {
     // Open a normal CSV reader.
     let mut rdr = csv::Reader::from_path("data.csv")?;
 
@@ -80,9 +71,6 @@ amenable to serializing to disk.)
 */
 
 #![deny(missing_docs)]
-
-extern crate byteorder;
-extern crate csv;
 
 pub use crate::simple::RandomAccessSimple;
 

@@ -1,11 +1,8 @@
-extern crate csv;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-
 use std::error::Error;
 use std::io;
 use std::process;
+
+use serde::Serialize;
 
 // Note that structs can derive both Serialize and Deserialize!
 #[derive(Debug, Serialize)]

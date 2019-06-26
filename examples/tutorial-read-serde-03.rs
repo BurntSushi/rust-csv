@@ -1,5 +1,3 @@
-extern crate csv;
-
 use std::collections::HashMap;
 use std::error::Error;
 use std::io;
@@ -19,8 +17,8 @@ fn run() -> Result<(), Box<dyn Error>> {
 }
 
 fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
-    }
+if let Err(err) = run() {
+println!("{}", err);
+process::exit(1);
+}
 }

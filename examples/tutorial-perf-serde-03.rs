@@ -1,11 +1,8 @@
-extern crate csv;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-
 use std::error::Error;
 use std::io;
 use std::process;
+
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -35,13 +32,13 @@ fn run() -> Result<u64, Box<dyn Error>> {
 }
 
 fn main() {
-    match run() {
-        Ok(count) => {
-            println!("{}", count);
-        }
-        Err(err) => {
-            println!("{}", err);
-            process::exit(1);
-        }
-    }
+match run() {
+Ok(count) => {
+println!("{}", count);
+}
+Err(err) => {
+println!("{}", err);
+process::exit(1);
+}
+}
 }

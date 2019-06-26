@@ -53,7 +53,7 @@ $ cd csvtutor
 ```
 
 Once inside `csvtutor`, open `Cargo.toml` in your favorite text editor and add
-`csv = "1"` to your `[dependencies]` section. At this point, your
+`csv = "1.1"` to your `[dependencies]` section. At this point, your
 `Cargo.toml` should look something like this:
 
 ```text
@@ -63,7 +63,7 @@ version = "0.1.0"
 authors = ["Your Name"]
 
 [dependencies]
-csv = "1"
+csv = "1.1"
 ```
 
 Next, let's build your project. Since you added the `csv` crate as a
@@ -89,9 +89,6 @@ this:
 
 ```no_run
 //tutorial-setup-01.rs
-// This makes the csv crate accessible to your program.
-extern crate csv;
-
 // Import the standard library's I/O module so we can read from stdin.
 use std::io;
 
@@ -191,8 +188,6 @@ its error handling.
 
 ```no_run
 //tutorial-error-01.rs
-extern crate csv;
-
 use std::io;
 
 fn main() {
@@ -286,8 +281,6 @@ let's get rid of the panic and print an error message manually:
 
 ```no_run
 //tutorial-error-02.rs
-extern crate csv;
-
 use std::io;
 use std::process;
 
@@ -327,8 +320,6 @@ error, which our `main` function can then inspect and decide what to do with.
 
 ```no_run
 //tutorial-error-03.rs
-extern crate csv;
-
 use std::error::Error;
 use std::io;
 use std::process;
@@ -340,12 +331,12 @@ fn main() {
     }
 }
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.records() {
         // Examine our Result.
         // If there was no problem, print the record.
-        // Otherwise, convert our error to a Box<Error> and return it.
+        // Otherwise, convert our error to a Box<dyn Error> and return it.
         match result {
             Err(err) => return Err(From::from(err)),
             Ok(record) => {
@@ -357,10 +348,10 @@ fn run() -> Result<(), Box<Error>> {
 }
 ```
 
-Our new function, `run`, has a return type of `Result<(), Box<Error>>`. In
+Our new function, `run`, has a return type of `Result<(), Box<dyn Error>>`. In
 simple terms, this says that `run` either returns nothing when successful, or
-if an error occurred, it returns a `Box<Error>`, which stands for "any kind of
-error." A `Box<Error>` is hard to inspect if we cared about the specific error
+if an error occurred, it returns a `Box<dyn Error>`, which stands for "any kind of
+error." A `Box<dyn Error>` is hard to inspect if we cared about the specific error
 that occurred. But for our purposes, all we need to do is gracefully print an
 error message and exit the program.
 
@@ -369,8 +360,6 @@ special Rust language feature: the question mark.
 
 ```no_run
 //tutorial-error-04.rs
-extern crate csv;
-
 use std::error::Error;
 use std::io;
 use std::process;
@@ -382,7 +371,7 @@ fn main() {
     }
 }
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.records() {
         // This is effectively the same code as our `match` in the
@@ -400,7 +389,7 @@ ourselves. We will use the `?` heavily throughout this tutorial, and it's
 important to note that it can **only be used in functions that return
 `Result`.**
 
-We'll end this section with a word of caution: using `Box<Error>` as our error
+We'll end this section with a word of caution: using `Box<dyn Error>` as our error
 type is the minimally acceptable thing we can do here. Namely, while it allows
 our program to gracefully handle errors, it makes it hard for callers to
 inspect the specific error condition that occurred. However, since this is a
@@ -427,15 +416,13 @@ path argument instead of stdin.
 
 ```no_run
 //tutorial-read-01.rs
-extern crate csv;
-
 use std::env;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fs::File;
 use std::process;
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let file_path = get_first_arg()?;
     let file = File::open(file_path)?;
     let mut rdr = csv::Reader::from_reader(file);
@@ -448,7 +435,7 @@ fn run() -> Result<(), Box<Error>> {
 
 /// Returns the first positional argument sent to this process. If there are no
 /// positional arguments, then this returns an error.
-fn get_first_arg() -> Result<OsString, Box<Error>> {
+fn get_first_arg() -> Result<OsString, Box<dyn Error>> {
     match env::args_os().nth(1) {
         None => Err(From::from("expected 1 argument, but got none")),
         Some(file_path) => Ok(file_path),
@@ -537,13 +524,11 @@ produces terser examples.)
 
 ```no_run
 //tutorial-read-headers-01.rs
-# extern crate csv;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
 #
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false)
         .from_reader(io::stdin());
@@ -580,13 +565,11 @@ method like so:
 
 ```no_run
 //tutorial-read-headers-02.rs
-# extern crate csv;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
 #
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     {
         // We nest this call in its own scope because of lifetimes.
@@ -663,13 +646,11 @@ as seen in the following example:
 
 ```no_run
 //tutorial-read-delimiter-01.rs
-# extern crate csv;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
 #
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false)
         .delimiter(b';')
@@ -753,13 +734,11 @@ a lot of manual work. This next example shows how.
 
 ```no_run
 //tutorial-read-serde-01.rs
-# extern crate csv;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
 #
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.records() {
         let record = result?;
@@ -798,8 +777,6 @@ type: `(String, String, Option<u64>, f64, f64)`.
 
 ```no_run
 //tutorial-read-serde-02.rs
-# extern crate csv;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
@@ -808,7 +785,7 @@ type: `(String, String, Option<u64>, f64, f64)`.
 // record type.
 type Record = (String, String, Option<u64>, f64, f64);
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     // Instead of creating an iterator with the `records` method, we create
     // an iterator with the `deserialize` method.
@@ -853,8 +830,6 @@ a new `use` statement that imports `HashMap` from the standard library:
 
 ```no_run
 //tutorial-read-serde-03.rs
-# extern crate csv;
-#
 use std::collections::HashMap;
 # use std::error::Error;
 # use std::io;
@@ -864,7 +839,7 @@ use std::collections::HashMap;
 // record type.
 type Record = HashMap<String, String>;
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         let record: Record = result?;
@@ -894,36 +869,32 @@ $ ./target/debug/csvtutor < uspop.csv
 
 This method works especially well if you need to read CSV data with header
 records, but whose exact structure isn't known until your program runs.
-However, in our case, we know the structure of the data in `uspop.csv`.
-In particular, with the `HashMap` approach, we've lost the specific types
-we had for each field in the previous example when we deserialized each record
-into a `(String, String, Option<u64>, f64, f64)`. Is there a way to identify
-fields by their corresponding header name *and* assign each field its own
-unique type? The answer is yes, but we'll need to bring in a new crate called
-`serde_derive` first. You can do that by adding this to the `[dependencies]`
-section of your `Cargo.toml` file:
+However, in our case, we know the structure of the data in `uspop.csv`. In
+particular, with the `HashMap` approach, we've lost the specific types we had
+for each field in the previous example when we deserialized each record into a
+`(String, String, Option<u64>, f64, f64)`. Is there a way to identify fields
+by their corresponding header name *and* assign each field its own unique
+type? The answer is yes, but we'll need to bring in Serde's `derive` feature
+first. You can do that by adding this to the `[dependencies]` section of your
+`Cargo.toml` file:
 
 ```text
-serde = "1"
-serde_derive = "1"
+serde = { version = "1", features = ["derive"] }
 ```
 
 With these crates added to our project, we can now define our own custom struct
 that represents our record. We then ask Serde to automatically write the glue
 code required to populate our struct from a CSV record. The next example shows
-how. Don't miss the new `extern crate` lines!
+how. Don't miss the new Serde imports!
 
 ```no_run
 //tutorial-read-serde-04.rs
-extern crate csv;
-extern crate serde;
-// This lets us write `#[derive(Deserialize)]`.
-#[macro_use]
-extern crate serde_derive;
-
 use std::error::Error;
 use std::io;
 use std::process;
+
+// This lets us write `#[derive(Deserialize)]`.
+use serde::Deserialize;
 
 // We don't need to derive `Debug` (which doesn't require Serde), but it's a
 // good habit to do it for all your types.
@@ -940,7 +911,7 @@ struct Record {
     state: String,
 }
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         let record: Record = result?;
@@ -972,14 +943,13 @@ Record { latitude: 33.7133333, longitude: -87.3886111, population: None, city: "
 Once again, we didn't need to change our `run` function at all: we're still
 iterating over records using the `deserialize` iterator that we started with
 in the beginning of this section. The only thing that changed in this example
-was the definition of the `Record` type and a couple new `extern crate`
-statements. Our `Record` type is now a custom struct that we defined instead
-of a type alias, and as a result, Serde doesn't know how to deserialize it by
-default. However, a special compiler plugin called `serde_derive` is available,
-which will read your struct definition at compile time and generate code that
-will deserialize a CSV record into a `Record` value. To see what happens if you
-leave out the automatic derive, change `#[derive(Debug, Deserialize)]` to
-`#[derive(Debug)]`.
+was the definition of the `Record` type and a new `use` statement. Our `Record`
+type is now a custom struct that we defined instead of a type alias, and as a
+result, Serde doesn't know how to deserialize it by default. However, a special
+compiler plugin provided by Serde is available, which will read your struct
+definition at compile time and generate code that will deserialize a CSV record
+into a `Record` value. To see what happens if you leave out the automatic
+derive, change `#[derive(Debug, Deserialize)]` to `#[derive(Debug)]`.
 
 One other thing worth mentioning in this example is the use of
 `#[serde(rename_all = "PascalCase")]`. This directive helps Serde map your
@@ -1057,13 +1027,11 @@ Let's start by running our program from the previous section:
 
 ```no_run
 //tutorial-read-serde-invalid-01.rs
-# extern crate csv;
-# #[macro_use]
-# extern crate serde_derive;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
+#
+# use serde::Deserialize;
 #
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -1075,7 +1043,7 @@ struct Record {
     state: String,
 }
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         let record: Record = result?;
@@ -1128,14 +1096,11 @@ to a `None` value, as shown in this next example:
 
 ```no_run
 //tutorial-read-serde-invalid-02.rs
-# extern crate csv;
-# #[macro_use]
-# extern crate serde_derive;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
 #
+# use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record {
@@ -1147,7 +1112,7 @@ struct Record {
     state: String,
 }
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         let record: Record = result?;
@@ -1199,13 +1164,11 @@ Let's start with the most basic example: writing a few CSV records to `stdout`.
 
 ```no_run
 //tutorial-write-01.rs
-extern crate csv;
-
 use std::error::Error;
 use std::io;
 use std::process;
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
     // Since we're writing records manually, we must explicitly write our
     // header record. A header record is written the same way that other
@@ -1310,14 +1273,12 @@ of `stdout`:
 
 ```no_run
 //tutorial-write-02.rs
-extern crate csv;
-
 use std::env;
 use std::error::Error;
 use std::ffi::OsString;
 use std::process;
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let file_path = get_first_arg()?;
     let mut wtr = csv::Writer::from_path(file_path)?;
 
@@ -1332,7 +1293,7 @@ fn run() -> Result<(), Box<Error>> {
 
 /// Returns the first positional argument sent to this process. If there are no
 /// positional arguments, then this returns an error.
-fn get_first_arg() -> Result<OsString, Box<Error>> {
+fn get_first_arg() -> Result<OsString, Box<dyn Error>> {
     match env::args_os().nth(1) {
         None => Err(From::from("expected 1 argument, but got none")),
         Some(file_path) => Ok(file_path),
@@ -1373,13 +1334,11 @@ Here's an example:
 
 ```no_run
 //tutorial-write-delimiter-01.rs
-# extern crate csv;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
 #
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::WriterBuilder::new()
         .delimiter(b'\t')
         .quote_style(csv::QuoteStyle::NonNumeric)
@@ -1431,13 +1390,11 @@ As with reading, let's start by seeing how we can serialize a Rust tuple.
 
 ```no_run
 //tutorial-write-serde-01.rs
-# extern crate csv;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
 #
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
     // We still need to write headers manually.
@@ -1488,30 +1445,26 @@ As with reading, we can also serialize custom structs as CSV records. As a
 bonus, the fields in a struct will automatically be written as a header
 record!
 
-To write custom structs as CSV records, we'll need to make use of the
-`serde_derive` crate again. As in the
+To write custom structs as CSV records, we'll need to make use of Serde's
+automatic `derive` feature again. As in the
 [previous section on reading with Serde](#reading-with-serde),
 we'll need to add a couple crates to our `[dependencies]` section in our
 `Cargo.toml` (if they aren't already there):
 
 ```text
-serde = "1"
-serde_derive = "1"
+serde = { version = "1", features = ["derive"] }
 ```
 
-And we'll also need to add a couple extra `extern crate` statements to our
-code, as shown in the example:
+And we'll also need to add a new `use` statement to our code, for Serde, as
+shown in the example:
 
 ```no_run
 //tutorial-write-serde-02.rs
-extern crate csv;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-
 use std::error::Error;
 use std::io;
 use std::process;
+
+use serde::Serialize;
 
 // Note that structs can derive both Serialize and Deserialize!
 #[derive(Debug, Serialize)]
@@ -1524,7 +1477,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
     wtr.serialize(Record {
@@ -1636,14 +1589,12 @@ rows with a field that matches the query.
 
 ```no_run
 //tutorial-pipeline-search-01.rs
-extern crate csv;
-
 use std::env;
 use std::error::Error;
 use std::io;
 use std::process;
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     // Get the query from the positional arguments.
     // If one doesn't exist, return an error.
     let query = match env::args().nth(1) {
@@ -1758,14 +1709,12 @@ change:
 
 ```no_run
 //tutorial-pipeline-search-02.rs
-# extern crate csv;
-#
 # use std::env;
 # use std::error::Error;
 # use std::io;
 # use std::process;
 #
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let query = match env::args().nth(1) {
         None => return Err(From::from("expected 1 argument, but got none")),
         Some(query) => query,
@@ -1825,23 +1774,19 @@ dependencies to your `Cargo.toml` in your `[dependencies]` section if they
 aren't already there:
 
 ```text
-serde = "1"
-serde_derive = "1"
+serde = { version = "1", features = ["derive"] }
 ```
 
 Now here's the code:
 
 ```no_run
 //tutorial-pipeline-pop-01.rs
-extern crate csv;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-
 use std::env;
 use std::error::Error;
 use std::io;
 use std::process;
+
+use serde::{Deserialize, Serialize};
 
 // Unlike previous examples, we derive both Deserialize and Serialize. This
 // means we'll be able to automatically deserialize and serialize this type.
@@ -1855,7 +1800,7 @@ struct Record {
     longitude: f64,
 }
 
-fn run() -> Result<(), Box<Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     // Get the query from the positional arguments.
     // If one doesn't exist or isn't an integer, return an error.
     let minimum_pop: u64 = match env::args().nth(1) {
@@ -1969,13 +1914,11 @@ adapting a previous example to count the number of records in
 
 ```no_run
 //tutorial-perf-alloc-01.rs
-extern crate csv;
-
 use std::error::Error;
 use std::io;
 use std::process;
 
-fn run() -> Result<u64, Box<Error>> {
+fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
 
     let mut count = 0;
@@ -2029,13 +1972,11 @@ shown in the next example:
 
 ```no_run
 //tutorial-perf-alloc-02.rs
-# extern crate csv;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
 #
-fn run() -> Result<u64, Box<Error>> {
+fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
 
     let mut count = 0;
@@ -2114,13 +2055,11 @@ method.
 
 ```no_run
 //tutorial-perf-alloc-03.rs
-# extern crate csv;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
 #
-fn run() -> Result<u64, Box<Error>> {
+fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     let mut record = csv::ByteRecord::new();
 
@@ -2197,14 +2136,11 @@ example using Serde in a previous section:
 
 ```no_run
 //tutorial-perf-serde-01.rs
-extern crate csv;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-
 use std::error::Error;
 use std::io;
 use std::process;
+
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -2218,7 +2154,7 @@ struct Record {
     longitude: f64,
 }
 
-fn run() -> Result<u64, Box<Error>> {
+fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
 
     let mut count = 0;
@@ -2269,14 +2205,11 @@ like:
 
 ```no_run
 //tutorial-perf-serde-02.rs
-# extern crate csv;
-# extern crate serde;
-# #[macro_use]
-# extern crate serde_derive;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
+#
+# use serde::Deserialize;
 #
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -2290,7 +2223,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
-fn run() -> Result<u64, Box<Error>> {
+fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     let mut raw_record = csv::StringRecord::new();
     let headers = rdr.headers()?.clone();
@@ -2359,14 +2292,11 @@ of `StringRecord`:
 
 ```no_run
 //tutorial-perf-serde-03.rs
-# extern crate csv;
-# extern crate serde;
-# #[macro_use]
-# extern crate serde_derive;
-#
 # use std::error::Error;
 # use std::io;
 # use std::process;
+#
+# use serde::Deserialize;
 #
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -2380,7 +2310,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
-fn run() -> Result<u64, Box<Error>> {
+fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     let mut raw_record = csv::ByteRecord::new();
     let headers = rdr.byte_headers()?.clone();
@@ -2459,8 +2389,6 @@ access to I/O, which would be harder without the standard library.)
 
 ```no_run
 //tutorial-perf-core-01.rs
-extern crate csv_core;
-
 use std::io::{self, Read};
 use std::process;
 

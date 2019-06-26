@@ -30,7 +30,7 @@ ryu = "1"
 serde = "1.0.55"
 
 [dev-dependencies]
-serde_derive = "1.0.55"
+serde = { version = "1.0.55", features = ["derive"] }
 serde_bytes = "0.10.4"
 
 [profile.release]

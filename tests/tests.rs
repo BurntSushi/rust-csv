@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 
-extern crate csv;
-
 use std::env;
 use std::io::{self, Write};
 use std::path::PathBuf;

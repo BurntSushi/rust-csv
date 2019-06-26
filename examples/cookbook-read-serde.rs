@@ -1,10 +1,8 @@
-extern crate csv;
-#[macro_use]
-extern crate serde_derive;
-
 use std::error::Error;
 use std::io;
 use std::process;
+
+use serde::Deserialize;
 
 // By default, struct field names are deserialized based on the position of
 // a corresponding field in the CSV data's header record.

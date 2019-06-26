@@ -31,13 +31,11 @@ stdout.
 
 ```no_run
 # //cookbook-read-basic.rs
-extern crate csv;
-
 use std::error::Error;
 use std::io;
 use std::process;
 
-fn example() -> Result<(), Box<Error>> {
+fn example() -> Result<(), Box<dyn Error>> {
     // Build the CSV reader and iterate over each record.
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.records() {
@@ -76,17 +74,15 @@ method.
 
 ```no_run
 # //cookbook-read-serde.rs
-extern crate csv;
-#[macro_use]
-extern crate serde_derive;
-
 use std::error::Error;
 use std::io;
 use std::process;
 
+use serde::Deserialize;
+
 // By default, struct field names are deserialized based on the position of
 // a corresponding field in the CSV data's header record.
-#[derive(Debug,Deserialize)]
+#[derive(Debug, Deserialize)]
 struct Record {
     city: String,
     region: String,
@@ -94,7 +90,7 @@ struct Record {
     population: Option<u64>,
 }
 
-fn example() -> Result<(), Box<Error>> {
+fn example() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         // Notice that we need to provide a type hint for automatic
@@ -128,13 +124,11 @@ by `:` instead of `,`.
 
 ```no_run
 # //cookbook-read-colon.rs
-extern crate csv;
-
 use std::error::Error;
 use std::io;
 use std::process;
 
-fn example() -> Result<(), Box<Error>> {
+fn example() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::ReaderBuilder::new()
         .delimiter(b':')
         .from_reader(io::stdin());
@@ -170,13 +164,11 @@ first record is not skipped. This example shows how to disable that setting.
 
 ```no_run
 # //cookbook-read-no-headers.rs
-extern crate csv;
-
 use std::error::Error;
 use std::io;
 use std::process;
 
-fn example() -> Result<(), Box<Error>> {
+fn example() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false)
         .from_reader(io::stdin());
@@ -209,13 +201,11 @@ This example shows how to write CSV data to stdout.
 
 ```no_run
 # //cookbook-write-basic.rs
-extern crate csv;
-
 use std::error::Error;
 use std::io;
 use std::process;
 
-fn example() -> Result<(), Box<Error>> {
+fn example() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
     // When writing records without Serde, the header record is written just
@@ -251,13 +241,11 @@ headers are written automatically.
 
 ```no_run
 # //cookbook-write-serde.rs
-extern crate csv;
-#[macro_use]
-extern crate serde_derive;
-
 use std::error::Error;
 use std::io;
 use std::process;
+
+use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 struct Record {
@@ -267,7 +255,7 @@ struct Record {
     population: Option<u64>,
 }
 
-fn example() -> Result<(), Box<Error>> {
+fn example() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
     // When writing records with Serde using structs, the header row is written

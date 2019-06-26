@@ -1,5 +1,3 @@
-extern crate csv;
-
 use std::io;
 
 fn main() {

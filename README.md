@@ -24,13 +24,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-csv = "1"
-```
-
-and this to your crate root:
-
-```rust
-extern crate csv;
+csv = "1.1"
 ```
 
 ### Example
@@ -42,13 +36,11 @@ There are more examples in the
 [cookbook](https://docs.rs/csv/1.0.0/csv/cookbook/index.html).
 
 ```rust
-extern crate csv;
-
 use std::error::Error;
 use std::io;
 use std::process;
 
-fn example() -> Result<(), Box<Error>> {
+fn example() -> Result<(), Box<dyn Error>> {
     // Build the CSV reader and iterate over each record.
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.records() {
@@ -83,15 +75,13 @@ By default, the member names of the struct are matched with the values in the
 header record of your CSV data.
 
 ```rust
-extern crate csv;
-#[macro_use]
-extern crate serde_derive;
-
 use std::error::Error;
 use std::io;
 use std::process;
 
-#[derive(Debug,Deserialize)]
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
 struct Record {
     city: String,
     region: String,
@@ -99,7 +89,7 @@ struct Record {
     population: Option<u64>,
 }
 
-fn example() -> Result<(), Box<Error>> {
+fn example() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         // Notice that we need to provide a type hint for automatic

@@ -1,6 +1,3 @@
-// This makes the csv crate accessible to your program.
-extern crate csv;
-
 // Import the standard library's I/O module so we can read from stdin.
 use std::io;
 
