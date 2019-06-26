@@ -32,13 +32,13 @@ fn run() -> Result<u64, Box<dyn Error>> {
 }
 
 fn main() {
-match run() {
-Ok(count) => {
-println!("{}", count);
-}
-Err(err) => {
-println!("{}", err);
-process::exit(1);
-}
-}
+    match run() {
+        Ok(count) => {
+            println!("{}", count);
+        }
+        Err(err) => {
+            println!("{}", err);
+            process::exit(1);
+        }
+    }
 }

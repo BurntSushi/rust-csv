@@ -18,7 +18,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         match result {
             Err(err) => return Err(From::from(err)),
             Ok(record) => {
-              println!("{:?}", record);
+                println!("{:?}", record);
             }
         }
     }

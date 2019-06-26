@@ -5,6 +5,7 @@ import argparse
 import codecs
 import os.path
 import re
+import subprocess
 
 RE_EACH_CODE_BLOCK = re.compile(r'(?s)```[^\n]*\n(.*?)```')
 RE_MARKER = re.compile(r'^(?:# )?//(.+)$')
@@ -29,3 +30,4 @@ if __name__ == '__main__':
         fpath = os.path.join(args.example_dir, m.group(1))
         with codecs.open(fpath, mode='w+', encoding='utf-8') as f:
             print(code, file=f)
+        subprocess.check_output(['rustfmt', fpath])

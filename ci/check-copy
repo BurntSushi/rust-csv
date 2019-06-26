@@ -19,6 +19,8 @@ errored() {
     exit 1
 }
 
+# Make sure the right rustfmt config is available.
+cp "$REPO/rustfmt.toml" "$TMPDIR/"
 "$SCRIPTS/copy-examples" \
   --rust-file "$REPO/src/$SOURCE.rs" \
   --example-dir "$TMPDIR"
