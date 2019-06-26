@@ -1,5 +1,3 @@
-extern crate csv;
-
 use std::error::Error;
 use std::io;
 use std::process;
@@ -16,11 +14,11 @@ fn run() -> Result<(), Box<dyn Error>> {
     for result in rdr.records() {
         // Examine our Result.
         // If there was no problem, print the record.
-        // Otherwise, convert our error to a Box<Error> and return it.
+        // Otherwise, convert our error to a Box<dyn Error> and return it.
         match result {
             Err(err) => return Err(From::from(err)),
             Ok(record) => {
-                println!("{:?}", record);
+              println!("{:?}", record);
             }
         }
     }

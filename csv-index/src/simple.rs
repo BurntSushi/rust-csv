@@ -45,9 +45,6 @@ impl<W: io::Write> RandomAccessSimple<W> {
     /// and query the number of records in the index.
     ///
     /// ```
-    /// extern crate csv;
-    /// extern crate csv_index;
-    ///
     /// use std::io;
     /// use csv_index::RandomAccessSimple;
     ///
@@ -74,9 +71,6 @@ impl<W: io::Write> RandomAccessSimple<W> {
     /// in memory with `std::io::Cursor`, we write the index to a file.
     ///
     /// ```no_run
-    /// extern crate csv;
-    /// extern crate csv_index;
-    ///
     /// use std::fs::File;
     /// use std::io;
     /// use csv_index::RandomAccessSimple;
@@ -137,9 +131,6 @@ impl<R: io::Read + io::Seek> RandomAccessSimple<R> {
     /// and query the number of records in the index.
     ///
     /// ```
-    /// extern crate csv;
-    /// extern crate csv_index;
-    ///
     /// use std::io;
     /// use csv_index::RandomAccessSimple;
     ///
@@ -184,15 +175,12 @@ impl<R: io::Read + io::Seek> RandomAccessSimple<R> {
     /// and use it to seek a CSV reader to read an arbitrary record.
     ///
     /// ```
-    /// extern crate csv;
-    /// extern crate csv_index;
-    ///
     /// use std::error::Error;
     /// use std::io;
     /// use csv_index::RandomAccessSimple;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910

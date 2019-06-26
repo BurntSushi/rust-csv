@@ -1,12 +1,9 @@
-extern crate csv;
-extern crate serde;
-// This lets us write `#[derive(Deserialize)]`.
-#[macro_use]
-extern crate serde_derive;
-
 use std::error::Error;
 use std::io;
 use std::process;
+
+// This lets us write `#[derive(Deserialize)]`.
+use serde::Deserialize;
 
 // We don't need to derive `Debug` (which doesn't require Serde), but it's a
 // good habit to do it for all your types.

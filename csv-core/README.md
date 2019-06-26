@@ -19,13 +19,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-csv-core = "0.1"
-```
-
-and this to your crate root:
-
-```rust
-extern crate csv_core;
+csv-core = "0.2"
 ```
 
 ### Build features

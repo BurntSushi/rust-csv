@@ -19,13 +19,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-csv-index = "0.1"
-```
-
-and this to your crate root:
-
-```rust
-extern crate csv_index;
+csv-index = "0.2"
 ```
 
 ### Example: build a simple random access index
@@ -36,19 +30,17 @@ data. This example shows how to save this index to disk for a particular CSV
 file.
 
 ```rust
-extern crate csv;
-extern crate csv_index;
-
 use std::error::Error;
 use std::fs::File;
 use std::io::{self, Write};
+
 use csv_index::RandomAccessSimple;
 
 fn main() {
   example().unwrap();
 }
 
-fn example() -> Result<(), Box<Error>> {
+fn example() -> Result<(), Box<dyn Error>> {
     // Open a normal CSV reader.
     let mut rdr = csv::Reader::from_path("data.csv")?;
 

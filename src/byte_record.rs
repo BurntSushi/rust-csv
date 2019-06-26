@@ -236,12 +236,10 @@ impl ByteRecord {
     /// deserialization.
     ///
     /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::ByteRecord;
+    /// use serde::Deserialize;
     ///
     /// #[derive(Deserialize)]
     /// struct Row<'a> {
@@ -251,7 +249,7 @@ impl ByteRecord {
     /// }
     ///
     /// # fn main() { example().unwrap() }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let record = ByteRecord::from(vec![
     ///         "Boston", "United States", "4628910",
     ///     ]);
@@ -274,12 +272,10 @@ impl ByteRecord {
     /// types (e.g., `String`) instead of borrowed data types (e.g., `&str`).
     ///
     /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::ByteRecord;
+    /// use serde::Deserialize;
     ///
     /// #[derive(Deserialize)]
     /// struct Row {
@@ -289,7 +285,7 @@ impl ByteRecord {
     /// }
     ///
     /// # fn main() { example().unwrap() }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     // Notice that the fields are not in the same order
     ///     // as the fields in the struct!
     ///     let header = ByteRecord::from(vec![
@@ -503,13 +499,12 @@ impl ByteRecord {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::{ByteRecord, ReaderBuilder};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut record = ByteRecord::new();
     ///     let mut rdr = ReaderBuilder::new()
     ///         .has_headers(false)

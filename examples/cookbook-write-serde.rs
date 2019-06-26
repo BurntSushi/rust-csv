@@ -1,10 +1,8 @@
-extern crate csv;
-#[macro_use]
-extern crate serde_derive;
-
 use std::error::Error;
 use std::io;
 use std::process;
+
+use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 struct Record {

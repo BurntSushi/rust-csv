@@ -758,9 +758,8 @@ fn try_float_bytes(s: &[u8]) -> Option<f64> {
 mod tests {
     use std::collections::HashMap;
 
-    use serde::de::DeserializeOwned;
+    use serde::{de::DeserializeOwned, Deserialize};
     use serde_bytes::{self, ByteBuf};
-    use serde_derive::Deserialize;
 
     use super::{deserialize_byte_record, deserialize_string_record};
     use crate::byte_record::ByteRecord;

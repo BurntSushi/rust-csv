@@ -1,6 +1,5 @@
 #![feature(test)]
 
-extern crate csv_core;
 extern crate test;
 
 use test::Bencher;

@@ -165,13 +165,11 @@ impl StringRecord {
     /// # Example: valid UTF-8
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{ByteRecord, StringRecord};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let byte_record = ByteRecord::from(vec!["a", "b", "c"]);
     ///     let str_record = StringRecord::from_byte_record(byte_record)?;
     ///     assert_eq!(str_record.len(), 3);
@@ -264,12 +262,10 @@ impl StringRecord {
     /// deserialization.
     ///
     /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::StringRecord;
+    /// use serde::Deserialize;
     ///
     /// #[derive(Deserialize)]
     /// struct Row<'a> {
@@ -279,7 +275,7 @@ impl StringRecord {
     /// }
     ///
     /// # fn main() { example().unwrap() }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let record = StringRecord::from(vec![
     ///         "Boston", "United States", "4628910",
     ///     ]);
@@ -302,12 +298,10 @@ impl StringRecord {
     /// types (e.g., `String`) instead of borrowed data types (e.g., `&str`).
     ///
     /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::StringRecord;
+    /// use serde::Deserialize;
     ///
     /// #[derive(Deserialize)]
     /// struct Row {
@@ -317,7 +311,7 @@ impl StringRecord {
     /// }
     ///
     /// # fn main() { example().unwrap() }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     // Notice that the fields are not in the same order
     ///     // as the fields in the struct!
     ///     let header = StringRecord::from(vec![
@@ -504,13 +498,11 @@ impl StringRecord {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{StringRecord, ReaderBuilder};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut record = StringRecord::new();
     ///     let mut rdr = ReaderBuilder::new()
     ///         .has_headers(false)

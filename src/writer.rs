@@ -49,13 +49,11 @@ impl WriterBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::WriterBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new().from_writer(vec![]);
     ///     wtr.write_record(&["a", "b", "c"])?;
     ///     wtr.write_record(&["x", "y", "z"])?;
@@ -78,13 +76,11 @@ impl WriterBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::WriterBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new().from_path("foo.csv")?;
     ///     wtr.write_record(&["a", "b", "c"])?;
     ///     wtr.write_record(&["x", "y", "z"])?;
@@ -104,13 +100,11 @@ impl WriterBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::WriterBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new().from_writer(vec![]);
     ///     wtr.write_record(&["a", "b", "c"])?;
     ///     wtr.write_record(&["x", "y", "z"])?;
@@ -131,13 +125,11 @@ impl WriterBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::WriterBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new()
     ///         .delimiter(b';')
     ///         .from_writer(vec![]);
@@ -173,12 +165,10 @@ impl WriterBuilder {
     /// names of a struct.
     ///
     /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::WriterBuilder;
+    /// use serde::Serialize;
     ///
     /// #[derive(Serialize)]
     /// struct Row<'a> {
@@ -191,7 +181,7 @@ impl WriterBuilder {
     /// }
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new().from_writer(vec![]);
     ///     wtr.serialize(Row {
     ///         city: "Boston",
@@ -222,13 +212,11 @@ impl WriterBuilder {
     /// explicitly want to both write custom headers and serialize structs.
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::WriterBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new().from_writer(vec![]);
     ///     wtr.serialize(("Boston", "United States", 4628910))?;
     ///     wtr.serialize(("Concord", "United States", 42695))?;
@@ -257,13 +245,11 @@ impl WriterBuilder {
     /// # Example: writing flexible records
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::WriterBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new()
     ///         .flexible(true)
     ///         .from_writer(vec![]);
@@ -279,13 +265,11 @@ impl WriterBuilder {
     /// # Example: error when `flexible` is disabled
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::WriterBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new()
     ///         .flexible(false)
     ///         .from_writer(vec![]);
@@ -320,13 +304,11 @@ impl WriterBuilder {
     /// This shows how to use RFC 4180 compliant record terminators.
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{Terminator, WriterBuilder};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new()
     ///         .terminator(Terminator::CRLF)
     ///         .from_writer(vec![]);
@@ -356,13 +338,11 @@ impl WriterBuilder {
     /// This shows how to quote non-numeric fields only.
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{QuoteStyle, WriterBuilder};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new()
     ///         .quote_style(QuoteStyle::NonNumeric)
     ///         .from_writer(vec![]);
@@ -381,13 +361,11 @@ impl WriterBuilder {
     /// if it sacrifices the integrity of the data.
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{QuoteStyle, WriterBuilder};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new()
     ///         .quote_style(QuoteStyle::Never)
     ///         .from_writer(vec![]);
@@ -411,13 +389,11 @@ impl WriterBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::WriterBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new()
     ///         .quote(b'\'')
     ///         .from_writer(vec![]);
@@ -442,13 +418,11 @@ impl WriterBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::WriterBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new()
     ///         .double_quote(false)
     ///         .from_writer(vec![]);
@@ -476,13 +450,11 @@ impl WriterBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::WriterBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new()
     ///         .double_quote(false)
     ///         .escape(b'$')
@@ -606,13 +578,11 @@ impl Writer<File> {
     /// # Example
     ///
     /// ```no_run
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::Writer;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = Writer::from_path("foo.csv")?;
     ///     wtr.write_record(&["a", "b", "c"])?;
     ///     wtr.write_record(&["x", "y", "z"])?;
@@ -655,13 +625,11 @@ impl<W: io::Write> Writer<W> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::Writer;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = Writer::from_writer(vec![]);
     ///     wtr.write_record(&["a", "b", "c"])?;
     ///     wtr.write_record(&["x", "y", "z"])?;
@@ -686,12 +654,10 @@ impl<W: io::Write> Writer<W> {
     /// calling the `has_headers` method.)
     ///
     /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::Writer;
+    /// use serde::Serialize;
     ///
     /// #[derive(Serialize)]
     /// struct Row<'a> {
@@ -704,7 +670,7 @@ impl<W: io::Write> Writer<W> {
     /// }
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = Writer::from_writer(vec![]);
     ///     wtr.serialize(Row {
     ///         city: "Boston",
@@ -771,12 +737,10 @@ impl<W: io::Write> Writer<W> {
     /// this:
     ///
     /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::Writer;
+    /// use serde::Serialize;
     ///
     /// #[derive(Serialize)]
     /// struct Row {
@@ -791,7 +755,7 @@ impl<W: io::Write> Writer<W> {
     /// }
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = Writer::from_writer(vec![]);
     ///     wtr.serialize(Row {
     ///         label: "foo".to_string(),
@@ -839,12 +803,10 @@ impl<W: io::Write> Writer<W> {
     /// types can be nested arbitrarily. For example:
     ///
     /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::WriterBuilder;
+    /// use serde::Serialize;
     ///
     /// #[derive(Serialize)]
     /// struct Row {
@@ -853,7 +815,7 @@ impl<W: io::Write> Writer<W> {
     /// }
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new()
     ///         .has_headers(false)
     ///         .from_writer(vec![]);
@@ -916,13 +878,11 @@ impl<W: io::Write> Writer<W> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::Writer;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = Writer::from_writer(vec![]);
     ///     wtr.write_record(&["a", "b", "c"])?;
     ///     wtr.write_record(&["x", "y", "z"])?;
@@ -959,13 +919,11 @@ impl<W: io::Write> Writer<W> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{ByteRecord, Writer};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = Writer::from_writer(vec![]);
     ///     wtr.write_byte_record(&ByteRecord::from(&["a", "b", "c"][..]))?;
     ///     wtr.write_byte_record(&ByteRecord::from(&["x", "y", "z"][..]))?;
@@ -1044,13 +1002,11 @@ impl<W: io::Write> Writer<W> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::Writer;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = Writer::from_writer(vec![]);
     ///     wtr.write_field("a")?;
     ///     wtr.write_field("b")?;
@@ -1223,6 +1179,8 @@ impl Buffer {
 
 #[cfg(test)]
 mod tests {
+    use serde::Serialize;
+
     use crate::byte_record::ByteRecord;
     use crate::error::ErrorKind;
     use crate::string_record::StringRecord;

@@ -52,13 +52,11 @@ impl ReaderBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{ReaderBuilder, StringRecord};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -89,13 +87,11 @@ impl ReaderBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut rdr = ReaderBuilder::new().from_path("foo.csv")?;
     ///     for result in rdr.records() {
     ///         let record = result?;
@@ -116,13 +112,11 @@ impl ReaderBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -147,13 +141,11 @@ impl ReaderBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city;country;pop
     /// Boston;United States;4628910
@@ -192,13 +184,11 @@ impl ReaderBuilder {
     /// Namely, the first row is treated just like any other row.
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -244,13 +234,11 @@ impl ReaderBuilder {
     /// # Example: flexible records enabled
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     // Notice that the first row is missing the population count.
     ///     let data = "\
     /// city,country,pop
@@ -277,13 +265,11 @@ impl ReaderBuilder {
     /// default).
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{ErrorKind, ReaderBuilder};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     // Notice that the first row is missing the population count.
     ///     let data = "\
     /// city,country,pop
@@ -341,13 +327,11 @@ impl ReaderBuilder {
     /// This example shows what happens when all values are trimmed.
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{ReaderBuilder, StringRecord, Trim};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city ,   country ,  pop
     /// Boston,\"
@@ -381,13 +365,11 @@ impl ReaderBuilder {
     /// # Example: `$` as a record terminator
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{ReaderBuilder, Terminator};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "city,country,pop$Boston,United States,4628910";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .terminator(Terminator::Any(b'$'))
@@ -414,13 +396,11 @@ impl ReaderBuilder {
     /// # Example: single quotes instead of double quotes
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,'United States',4628910
@@ -453,13 +433,11 @@ impl ReaderBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,\"The \\\"United\\\" States\",4628910
@@ -492,13 +470,11 @@ impl ReaderBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,\"The \"\"United\"\" States\",4628910
@@ -531,13 +507,11 @@ impl ReaderBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,\"The United States,4628910
@@ -572,13 +546,11 @@ impl ReaderBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// #Concord,United States,42695
@@ -611,13 +583,11 @@ impl ReaderBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::ReaderBuilder;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city\x1Fcountry\x1Fpop\x1EBoston\x1FUnited States\x1F4628910";
     ///     let mut rdr = ReaderBuilder::new()
@@ -674,13 +644,11 @@ impl ReaderBuilder {
 /// a `Reader`. For example, to change the field delimiter:
 ///
 /// ```
-/// extern crate csv;
-///
 /// use std::error::Error;
 /// use csv::ReaderBuilder;
 ///
 /// # fn main() { example().unwrap(); }
-/// fn example() -> Result<(), Box<Error>> {
+/// fn example() -> Result<(), Box<dyn Error>> {
 ///     let data = "\
 /// city;country;pop
 /// Boston;United States;4628910
@@ -796,13 +764,11 @@ impl Reader<Reader<File>> {
     /// # Example
     ///
     /// ```no_run
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::Reader;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut rdr = Reader::from_path("foo.csv")?;
     ///     for result in rdr.records() {
     ///         let record = result?;
@@ -845,13 +811,11 @@ impl<R: io::Read> Reader<R> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::Reader;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -888,12 +852,10 @@ impl<R: io::Read> Reader<R> {
     /// to the fields of the struct.
     ///
     /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::Reader;
+    /// use serde::Deserialize;
     ///
     /// #[derive(Debug, Deserialize, Eq, PartialEq)]
     /// struct Row {
@@ -904,7 +866,7 @@ impl<R: io::Read> Reader<R> {
     /// }
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,popcount
     /// Boston,United States,4628910
@@ -947,12 +909,10 @@ impl<R: io::Read> Reader<R> {
     /// a "tail" of fields in a record:
     ///
     /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::ReaderBuilder;
+    /// use serde::Deserialize;
     ///
     /// #[derive(Debug, Deserialize, Eq, PartialEq)]
     /// struct Row {
@@ -961,7 +921,7 @@ impl<R: io::Read> Reader<R> {
     /// }
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "foo,1,2,3";
     ///     let mut rdr = ReaderBuilder::new()
     ///         .has_headers(false)
@@ -996,12 +956,10 @@ impl<R: io::Read> Reader<R> {
     /// following example shows both forms in action:
     ///
     /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::Reader;
+    /// use serde::Deserialize;
     ///
     /// #[derive(Debug, Deserialize, PartialEq)]
     /// struct Row {
@@ -1024,7 +982,7 @@ impl<R: io::Read> Reader<R> {
     /// }
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// label,value
     /// celsius,22.2222
@@ -1087,12 +1045,10 @@ impl<R: io::Read> Reader<R> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    /// #[macro_use]
-    /// extern crate serde_derive;
-    ///
     /// use std::error::Error;
+    ///
     /// use csv::Reader;
+    /// use serde::Deserialize;
     ///
     /// #[derive(Debug, Deserialize, Eq, PartialEq)]
     /// struct Row {
@@ -1103,7 +1059,7 @@ impl<R: io::Read> Reader<R> {
     /// }
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,popcount
     /// Boston,United States,4628910
@@ -1143,13 +1099,11 @@ impl<R: io::Read> Reader<R> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::Reader;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -1185,13 +1139,11 @@ impl<R: io::Read> Reader<R> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::Reader;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -1224,13 +1176,11 @@ impl<R: io::Read> Reader<R> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::Reader;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -1266,13 +1216,11 @@ impl<R: io::Read> Reader<R> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::Reader;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -1313,13 +1261,11 @@ impl<R: io::Read> Reader<R> {
     /// the header row does not appear as a record in the iterator!
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::Reader;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -1384,13 +1330,11 @@ impl<R: io::Read> Reader<R> {
     /// the header row does not appear as a record in the iterator!
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::Reader;
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -1438,13 +1382,11 @@ impl<R: io::Read> Reader<R> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{Reader, StringRecord};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -1471,13 +1413,11 @@ impl<R: io::Read> Reader<R> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{Reader, ByteRecord};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -1542,13 +1482,11 @@ impl<R: io::Read> Reader<R> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{Reader, StringRecord};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -1592,13 +1530,11 @@ impl<R: io::Read> Reader<R> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use csv::{ByteRecord, Reader};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
@@ -1716,14 +1652,12 @@ impl<R: io::Read> Reader<R> {
     /// # Example: reading the position
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use std::io;
     /// use csv::{Reader, Position};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,popcount
     /// Boston,United States,4628910
@@ -1761,14 +1695,12 @@ impl<R: io::Read> Reader<R> {
     /// # Example
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use std::io;
     /// use csv::{Reader, Position};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,popcount
     /// Boston,United States,4628910
@@ -1839,14 +1771,12 @@ impl<R: io::Read + io::Seek> Reader<R> {
     /// # Example: seek to parse a record twice
     ///
     /// ```
-    /// extern crate csv;
-    ///
     /// use std::error::Error;
     /// use std::io;
     /// use csv::{Reader, Position};
     ///
     /// # fn main() { example().unwrap(); }
-    /// fn example() -> Result<(), Box<Error>> {
+    /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let data = "\
     /// city,country,popcount
     /// Boston,United States,4628910

@@ -1,14 +1,10 @@
 #![feature(test)]
 
-extern crate csv;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
 extern crate test;
 
 use std::io;
 
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use test::Bencher;
 
 use csv::{
