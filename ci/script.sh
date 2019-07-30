@@ -10,9 +10,10 @@ cargo test --verbose --manifest-path csv-index/Cargo.toml
 if [ "$TRAVIS_RUST_VERSION" = "stable" ]; then
   rustup component add rustfmt
   cargo fmt -- --check
-fi
-if [ "$TRAVIS_RUST_VERSION" = "nightly" ]; then
+
   ci/check-copy cookbook
   ci/check-copy tutorial
+fi
+if [ "$TRAVIS_RUST_VERSION" = "nightly" ]; then
   cargo bench --verbose --no-run
 fi
