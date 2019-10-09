@@ -1,10 +1,12 @@
 use std::fs::File;
 use std::io::{self, BufRead, Seek};
+#[cfg(feature = "serde")]
 use std::marker::PhantomData;
 use std::path::Path;
 use std::result;
 
 use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
+#[cfg(feature = "serde")]
 use serde::de::DeserializeOwned;
 
 use crate::byte_record::{ByteRecord, Position};
@@ -1017,6 +1019,7 @@ impl<R: io::Read> Reader<R> {
     ///     }
     /// }
     /// ```
+    #[cfg(feature = "serde")]
     pub fn deserialize<D>(&mut self) -> DeserializeRecordsIter<R, D>
     where
         D: DeserializeOwned,
@@ -1080,6 +1083,7 @@ impl<R: io::Read> Reader<R> {
     ///     }
     /// }
     /// ```
+    #[cfg(feature = "serde")]
     pub fn into_deserialize<D>(self) -> DeserializeRecordsIntoIter<R, D>
     where
         D: DeserializeOwned,
@@ -1877,6 +1881,7 @@ impl ReaderState {
 ///
 /// The type parameter `R` refers to the underlying `io::Read` type, and `D`
 /// refers to the type that this iterator will deserialize a record into.
+#[cfg(feature = "serde")]
 pub struct DeserializeRecordsIntoIter<R, D> {
     rdr: Reader<R>,
     rec: StringRecord,
@@ -1884,6 +1889,7 @@ pub struct DeserializeRecordsIntoIter<R, D> {
     _priv: PhantomData<D>,
 }
 
+#[cfg(feature = "serde")]
 impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
     fn new(mut rdr: Reader<R>) -> DeserializeRecordsIntoIter<R, D> {
         let headers = if !rdr.state.has_headers {
@@ -1915,6 +1921,7 @@ impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<R: io::Read, D: DeserializeOwned> Iterator
     for DeserializeRecordsIntoIter<R, D>
 {
@@ -1935,6 +1942,7 @@ impl<R: io::Read, D: DeserializeOwned> Iterator
 /// CSV `Reader`. The type parameter `R` refers to the underlying `io::Read`
 /// type, and `D` refers to the type that this iterator will deserialize a
 /// record into.
+#[cfg(feature = "serde")]
 pub struct DeserializeRecordsIter<'r, R: 'r, D> {
     rdr: &'r mut Reader<R>,
     rec: StringRecord,
@@ -1942,6 +1950,7 @@ pub struct DeserializeRecordsIter<'r, R: 'r, D> {
     _priv: PhantomData<D>,
 }
 
+#[cfg(feature = "serde")]
 impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
     fn new(rdr: &'r mut Reader<R>) -> DeserializeRecordsIter<'r, R, D> {
         let headers = if !rdr.state.has_headers {
@@ -1968,6 +1977,7 @@ impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'r, R: io::Read, D: DeserializeOwned> Iterator
     for DeserializeRecordsIter<'r, R, D>
 {

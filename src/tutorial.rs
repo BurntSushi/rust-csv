@@ -708,7 +708,8 @@ is `CRLF`, which treats each of `\r\n`, `\r` and `\n` as single record
 terminators.) For more details, see the documentation and examples for each of
 the methods on
 [`ReaderBuilder`](../struct.ReaderBuilder.html).
-
+*/
+#![cfg_attr(feature = "serde", doc = r#"
 ## Reading with Serde
 
 One of the most convenient features of this crate is its support for
@@ -1153,7 +1154,8 @@ The
 function is a generic helper function that does one very simple thing: when
 applied to `Option` fields, it will convert any deserialization error into a
 `None` value. This is useful when you need to work with messy CSV data.
-
+#")]
+/*!
 # Writing CSV
 
 In this section we'll show a few examples that write CSV data. Writing CSV data
@@ -1379,7 +1381,8 @@ to you. The default is to add quotes to fields only when necessary. This
 probably works for most use cases, but you can also ask for quotes to always
 be put around fields, to never be put around fields or to always be put around
 non-numeric fields.
-
+*/
+#![cfg_attr(feature = "serde", doc = r#"
 ## Writing with Serde
 
 Just like the CSV reader supports automatic deserialization into Rust types
@@ -1571,7 +1574,8 @@ For more examples and more details on the rules for serialization, please see
 the
 [`Writer::serialize`](../struct.Writer.html#method.serialize)
 method.
-
+#")]
+/*!
 # Pipelining
 
 In this section, we're going to cover a few examples that demonstrate programs
@@ -1755,7 +1759,8 @@ $ ./csvtutor MA < uspop-latin1.csv
 City,State,Population,Latitude,Longitude
 Reading,MA,23441,42.5255556,-71.0958333
 ```
-
+*/
+#![cfg_attr(feature = "serde", doc = r#"
 ## Filter by population count
 
 In this section, we will show another example program that both reads and
@@ -1857,7 +1862,8 @@ Fontana,CA,169160,34.0922222,-117.4341667
 Bridgeport,CT,139090,41.1669444,-73.2052778
 Indianapolis,IN,773283,39.7683333,-86.1580556
 ```
-
+#")]
+/*!
 # Performance
 
 In this section, we'll go over how to squeeze the most juice out of our CSV
@@ -2124,7 +2130,8 @@ An exercise you might consider doing is to use a `StringRecord` instead of a
 instead of `read_byte_record`. This will give you easy access to Rust strings
 at the cost of UTF-8 validation but *without* the cost of allocating a new
 `StringRecord` for every record.
-
+*/
+#![cfg_attr(feature = "serde", doc = r#"
 ## Serde and zero allocation
 
 In this section, we are going to briefly examine how we use Serde and what we
@@ -2355,7 +2362,8 @@ over the first example.
 
 In sum, Serde parsing is still quite fast, but will generally not be the
 fastest way to parse CSV since it necessarily needs to do more work.
-
+"#)]
+/*!
 ## CSV parsing without the standard library
 
 In this section, we will explore a niche use case: parsing CSV without the

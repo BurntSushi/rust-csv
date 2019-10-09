@@ -96,7 +96,8 @@ $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
 $ cargo run --example cookbook-read-basic < examples/data/smallpop.csv
 ```
-
+*/
+#![cfg_attr(feature = "serde", doc = r#"
 # Example with Serde
 
 This example shows how to read CSV data from stdin into your own custom struct.
@@ -144,33 +145,38 @@ $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
 $ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
 ```
-
-*/
+"#)]
 
 #![deny(missing_docs)]
 
+#[cfg(feature = "serde")]
 use std::result;
 
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer};
 
 pub use crate::byte_record::{ByteRecord, ByteRecordIter, Position};
+#[cfg(feature = "serde")]
 pub use crate::deserializer::{DeserializeError, DeserializeErrorKind};
 pub use crate::error::{
     Error, ErrorKind, FromUtf8Error, IntoInnerError, Result, Utf8Error,
 };
 pub use crate::reader::{
-    ByteRecordsIntoIter, ByteRecordsIter, DeserializeRecordsIntoIter,
-    DeserializeRecordsIter, Reader, ReaderBuilder, StringRecordsIntoIter,
-    StringRecordsIter,
+    ByteRecordsIntoIter, ByteRecordsIter, Reader, ReaderBuilder,
+    StringRecordsIntoIter, StringRecordsIter,
 };
+#[cfg(feature = "serde")]
+pub use crate::reader::{DeserializeRecordsIntoIter, DeserializeRecordsIter};
 pub use crate::string_record::{StringRecord, StringRecordIter};
 pub use crate::writer::{Writer, WriterBuilder};
 
 mod byte_record;
 pub mod cookbook;
+#[cfg(feature = "serde")]
 mod deserializer;
 mod error;
 mod reader;
+#[cfg(feature = "serde")]
 mod serializer;
 mod string_record;
 pub mod tutorial;
@@ -350,6 +356,7 @@ impl Default for Trim {
 ///     }
 /// }
 /// ```
+#[cfg(feature = "serde")]
 pub fn invalid_option<'de, D, T>(de: D) -> result::Result<Option<T>, D::Error>
 where
     D: Deserializer<'de>,
