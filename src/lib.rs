@@ -97,7 +97,9 @@ $ cd rust-csv
 $ cargo run --example cookbook-read-basic < examples/data/smallpop.csv
 ```
 */
-#![cfg_attr(feature = "serde", doc = r#"
+#![cfg_attr(
+    feature = "serde",
+    doc = r#"
 # Example with Serde
 
 This example shows how to read CSV data from stdin into your own custom struct.
@@ -145,8 +147,8 @@ $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
 $ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
 ```
-"#)]
-
+"#
+)]
 #![deny(missing_docs)]
 
 #[cfg(feature = "serde")]

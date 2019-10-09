@@ -10,9 +10,9 @@ use serde::de::Deserialize;
 
 #[cfg(feature = "serde")]
 use crate::deserializer::deserialize_byte_record;
-use crate::error::{new_utf8_error, Utf8Error};
 #[cfg(feature = "serde")]
 use crate::error::Result;
+use crate::error::{new_utf8_error, Utf8Error};
 use crate::string_record::StringRecord;
 
 /// A single CSV record stored as raw bytes.
