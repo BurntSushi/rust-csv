@@ -1,6 +1,6 @@
+use csv::ByteRecord;
 use std::error::Error;
 use std::io::Read;
-use csv::ByteRecord;
 
 fn parse_csv(
     chunk: impl Read,
@@ -31,11 +31,9 @@ fn test_chunks() {
     let mut next_unparsed = Vec::new();
     let mut output = Vec::new();
     for chunk in input_chunks.iter() {
-        let bytes_parsed = parse_csv(
-            Read::chain(unparsed.as_slice(), *chunk),
-            &mut output
-        )
-        .unwrap();
+        let bytes_parsed =
+            parse_csv(Read::chain(unparsed.as_slice(), *chunk), &mut output)
+                .unwrap();
         let stored_bytes_parsed =
             std::cmp::min(bytes_parsed as usize, unparsed.len());
         let chunk_bytes_parsed = bytes_parsed as usize - stored_bytes_parsed;
