@@ -51,7 +51,6 @@ fn test_chunks() {
     assert_eq!(output[6].as_slice(), &b"5aaaa5bbbb5cccc"[..]);
 }
 
-
 #[derive(Debug)]
 struct ChunkReader<'a> {
     read: usize,
@@ -102,9 +101,10 @@ fn test_chunks_2() {
         &b"6aaa"[..],
     ];
     let mut output = Vec::new();
-    let mut reader = csv::ReaderBuilder::new()
-        .complete_only(true)
-        .from_reader(ChunkReader{ read: 0, chunk: &[], unparsed: Vec::new() });
+    let mut reader =
+        csv::ReaderBuilder::new().complete_only(true).from_reader(
+            ChunkReader { read: 0, chunk: &[], unparsed: Vec::new() },
+        );
     let mut bytes_parsed_prev = 0;
     for chunk in input_chunks.iter() {
         reader.inner_mut().feed(chunk);
