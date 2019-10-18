@@ -22,6 +22,7 @@ pub struct ReaderBuilder {
     capacity: usize,
     flexible: bool,
     has_headers: bool,
+    complete_only: bool,
     trim: Trim,
     /// The underlying CSV parser builder.
     ///
@@ -37,6 +38,7 @@ impl Default for ReaderBuilder {
             capacity: 8 * (1 << 10),
             flexible: false,
             has_headers: true,
+            complete_only: false,
             trim: Trim::default(),
             builder: Box::new(CoreReaderBuilder::default()),
         }
@@ -223,6 +225,19 @@ impl ReaderBuilder {
         self
     }
 
+    /// Whether only complete records are parsed.
+    ///
+    /// When disabled (which is the default), records ending with EOF
+    /// but without the a record terminator will be parsed.
+    ///
+    /// When enabled, the parser only parses records that end with the
+    /// record terminator. This is useful when the underlying Reader
+    /// might return an EOF unexpectedly – it prevents "teared reads",
+    /// where the final parsed record is missing bytes in the end.
+    pub fn complete_only(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.complete_only = yes;
+        self
+    }
     /// Whether the number of fields in records is allowed to change or not.
     ///
     /// When disabled (which is the default), parsing CSV data will return an
@@ -724,6 +739,9 @@ struct ReaderState {
     /// When set, the first row of parsed CSV data is excluded from things
     /// that read records, like iterators and `read_record`.
     has_headers: bool,
+    /// When set, the record isn't considered parsed until the record terminator
+    /// is encountered.
+    complete_only: bool,
     /// When set, there is no restriction on the length of records. When not
     /// set, every record must have the same number of fields, or else an error
     /// is reported.
@@ -792,6 +810,7 @@ impl<R: io::Read> Reader<R> {
             state: ReaderState {
                 headers: None,
                 has_headers: builder.has_headers,
+                complete_only: builder.complete_only,
                 flexible: builder.flexible,
                 trim: builder.trim,
                 first_field_count: None,
@@ -1597,6 +1616,7 @@ impl<R: io::Read> Reader<R> {
         use csv_core::ReadRecordResult::*;
 
         record.clear();
+        let orig_pos = self.state.cur_pos.clone();
         record.set_position(Some(self.state.cur_pos.clone()));
         if self.state.eof {
             return Ok(false);
@@ -1605,6 +1625,10 @@ impl<R: io::Read> Reader<R> {
         loop {
             let (res, nin, nout, nend) = {
                 let input = self.rdr.fill_buf()?;
+                if self.state.complete_only && input.is_empty() {
+                    self.state.cur_pos = orig_pos;
+                    return Ok(false);
+                }
                 let (fields, ends) = record.as_parts();
                 self.core.read_record(
                     input,
