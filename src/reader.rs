@@ -1625,16 +1625,17 @@ impl<R: io::Read> Reader<R> {
         loop {
             let (res, nin, nout, nend) = {
                 let input = self.rdr.fill_buf()?;
+                let (fields, ends) = record.as_parts();
+                let result = self.core.read_record(
+                    input,
+                    &mut fields[outlen..],
+                    &mut ends[endlen..],
+                );
                 if self.state.complete_only && input.is_empty() {
                     self.state.cur_pos = orig_pos;
                     return Ok(false);
                 }
-                let (fields, ends) = record.as_parts();
-                self.core.read_record(
-                    input,
-                    &mut fields[outlen..],
-                    &mut ends[endlen..],
-                )
+                result
             };
             self.rdr.consume(nin);
             let byte = self.state.cur_pos.byte();
