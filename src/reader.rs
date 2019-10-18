@@ -852,6 +852,9 @@ impl<R: io::Read> Reader<R> {
         ReaderBuilder::new().from_reader(rdr)
     }
 
+    /// Returns a mutable reference to the inner reader.
+    pub fn inner_mut(&mut self) -> &mut R { self.rdr.get_mut() }
+
     /// Returns a borrowed iterator over deserialized records.
     ///
     /// Each item yielded by this iterator is a `Result<D, Error>`.
