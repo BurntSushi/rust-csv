@@ -62,7 +62,7 @@ fn main() {
 
 The above example can be run like so:
 
-```ignore
+```text
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
 $ cargo run --example cookbook-read-basic < examples/data/smallpop.csv
@@ -110,7 +110,7 @@ fn main() {
 
 The above example can be run like so:
 
-```ignore
+```text
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
 $ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
