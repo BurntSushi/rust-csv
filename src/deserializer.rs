@@ -738,6 +738,7 @@ impl DeserializeError {
 }
 
 impl DeserializeErrorKind {
+    #[allow(deprecated)]
     fn description(&self) -> &str {
         use self::DeserializeErrorKind::*;
 

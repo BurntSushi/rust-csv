@@ -358,12 +358,7 @@ fn example_bin_dir() -> PathBuf {
 
 /// Return the repo root directory path.
 fn repo_dir() -> PathBuf {
-    debug_dir()
-        .parent()
-        .expect("target directory")
-        .parent()
-        .expect("repo directory")
-        .to_path_buf()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
 /// Return the directory containing the example data.
