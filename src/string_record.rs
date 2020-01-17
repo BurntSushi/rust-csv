@@ -7,7 +7,10 @@ use std::str;
 
 use serde::de::Deserialize;
 
-use crate::byte_record::{ByteRecord, ByteRecordIter, Position};
+use crate::byte_record::{
+    iter_eq, Bounds, ByteRecord, ByteRecordInner, ByteRecordInnerIter,
+    Position,
+};
 use crate::deserializer::deserialize_string_record;
 use crate::error::{Error, ErrorKind, FromUtf8Error, Result};
 use crate::reader::Reader;
@@ -33,35 +36,35 @@ use crate::reader::Reader;
 /// Two `StringRecord`s are compared on the basis of their field data. Any
 /// position information associated with the records is ignored.
 #[derive(Clone, Eq)]
-pub struct StringRecord(ByteRecord);
+pub struct StringRecord(Box<ByteRecordInner<String>>);
 
 impl PartialEq for StringRecord {
     fn eq(&self, other: &StringRecord) -> bool {
-        self.0.iter_eq(&other.0)
+        iter_eq(self.iter(), other)
     }
 }
 
 impl<T: AsRef<[u8]>> PartialEq<Vec<T>> for StringRecord {
     fn eq(&self, other: &Vec<T>) -> bool {
-        self.0.iter_eq(other)
+        iter_eq(self.iter(), other)
     }
 }
 
 impl<'a, T: AsRef<[u8]>> PartialEq<Vec<T>> for &'a StringRecord {
     fn eq(&self, other: &Vec<T>) -> bool {
-        self.0.iter_eq(other)
+        iter_eq(self.iter(), other)
     }
 }
 
 impl<T: AsRef<[u8]>> PartialEq<[T]> for StringRecord {
     fn eq(&self, other: &[T]) -> bool {
-        self.0.iter_eq(other)
+        iter_eq(self.iter(), other)
     }
 }
 
 impl<'a, T: AsRef<[u8]>> PartialEq<[T]> for &'a StringRecord {
     fn eq(&self, other: &[T]) -> bool {
-        self.0.iter_eq(other)
+        iter_eq(self.iter(), other)
     }
 }
 
@@ -104,7 +107,7 @@ impl StringRecord {
     /// ```
     #[inline]
     pub fn new() -> StringRecord {
-        StringRecord(ByteRecord::new())
+        StringRecord::with_capacity(0, 0)
     }
 
     /// Create a new empty `StringRecord` with the given capacity.
@@ -114,7 +117,12 @@ impl StringRecord {
     /// might expect to store.
     #[inline]
     pub fn with_capacity(buffer: usize, fields: usize) -> StringRecord {
-        StringRecord(ByteRecord::with_capacity(buffer, fields))
+        // StringRecord(ByteRecord::with_capacity(buffer, fields))
+        StringRecord(Box::new(ByteRecordInner {
+            pos: None,
+            fields: "0".repeat(buffer),
+            bounds: Bounds::with_capacity(fields),
+        }))
     }
 
     /// Create a new `StringRecord` from a `ByteRecord`.
@@ -155,8 +163,11 @@ impl StringRecord {
         record: ByteRecord,
     ) -> result::Result<StringRecord, FromUtf8Error> {
         match record.validate() {
-            Ok(()) => Ok(StringRecord(record)),
             Err(err) => Err(FromUtf8Error::new(record, err)),
+            Ok(()) => {
+                let inner = ma
+                Ok(StringRecord(record))
+            }
         }
     }
 
@@ -690,7 +701,7 @@ impl<'a> IntoIterator for &'a StringRecord {
 
     #[inline]
     fn into_iter(self) -> StringRecordIter<'a> {
-        StringRecordIter(self.0.iter())
+        StringRecordIter(ByteRecordInnerIter::new(&self.0))
     }
 }
 
@@ -698,17 +709,16 @@ impl<'a> IntoIterator for &'a StringRecord {
 ///
 /// The `'r` lifetime variable refers to the lifetime of the `StringRecord`
 /// that is being iterated over.
-pub struct StringRecordIter<'r>(ByteRecordIter<'r>);
+pub struct StringRecordIter<'r>(ByteRecordInnerIter<'r>);
+
+impl<'r> ExactSizeIterator for StringRecordIter<'r> {}
 
 impl<'r> Iterator for StringRecordIter<'r> {
     type Item = &'r str;
 
     #[inline]
     fn next(&mut self) -> Option<&'r str> {
-        self.0.next().map(|bytes| {
-            // See StringRecord::get for safety argument.
-            unsafe { str::from_utf8_unchecked(bytes) }
-        })
+        self.0.next().map(|range| &self.0.r.fields[range])
     }
 
     #[inline]
@@ -725,10 +735,7 @@ impl<'r> Iterator for StringRecordIter<'r> {
 impl<'r> DoubleEndedIterator for StringRecordIter<'r> {
     #[inline]
     fn next_back(&mut self) -> Option<&'r str> {
-        self.0.next_back().map(|bytes| {
-            // See StringRecord::get for safety argument.
-            unsafe { str::from_utf8_unchecked(bytes) }
-        })
+        self.0.next().map(|range| &self.0.r.fields[range])
     }
 }
 

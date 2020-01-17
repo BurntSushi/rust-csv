@@ -31,7 +31,7 @@ use crate::string_record::StringRecord;
 /// Two `ByteRecord`s are compared on the basis of their field data. Any
 /// position information associated with the records is ignored.
 #[derive(Clone, Eq)]
-pub struct ByteRecord(Box<ByteRecordInner>);
+pub struct ByteRecord(Box<ByteRecordInner<Vec<u8>>>);
 
 impl PartialEq for ByteRecord {
     fn eq(&self, other: &ByteRecord) -> bool {
@@ -44,25 +44,25 @@ impl PartialEq for ByteRecord {
 
 impl<T: AsRef<[u8]>> PartialEq<Vec<T>> for ByteRecord {
     fn eq(&self, other: &Vec<T>) -> bool {
-        self.iter_eq(other)
+        iter_eq(self.iter(), other)
     }
 }
 
 impl<'a, T: AsRef<[u8]>> PartialEq<Vec<T>> for &'a ByteRecord {
     fn eq(&self, other: &Vec<T>) -> bool {
-        self.iter_eq(other)
+        iter_eq(self.iter(), other)
     }
 }
 
 impl<T: AsRef<[u8]>> PartialEq<[T]> for ByteRecord {
     fn eq(&self, other: &[T]) -> bool {
-        self.iter_eq(other)
+        iter_eq(self.iter(), other)
     }
 }
 
 impl<'a, T: AsRef<[u8]>> PartialEq<[T]> for &'a ByteRecord {
     fn eq(&self, other: &[T]) -> bool {
-        self.iter_eq(other)
+        iter_eq(self.iter(), other)
     }
 }
 
@@ -74,22 +74,6 @@ impl fmt::Debug for ByteRecord {
         }
         write!(f, "ByteRecord({:?})", fields)
     }
-}
-
-/// The inner portion of a byte record.
-///
-/// We use this memory layout so that moving a `ByteRecord` only requires
-/// moving a single pointer. The optimization is dubious at best, but does
-/// seem to result in slightly better numbers in microbenchmarks. Methinks this
-/// may heavily depend on the underlying allocator.
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct ByteRecordInner {
-    /// The position of this byte record.
-    pos: Option<Position>,
-    /// All fields in this record, stored contiguously.
-    fields: Vec<u8>,
-    /// The number of and location of each field in this record.
-    bounds: Bounds,
 }
 
 impl Default for ByteRecord {
@@ -281,7 +265,7 @@ impl ByteRecord {
     /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.0.is_empty()
     }
 
     /// Returns the number of fields in this record.
@@ -296,7 +280,7 @@ impl ByteRecord {
     /// ```
     #[inline]
     pub fn len(&self) -> usize {
-        self.0.bounds.len()
+        self.0.len()
     }
 
     /// Truncate this record to `n` fields.
@@ -317,9 +301,7 @@ impl ByteRecord {
     /// ```
     #[inline]
     pub fn truncate(&mut self, n: usize) {
-        if n <= self.len() {
-            self.0.bounds.len = n;
-        }
+        self.0.truncate(n);
     }
 
     /// Clear this record so that it has zero fields.
@@ -341,7 +323,7 @@ impl ByteRecord {
     /// ```
     #[inline]
     pub fn clear(&mut self) {
-        self.truncate(0);
+        self.0.clear();
     }
 
     /// Trim the fields of this record so that leading and trailing whitespace
@@ -436,7 +418,7 @@ impl ByteRecord {
     /// ```
     #[inline]
     pub fn position(&self) -> Option<&Position> {
-        self.0.pos.as_ref()
+        self.0.position()
     }
 
     /// Set the position of this record.
@@ -457,7 +439,7 @@ impl ByteRecord {
     /// ```
     #[inline]
     pub fn set_position(&mut self, pos: Option<Position>) {
-        self.0.pos = pos;
+        self.0.set_position(pos);
     }
 
     /// Return the start and end position of a field in this record.
@@ -477,7 +459,7 @@ impl ByteRecord {
     /// ```
     #[inline]
     pub fn range(&self, i: usize) -> Option<Range<usize>> {
-        self.0.bounds.get(i)
+        self.0.range(i)
     }
 
     /// Return the entire row as a single byte slice. The slice returned stores
@@ -507,7 +489,7 @@ impl ByteRecord {
     /// Set the number of fields in the given record record.
     #[inline]
     pub(crate) fn set_len(&mut self, len: usize) {
-        self.0.bounds.len = len;
+        self.0.set_len(len);
     }
 
     /// Expand the capacity for storing fields.
@@ -520,7 +502,7 @@ impl ByteRecord {
     /// Expand the capacity for storing field ending positions.
     #[inline]
     pub(crate) fn expand_ends(&mut self) {
-        self.0.bounds.expand();
+        self.0.expand_ends()
     }
 
     /// Validate the given record as UTF-8.
@@ -541,26 +523,75 @@ impl ByteRecord {
         }
         Ok(())
     }
+}
 
-    /// Compare the given byte record with the iterator of fields for equality.
-    pub(crate) fn iter_eq<I, T>(&self, other: I) -> bool
-    where
-        I: IntoIterator<Item = T>,
-        T: AsRef<[u8]>,
-    {
-        let mut it_record = self.iter();
-        let mut it_other = other.into_iter();
-        loop {
-            match (it_record.next(), it_other.next()) {
-                (None, None) => return true,
-                (None, Some(_)) | (Some(_), None) => return false,
-                (Some(x), Some(y)) => {
-                    if x != y.as_ref() {
-                        return false;
-                    }
-                }
-            }
+/// The inner portion of a byte record.
+///
+/// We use this memory layout so that moving a `ByteRecord` only requires
+/// moving a single pointer. The optimization is dubious at best, but does
+/// seem to result in slightly better numbers in microbenchmarks. Methinks this
+/// may heavily depend on the underlying allocator.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ByteRecordInner<B> {
+    /// The position of this byte record.
+    pub(crate) pos: Option<Position>,
+    /// All fields in this record, stored contiguously.
+    pub(crate) fields: B,
+    /// The number of and location of each field in this record.
+    pub(crate) bounds: Bounds,
+}
+
+impl<B: AsRef<[u8]>> ByteRecordInner<B> {
+    #[inline]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[inline]
+    pub(crate) fn len(&self) -> usize {
+        self.bounds.len()
+    }
+
+    #[inline]
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        &self.fields[..self.bounds.end()]
+    }
+
+    #[inline]
+    pub(crate) fn truncate(&mut self, n: usize) {
+        if n <= self.len() {
+            self.bounds.len = n;
         }
+    }
+
+    #[inline]
+    pub(crate) fn clear(&mut self) {
+        self.truncate(0);
+    }
+
+    #[inline]
+    pub(crate) fn position(&self) -> Option<&Position> {
+        self.pos.as_ref()
+    }
+
+    #[inline]
+    pub(crate) fn set_position(&mut self, pos: Option<Position>) {
+        self.pos = pos;
+    }
+
+    #[inline]
+    pub(crate) fn range(&self, i: usize) -> Option<Range<usize>> {
+        self.bounds.get(i)
+    }
+
+    #[inline]
+    pub(crate) fn set_len(&mut self, len: usize) {
+        self.bounds.len = len;
+    }
+
+    #[inline]
+    pub(crate) fn expand_ends(&mut self) {
+        self.bounds.expand();
     }
 }
 
@@ -629,7 +660,7 @@ impl Position {
 
 /// The bounds of fields in a single record.
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct Bounds {
+pub(crate) struct Bounds {
     /// The ending index of each field.
     ends: Vec<usize>,
     /// The number of fields in this record.
@@ -651,13 +682,13 @@ impl Bounds {
     /// Create a new set of bounds with the given capacity for storing the
     /// ends of fields.
     #[inline]
-    fn with_capacity(capacity: usize) -> Bounds {
+    pub(crate) fn with_capacity(capacity: usize) -> Bounds {
         Bounds { ends: vec![0; capacity], len: 0 }
     }
 
     /// Returns the bounds of field `i`.
     #[inline]
-    fn get(&self, i: usize) -> Option<Range<usize>> {
+    pub(crate) fn get(&self, i: usize) -> Option<Range<usize>> {
         if i >= self.len {
             return None;
         }
@@ -674,7 +705,7 @@ impl Bounds {
 
     /// Returns a slice of ending positions of all fields.
     #[inline]
-    fn ends(&self) -> &[usize] {
+    pub(crate) fn ends(&self) -> &[usize] {
         &self.ends[..self.len]
     }
 
@@ -682,26 +713,26 @@ impl Bounds {
     ///
     /// If there are no fields, this returns `0`.
     #[inline]
-    fn end(&self) -> usize {
+    pub(crate) fn end(&self) -> usize {
         self.ends().last().map(|&i| i).unwrap_or(0)
     }
 
     /// Returns the number of fields in these bounds.
     #[inline]
-    fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.len
     }
 
     /// Expand the capacity for storing field ending positions.
     #[inline]
-    fn expand(&mut self) {
+    pub(crate) fn expand(&mut self) {
         let new_len = self.ends.len().checked_mul(2).unwrap();
         self.ends.resize(cmp::max(4, new_len), 0);
     }
 
     /// Add a new field with the given ending position.
     #[inline]
-    fn add(&mut self, pos: usize) {
+    pub(crate) fn add(&mut self, pos: usize) {
         if self.len >= self.ends.len() {
             self.expand();
         }
@@ -761,18 +792,7 @@ impl<T: AsRef<[u8]>> Extend<T> for ByteRecord {
 ///
 /// The `'r` lifetime variable refers to the lifetime of the `ByteRecord` that
 /// is being iterated over.
-pub struct ByteRecordIter<'r> {
-    /// The record we are iterating over.
-    r: &'r ByteRecord,
-    /// The starting index of the previous field. (For reverse iteration.)
-    last_start: usize,
-    /// The ending index of the previous field. (For forward iteration.)
-    last_end: usize,
-    /// The index of forward iteration.
-    i_forward: usize,
-    /// The index of reverse iteration.
-    i_reverse: usize,
-}
+pub struct ByteRecordIter<'r>(ByteRecordInnerIter<'r, Vec<u8>>);
 
 impl<'r> IntoIterator for &'r ByteRecord {
     type IntoIter = ByteRecordIter<'r>;
@@ -780,13 +800,7 @@ impl<'r> IntoIterator for &'r ByteRecord {
 
     #[inline]
     fn into_iter(self) -> ByteRecordIter<'r> {
-        ByteRecordIter {
-            r: self,
-            last_start: self.as_slice().len(),
-            last_end: 0,
-            i_forward: 0,
-            i_reverse: self.len(),
-        }
+        ByteRecordIter(ByteRecordInnerIter::new(&self.0))
     }
 }
 
@@ -797,14 +811,73 @@ impl<'r> Iterator for ByteRecordIter<'r> {
 
     #[inline]
     fn next(&mut self) -> Option<&'r [u8]> {
+        self.0.next().map(|range| &self.0.r.fields[range])
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.0.len()
+    }
+}
+
+impl<'r> DoubleEndedIterator for ByteRecordIter<'r> {
+    #[inline]
+    fn next_back(&mut self) -> Option<&'r [u8]> {
+        self.0.next_back().map(|range| &self.0.r.fields[range])
+    }
+}
+
+/// A double-ended iterator over the field bounds in an inner byte record.
+///
+/// The `'r` lifetime variable refers to the lifetime of the inner record that
+/// is being iterated over.
+pub(crate) struct ByteRecordInnerIter<'r, B> {
+    /// The record we are iterating over.
+    r: &'r ByteRecordInner<B>,
+    /// The starting index of the previous field. (For reverse iteration.)
+    last_start: usize,
+    /// The ending index of the previous field. (For forward iteration.)
+    last_end: usize,
+    /// The index of forward iteration.
+    i_forward: usize,
+    /// The index of reverse iteration.
+    i_reverse: usize,
+}
+
+impl<'r, B: AsRef<[u8]>> ByteRecordInnerIter<'r, B> {
+    pub(crate) fn new(
+        r: &'r ByteRecordInner<B>,
+    ) -> ByteRecordInnerIter<'r, B> {
+        ByteRecordInnerIter {
+            r,
+            last_start: r.as_bytes().len(),
+            last_end: 0,
+            i_forward: 0,
+            i_reverse: r.len(),
+        }
+    }
+}
+
+impl<'r, B> ExactSizeIterator for ByteRecordInnerIter<'r, B> {}
+
+impl<'r, B> Iterator for ByteRecordInnerIter<'r, B> {
+    type Item = Range<usize>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Range<usize>> {
         if self.i_forward == self.i_reverse {
             None
         } else {
             let start = self.last_end;
-            let end = self.r.0.bounds.ends()[self.i_forward];
+            let end = self.r.bounds.ends()[self.i_forward];
             self.i_forward += 1;
             self.last_end = end;
-            Some(&self.r.0.fields[start..end])
+            Some(start..end)
         }
     }
 
@@ -820,9 +893,9 @@ impl<'r> Iterator for ByteRecordIter<'r> {
     }
 }
 
-impl<'r> DoubleEndedIterator for ByteRecordIter<'r> {
+impl<'r, B> DoubleEndedIterator for ByteRecordInnerIter<'r, B> {
     #[inline]
-    fn next_back(&mut self) -> Option<&'r [u8]> {
+    fn next_back(&mut self) -> Option<Range<usize>> {
         if self.i_forward == self.i_reverse {
             None
         } else {
@@ -830,11 +903,33 @@ impl<'r> DoubleEndedIterator for ByteRecordIter<'r> {
             let start = self
                 .i_reverse
                 .checked_sub(1)
-                .map(|i| self.r.0.bounds.ends()[i])
+                .map(|i| self.r.bounds.ends()[i])
                 .unwrap_or(0);
             let end = self.last_start;
             self.last_start = start;
-            Some(&self.r.0.fields[start..end])
+            Some(start..end)
+        }
+    }
+}
+
+/// Compare the given byte record with the iterator of fields for equality.
+pub(crate) fn iter_eq<I1, T1, I2, T2>(it1: I1, it2: I2) -> bool
+where
+    I1: IntoIterator<Item = T1>,
+    T1: AsRef<[u8]>,
+    I2: IntoIterator<Item = T2>,
+    T2: AsRef<[u8]>,
+{
+    let (mut it1, mut it2) = (it1.into_iter(), it2.into_iter());
+    loop {
+        match (it1.next(), it2.next()) {
+            (None, None) => return true,
+            (None, Some(_)) | (Some(_), None) => return false,
+            (Some(x), Some(y)) => {
+                if x.as_ref() != y.as_ref() {
+                    return false;
+                }
+            }
         }
     }
 }
