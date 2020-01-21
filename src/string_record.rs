@@ -618,8 +618,7 @@ impl StringRecord {
         &mut self,
         rdr: &mut Reader<R>,
     ) -> Result<bool> {
-        // SAFETY: Note that despite the absence of `unsafe` in this function,
-        // this code is critical to upholding the safety of other `unsafe`
+        // SAFETY: This code is critical to upholding the safety of other code
         // blocks in this module. Namely, after calling `read_byte_record`,
         // it is possible for `record` to contain invalid UTF-8. We check for
         // this in the `validate` method, and if it does have invalid UTF-8, we
