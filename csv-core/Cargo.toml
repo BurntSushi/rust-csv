@@ -21,7 +21,7 @@ appveyor = { repository = "BurntSushi/rust-csv" }
 bench = false
 
 [features]
-default = ["libc"]
+default = []
 libc = ["memchr/libc"]
 
 [dependencies]
