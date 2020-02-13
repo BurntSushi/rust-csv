@@ -565,8 +565,8 @@ impl Reader {
     /// `ReadRecordResult`, tells the caller what to do next. For example, if
     /// the entire input was read or if the output buffer was filled before a
     /// full field had been read, then `ReadRecordResult::InputEmpty` or
-    /// `ReadFieldResult::OutputFull` is returned, respectively. Similarly, if
-    /// the `ends` buffer is full, then `ReadFieldResult::OutputEndsFull` is
+    /// `ReadRecordResult::OutputFull` is returned, respectively. Similarly, if
+    /// the `ends` buffer is full, then `ReadRecordResult::OutputEndsFull` is
     /// returned. See the documentation for `ReadRecordResult` for more
     /// details.
     ///
