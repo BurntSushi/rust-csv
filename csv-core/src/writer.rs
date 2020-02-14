@@ -313,7 +313,8 @@ impl Writer {
     /// a field delimiter, then nothing is written to `output`
     /// and `WriteResult::OutputFull` is returned. Otherwise,
     /// `WriteResult::InputEmpty` is returned along with the number of bytes
-    /// written to `output` (which is always `1`).
+    /// written to `output` (which is `1` in case of an unquoted
+    /// field, or `2` in case of an end quote and a field separator).
     pub fn delimiter(
         &mut self,
         mut output: &mut [u8],
