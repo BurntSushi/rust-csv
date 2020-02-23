@@ -33,7 +33,7 @@ This example shows how to read CSV data from stdin and print each record to
 stdout.
 
 There are more examples in the
-[cookbook](https://docs.rs/csv/1.0.0/csv/cookbook/index.html).
+[cookbook](https://docs.rs/csv/latest/csv/cookbook/index.html).
 
 ```rust
 use std::error::Error;
