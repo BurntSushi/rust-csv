@@ -14,7 +14,7 @@ Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
 https://docs.rs/csv
 
 If you're new to Rust, the
-[tutorial](https://docs.rs/csv/1.0.0/csv/tutorial/index.html)
+[tutorial](https://docs.rs/csv/latest/csv/tutorial/index.html)
 is a good place to start.
 
 
