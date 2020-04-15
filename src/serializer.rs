@@ -448,11 +448,12 @@ enum HeaderState {
 struct SeHeader<'w, W: 'w + io::Write> {
     wtr: &'w mut Writer<W>,
     state: HeaderState,
+    structs_written: usize,
 }
 
 impl<'w, W: io::Write> SeHeader<'w, W> {
     fn new(wtr: &'w mut Writer<W>) -> Self {
-        SeHeader { wtr: wtr, state: HeaderState::Write }
+        SeHeader { wtr: wtr, state: HeaderState::Write, structs_written: 0usize }
     }
 
     fn wrote_header(&self) -> bool {
@@ -665,10 +666,11 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
 
     fn serialize_struct(
         self,
-        name: &'static str,
+        _name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        self.handle_container(name)
+        self.structs_written += 1;
+        Ok(self)
     }
 
     fn serialize_struct_variant(
@@ -784,12 +786,16 @@ impl<'a, 'w, W: io::Write> SerializeStruct for &'a mut SeHeader<'w, W> {
         if let HeaderState::ErrorIfWrite(err) = old_state {
             return Err(err);
         }
-        self.wtr.write_field(key)?;
+        let old_structs_count = self.structs_written;
 
         // Check that there aren't any containers in the value.
         self.state = HeaderState::InStructField;
         value.serialize(&mut **self)?;
         self.state = HeaderState::EncounteredStructField;
+
+        if self.structs_written == old_structs_count {
+            self.wtr.write_field(key)?;
+        }
 
         Ok(())
     }
@@ -1197,11 +1203,8 @@ mod tests {
         let got = serialize(row.clone());
         assert_eq!(got, "foo,bar,5\n");
 
-        let err = serialize_header_err(row.clone());
-        match *err.kind() {
-            ErrorKind::Serialize(_) => {}
-            ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
-        }
+        let got = serialize_header(row.clone());
+        assert_eq!(got, (true, "label,label2,value".to_owned()));
     }
 
     #[test]
