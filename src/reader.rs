@@ -1879,8 +1879,8 @@ impl ReaderState {
 /// refers to the type that this iterator will deserialize a record into.
 pub struct DeserializeRecordsIntoIter<R, D> {
     rdr: Reader<R>,
-    rec: StringRecord,
-    headers: Option<StringRecord>,
+    rec: ByteRecord,
+    headers: Option<ByteRecord>,
     _priv: PhantomData<D>,
 }
 
@@ -1893,8 +1893,8 @@ impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
         };
         DeserializeRecordsIntoIter {
             rdr: rdr,
-            rec: StringRecord::new(),
-            headers: headers,
+            rec: ByteRecord::new(),
+            headers: headers.map(|headers| headers.into_byte_record()),
             _priv: PhantomData,
         }
     }
@@ -1921,7 +1921,7 @@ impl<R: io::Read, D: DeserializeOwned> Iterator
     type Item = Result<D>;
 
     fn next(&mut self) -> Option<Result<D>> {
-        match self.rdr.read_record(&mut self.rec) {
+        match self.rdr.read_byte_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
             Ok(false) => None,
             Ok(true) => Some(self.rec.deserialize(self.headers.as_ref())),
@@ -1937,8 +1937,8 @@ impl<R: io::Read, D: DeserializeOwned> Iterator
 /// record into.
 pub struct DeserializeRecordsIter<'r, R: 'r, D> {
     rdr: &'r mut Reader<R>,
-    rec: StringRecord,
-    headers: Option<StringRecord>,
+    rec: ByteRecord,
+    headers: Option<ByteRecord>,
     _priv: PhantomData<D>,
 }
 
@@ -1951,8 +1951,8 @@ impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
         };
         DeserializeRecordsIter {
             rdr: rdr,
-            rec: StringRecord::new(),
-            headers: headers,
+            rec: ByteRecord::new(),
+            headers: headers.map(|headers| headers.into_byte_record()),
             _priv: PhantomData,
         }
     }
@@ -1974,7 +1974,7 @@ impl<'r, R: io::Read, D: DeserializeOwned> Iterator
     type Item = Result<D>;
 
     fn next(&mut self) -> Option<Result<D>> {
-        match self.rdr.read_record(&mut self.rec) {
+        match self.rdr.read_byte_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
             Ok(false) => None,
             Ok(true) => Some(self.rec.deserialize(self.headers.as_ref())),
