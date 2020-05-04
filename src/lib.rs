@@ -166,6 +166,12 @@ pub use crate::reader::{
 pub use crate::string_record::{StringRecord, StringRecordIter};
 pub use crate::writer::{Writer, WriterBuilder};
 
+#[cfg(feature = "async")]
+pub use crate::async_reader::{
+    AsyncReader, AsyncReaderBuilder, ByteRecordsIntoStream, ByteRecordsStream,
+    StringRecordsIntoStream, StringRecordsStream,
+};
+
 mod byte_record;
 pub mod cookbook;
 mod deserializer;
@@ -175,6 +181,9 @@ mod serializer;
 mod string_record;
 pub mod tutorial;
 mod writer;
+
+#[cfg(feature = "async")]
+mod async_reader;
 
 /// The quoting style to use when writing CSV data.
 #[derive(Clone, Copy, Debug)]

@@ -7,10 +7,18 @@ use std::str;
 
 use serde::de::Deserialize;
 
+#[cfg(feature = "async")]
+use bytes::Bytes;
+#[cfg(feature = "async")]
+use futures::stream::Stream;
+
 use crate::byte_record::{ByteRecord, ByteRecordIter, Position};
 use crate::deserializer::deserialize_string_record;
 use crate::error::{Error, ErrorKind, FromUtf8Error, Result};
 use crate::reader::Reader;
+
+#[cfg(feature = "async")]
+use crate::async_reader::AsyncReader;
 
 /// A single CSV record stored as valid UTF-8 bytes.
 ///
@@ -627,6 +635,42 @@ impl StringRecord {
         // is valid UTF-8.)
         let pos = rdr.position().clone();
         let read_res = rdr.read_byte_record(&mut self.0);
+        let utf8_res = match self.0.validate() {
+            Ok(()) => Ok(()),
+            Err(err) => {
+                // If this record isn't valid UTF-8, then completely wipe it.
+                self.0.clear();
+                Err(err)
+            }
+        };
+        match (read_res, utf8_res) {
+            (Err(err), _) => Err(err),
+            (Ok(_), Err(err)) => {
+                Err(Error::new(ErrorKind::Utf8 { pos: Some(pos), err: err }))
+            }
+            (Ok(eof), Ok(())) => Ok(eof),
+        }
+    }
+
+    /// A safe function for reading CSV data into a `StringRecord`.
+    ///
+    /// This relies on the internal representation of `StringRecord`.
+    #[cfg(feature = "async")]
+    pub(crate) async fn read_async<
+        S: Stream<Item = io::Result<Bytes>> + Unpin,
+    >(
+        &mut self,
+        rdr: &mut AsyncReader<S>,
+    ) -> Result<bool> {
+        // SAFETY: This code is critical to upholding the safety of other code
+        // blocks in this module. Namely, after calling `read_byte_record`,
+        // it is possible for `record` to contain invalid UTF-8. We check for
+        // this in the `validate` method, and if it does have invalid UTF-8, we
+        // clear the record. (It is bad for `record` to contain invalid UTF-8
+        // because other accessor methods, like `get`, assume that every field
+        // is valid UTF-8.)
+        let pos = rdr.position().clone();
+        let read_res = rdr.read_byte_record(&mut self.0).await;
         let utf8_res = match self.0.validate() {
             Ok(()) => Ok(()),
             Err(err) => {

@@ -17,6 +17,9 @@ edition = "2018"
 travis-ci = { repository = "BurntSushi/rust-csv" }
 appveyor = { repository = "BurntSushi/rust-csv" }
 
+[features]
+async = ["bytes", "futures"]
+
 [workspace]
 members = ["csv-core", "csv-index"]
 
@@ -25,13 +28,16 @@ bench = false
 
 [dependencies]
 bstr = { version = "0.2.1", features = ["serde1"] }
+bytes = { version = "0.5", optional = true }
 csv-core = { path = "csv-core", version = "0.1.6" }
 itoa = "0.4.3"
+futures = { version = "0.3", optional = true }
 ryu = "1"
 serde = "1.0.55"
 
 [dev-dependencies]
 serde = { version = "1.0.55", features = ["derive"] }
+async-std = "1.5"
 
 [profile.release]
 debug = true
