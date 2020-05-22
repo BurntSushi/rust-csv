@@ -1221,7 +1221,7 @@ To understand the type signature, we can break it down piece by piece.
 2. `self` is a special parameter that corresponds to the `Writer` itself.
 3. `record` is the CSV record we'd like to write. Its type is `I`, which is
    a generic type.
-4. In the method's `where` clause, the `I` type is contrained by the
+4. In the method's `where` clause, the `I` type is constrained by the
    `IntoIterator<Item=T>` bound. What that means is that `I` must satisfy the
    `IntoIterator` trait. If you look at the documentation of the
    [`IntoIterator` trait](https://doc.rust-lang.org/std/iter/trait.IntoIterator.html),
