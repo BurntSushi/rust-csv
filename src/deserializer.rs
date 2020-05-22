@@ -21,11 +21,13 @@ use self::DeserializeErrorKind as DEK;
 pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
     record: &'de StringRecord,
     headers: Option<&'de StringRecord>,
+    missing_field_check: Option<&'de dyn Fn(&str) -> bool>,
 ) -> Result<D, Error> {
     let mut deser = DeRecordWrap(DeStringRecord {
         it: record.iter().peekable(),
         headers: headers.map(|r| r.iter()),
         field: 0,
+        missing_field_check,
     });
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
@@ -69,6 +71,9 @@ pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
 ///
 /// The lifetime `'r` refers to the lifetime of the underlying record.
 trait DeRecord<'r> {
+    /// The type of the field before deserializing.
+    type RawField: ?Sized;
+
     /// Returns true if and only if this deserialize has access to headers.
     fn has_headers(&self) -> bool;
 
@@ -87,7 +92,7 @@ trait DeRecord<'r> {
     fn next_field_bytes(&mut self) -> Result<&'r [u8], DeserializeError>;
 
     /// Peeks at the next field from the underlying record.
-    fn peek_field(&mut self) -> Option<&'r [u8]>;
+    fn peek_field(&mut self) -> Option<&'r Self::RawField>;
 
     /// Returns an error corresponding to the most recently extracted field.
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError;
@@ -97,11 +102,17 @@ trait DeRecord<'r> {
         &mut self,
         visitor: V,
     ) -> Result<V::Value, DeserializeError>;
+
+    /// Checks whether the input indicates a missing or null field. By default
+    /// this is whether the input is empty.
+    fn check_for_empty_field(&self, field: &Self::RawField) -> bool;
 }
 
 struct DeRecordWrap<T>(T);
 
 impl<'r, T: DeRecord<'r>> DeRecord<'r> for DeRecordWrap<T> {
+    type RawField = T::RawField;
+
     #[inline]
     fn has_headers(&self) -> bool {
         self.0.has_headers()
@@ -130,7 +141,7 @@ impl<'r, T: DeRecord<'r>> DeRecord<'r> for DeRecordWrap<T> {
     }
 
     #[inline]
-    fn peek_field(&mut self) -> Option<&'r [u8]> {
+    fn peek_field(&mut self) -> Option<&'r Self::RawField> {
         self.0.peek_field()
     }
 
@@ -146,15 +157,23 @@ impl<'r, T: DeRecord<'r>> DeRecord<'r> for DeRecordWrap<T> {
     ) -> Result<V::Value, DeserializeError> {
         self.0.infer_deserialize(visitor)
     }
+
+    #[inline]
+    fn check_for_empty_field(&self, field: &Self::RawField) -> bool {
+        self.0.check_for_empty_field(field)
+    }
 }
 
 struct DeStringRecord<'r> {
     it: iter::Peekable<StringRecordIter<'r>>,
     headers: Option<StringRecordIter<'r>>,
     field: u64,
+    missing_field_check: Option<&'r dyn Fn(&str) -> bool>,
 }
 
 impl<'r> DeRecord<'r> for DeStringRecord<'r> {
+    type RawField = str;
+
     #[inline]
     fn has_headers(&self) -> bool {
         self.headers.is_some()
@@ -192,8 +211,8 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
     }
 
     #[inline]
-    fn peek_field(&mut self) -> Option<&'r [u8]> {
-        self.it.peek().map(|s| s.as_bytes())
+    fn peek_field(&mut self) -> Option<&'r Self::RawField> {
+        self.it.peek().map(|s| *s)
     }
 
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
@@ -230,6 +249,11 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
             visitor.visit_str(x)
         }
     }
+
+    #[inline]
+    fn check_for_empty_field(&self, field: &Self::RawField) -> bool {
+        self.missing_field_check.map(|f| f(field)).unwrap_or(field.is_empty())
+    }
 }
 
 struct DeByteRecord<'r> {
@@ -239,6 +263,8 @@ struct DeByteRecord<'r> {
 }
 
 impl<'r> DeRecord<'r> for DeByteRecord<'r> {
+    type RawField = [u8];
+
     #[inline]
     fn has_headers(&self) -> bool {
         self.headers.is_some()
@@ -326,6 +352,11 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
             visitor.visit_bytes(x)
         }
     }
+
+    #[inline]
+    fn check_for_empty_field(&self, field: &[u8]) -> bool {
+        field.is_empty()
+    }
 }
 
 macro_rules! deserialize_int {
@@ -345,7 +376,7 @@ macro_rules! deserialize_int {
     };
 }
 
-impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
+impl<'a, 'de: 'a, T: 'de + DeRecord<'de>> Deserializer<'de>
     for &'a mut DeRecordWrap<T>
 {
     type Error = DeserializeError;
@@ -455,7 +486,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
     ) -> Result<V::Value, Self::Error> {
         match self.peek_field() {
             None => visitor.visit_none(),
-            Some(f) if f.is_empty() => {
+            Some(f) if self.check_for_empty_field(f) => {
                 self.next_field().expect("empty field");
                 visitor.visit_none()
             }
@@ -613,7 +644,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> VariantAccess<'de>
     }
 }
 
-impl<'a, 'de: 'a, T: DeRecord<'de>> SeqAccess<'de>
+impl<'a, 'de: 'a, T: 'de + DeRecord<'de>> SeqAccess<'de>
     for &'a mut DeRecordWrap<T>
 {
     type Error = DeserializeError;
@@ -630,7 +661,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> SeqAccess<'de>
     }
 }
 
-impl<'a, 'de: 'a, T: DeRecord<'de>> MapAccess<'de>
+impl<'a, 'de: 'a, T: 'de + DeRecord<'de>> MapAccess<'de>
     for &'a mut DeRecordWrap<T>
 {
     type Error = DeserializeError;
@@ -811,7 +842,7 @@ mod tests {
 
     fn de<D: DeserializeOwned>(fields: &[&str]) -> Result<D, Error> {
         let record = StringRecord::from(fields);
-        deserialize_string_record(&record, None)
+        deserialize_string_record(&record, None, None)
     }
 
     fn de_headers<D: DeserializeOwned>(
@@ -820,7 +851,7 @@ mod tests {
     ) -> Result<D, Error> {
         let headers = StringRecord::from(headers);
         let record = StringRecord::from(fields);
-        deserialize_string_record(&record, Some(&headers))
+        deserialize_string_record(&record, Some(&headers), None)
     }
 
     fn b<'a, T: AsRef<[u8]> + ?Sized>(bytes: &'a T) -> &'a [u8] {
@@ -1161,7 +1192,7 @@ mod tests {
         let headers = StringRecord::from(vec!["a", "b", "c"]);
         let record = StringRecord::from(vec!["foo", "5", "bar"]);
         let got: Foo =
-            deserialize_string_record(&record, Some(&headers)).unwrap();
+            deserialize_string_record(&record, Some(&headers), None).unwrap();
         assert_eq!(got, Foo { a: "foo", b: 5, c: "bar" });
     }
 
@@ -1172,7 +1203,7 @@ mod tests {
         let headers = StringRecord::from(vec!["a", "b", "c"]);
         let record = StringRecord::from(vec!["aardvark", "bee", "cat"]);
         let got: HashMap<&str, &str> =
-            deserialize_string_record(&record, Some(&headers)).unwrap();
+            deserialize_string_record(&record, Some(&headers), None).unwrap();
 
         let expected: HashMap<&str, &str> =
             headers.iter().zip(&record).collect();
@@ -1217,7 +1248,7 @@ mod tests {
 
         let header = StringRecord::from(vec!["x", "y", "prop1", "prop2"]);
         let record = StringRecord::from(vec!["1", "2", "3", "4"]);
-        let got: Row = record.deserialize(Some(&header)).unwrap();
+        let got: Row = record.deserialize(Some(&header), None).unwrap();
         assert_eq!(
             got,
             Row {

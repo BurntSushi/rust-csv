@@ -241,7 +241,7 @@ impl StringRecord {
     ///         "Boston", "United States", "4628910",
     ///     ]);
     ///
-    ///     let row: Row = record.deserialize(None)?;
+    ///     let row: Row = record.deserialize(None, None)?;
     ///     assert_eq!(row.city, "Boston");
     ///     assert_eq!(row.country, "United States");
     ///     assert_eq!(row.population, 4628910);
@@ -282,7 +282,7 @@ impl StringRecord {
     ///         "United States", "Boston", "4628910",
     ///     ]);
     ///
-    ///     let row: Row = record.deserialize(Some(&header))?;
+    ///     let row: Row = record.deserialize(Some(&header), None)?;
     ///     assert_eq!(row.city, "Boston");
     ///     assert_eq!(row.country, "United States");
     ///     assert_eq!(row.population, 4628910);
@@ -292,8 +292,9 @@ impl StringRecord {
     pub fn deserialize<'de, D: Deserialize<'de>>(
         &'de self,
         headers: Option<&'de StringRecord>,
+        missing_field_check: Option<&'de dyn Fn(&str) -> bool>,
     ) -> Result<D> {
-        deserialize_string_record(self, headers)
+        deserialize_string_record(self, headers, missing_field_check)
     }
 
     /// Returns an iterator over all fields in this record.

@@ -2230,7 +2230,7 @@ fn run() -> Result<u64, Box<dyn Error>> {
 
     let mut count = 0;
     while rdr.read_record(&mut raw_record)? {
-        let record: Record = raw_record.deserialize(Some(&headers))?;
+        let record: Record = raw_record.deserialize(Some(&headers), None)?;
         if record.country == "us" && record.region == "MA" {
             count += 1;
         }
