@@ -761,6 +761,7 @@ impl<T: AsRef<[u8]>> Extend<T> for ByteRecord {
 ///
 /// The `'r` lifetime variable refers to the lifetime of the `ByteRecord` that
 /// is being iterated over.
+#[derive(Clone)]
 pub struct ByteRecordIter<'r> {
     /// The record we are iterating over.
     r: &'r ByteRecord,
