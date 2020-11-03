@@ -699,6 +699,7 @@ impl<'a> IntoIterator for &'a StringRecord {
 ///
 /// The `'r` lifetime variable refers to the lifetime of the `StringRecord`
 /// that is being iterated over.
+#[derive(Clone)]
 pub struct StringRecordIter<'r>(ByteRecordIter<'r>);
 
 impl<'r> Iterator for StringRecordIter<'r> {
