@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 
+use csv::Reader;
+
 use std::env;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{self, Command};
 
@@ -336,6 +338,23 @@ fn tutorial_perf_core_01() {
     let mut cmd = cmd_for_example("tutorial-perf-core-01");
     let out = cmd_output_with(&mut cmd, WORLDPOP.as_bytes());
     assert_eq!(out.stdout(), "11\n");
+}
+
+#[test]
+fn no_infinite_loop_on_io_errors() {
+    struct FailingRead;
+    impl Read for FailingRead {
+        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::new(io::ErrorKind::Other, "Broken reader"))
+        }
+    }
+
+    let mut record_results = Reader::from_reader(FailingRead).into_records();
+    let first_result = record_results.next();
+    assert!(
+        matches!(&first_result, Some(Err(e)) if matches!(e.kind(), csv::ErrorKind::Io(_)))
+    );
+    assert!(record_results.next().is_none());
 }
 
 // Helper functions follow.

@@ -686,6 +686,10 @@ impl ReaderBuilder {
 ///   [`ReaderBuilder`](struct.ReaderBuilder.html).
 /// * When reading CSV data from a resource (like a file), it is possible for
 ///   reading from the underlying resource to fail. This will return an error.
+///   For subsequent calls to the `Reader` after encountering a such error
+///   (unless `seek` is used), it will behave as if end of file had been
+///   reached, in order to avoid running into infinite loops when still
+///   attempting to read the next record when one has errored.
 /// * When reading CSV data into `String` or `&str` fields (e.g., via a
 ///   [`StringRecord`](struct.StringRecord.html)), UTF-8 is strictly
 ///   enforced. If CSV data is invalid UTF-8, then an error is returned. If
@@ -741,7 +745,34 @@ struct ReaderState {
     /// Whether the reader has been seeked or not.
     seeked: bool,
     /// Whether EOF of the underlying reader has been reached or not.
-    eof: bool,
+    ///
+    /// IO errors on the underlying reader will be considered as an EOF for
+    /// subsequent read attempts, as it would be incorrect to keep on trying
+    /// to read when the underlying reader has broken.
+    ///
+    /// For clarity, having the best `Debug` impl and in case they need to be
+    /// treated differently at some point, we store whether the `EOF` is
+    /// considered because an actual EOF happened, or because we encoundered
+    /// an IO error.
+    /// This has no additional runtime cost.
+    eof: ReaderEofState,
+}
+
+/// Whether EOF of the underlying reader has been reached or not.
+///
+/// IO errors on the underlying reader will be considered as an EOF for
+/// subsequent read attempts, as it would be incorrect to keep on trying
+/// to read when the underlying reader has broken.
+///
+/// For clarity, having the best `Debug` impl and in case they need to be
+/// treated differently at some point, we store whether the `EOF` is
+/// considered because an actual EOF happened, or because we encoundered
+/// an IO error
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReaderEofState {
+    NotEof,
+    Eof,
+    IOError,
 }
 
 /// Headers encapsulates any data associated with the headers of CSV data.
@@ -798,7 +829,7 @@ impl<R: io::Read> Reader<R> {
                 cur_pos: Position::new(),
                 first: false,
                 seeked: false,
-                eof: false,
+                eof: ReaderEofState::NotEof,
             },
         }
     }
@@ -1598,13 +1629,17 @@ impl<R: io::Read> Reader<R> {
 
         record.clear();
         record.set_position(Some(self.state.cur_pos.clone()));
-        if self.state.eof {
+        if self.state.eof != ReaderEofState::NotEof {
             return Ok(false);
         }
         let (mut outlen, mut endlen) = (0, 0);
         loop {
             let (res, nin, nout, nend) = {
-                let input = self.rdr.fill_buf()?;
+                let input_res = self.rdr.fill_buf();
+                if input_res.is_err() {
+                    self.state.eof = ReaderEofState::IOError;
+                }
+                let input = input_res?;
                 let (fields, ends) = record.as_parts();
                 self.core.read_record(
                     input,
@@ -1636,7 +1671,7 @@ impl<R: io::Read> Reader<R> {
                     return Ok(true);
                 }
                 End => {
-                    self.state.eof = true;
+                    self.state.eof = ReaderEofState::Eof;
                     return Ok(false);
                 }
             }
@@ -1716,7 +1751,7 @@ impl<R: io::Read> Reader<R> {
     /// }
     /// ```
     pub fn is_done(&self) -> bool {
-        self.state.eof
+        self.state.eof != ReaderEofState::NotEof
     }
 
     /// Returns true if and only if this reader has been configured to
@@ -1817,7 +1852,7 @@ impl<R: io::Read + io::Seek> Reader<R> {
         self.core.reset();
         self.core.set_line(pos.line());
         self.state.cur_pos = pos;
-        self.state.eof = false;
+        self.state.eof = ReaderEofState::NotEof;
         Ok(())
     }
 
@@ -1845,7 +1880,7 @@ impl<R: io::Read + io::Seek> Reader<R> {
         self.core.reset();
         self.core.set_line(pos.line());
         self.state.cur_pos = pos;
-        self.state.eof = false;
+        self.state.eof = ReaderEofState::NotEof;
         Ok(())
     }
 }
