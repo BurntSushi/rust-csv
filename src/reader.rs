@@ -687,9 +687,9 @@ impl ReaderBuilder {
 /// * When reading CSV data from a resource (like a file), it is possible for
 ///   reading from the underlying resource to fail. This will return an error.
 ///   For subsequent calls to the `Reader` after encountering a such error
-///   (unless `seek` is used), it will behave as if end of file had been reached,
-///   in order to avoid running into infinite loops when still attempting to read
-///   the next record when one has errored.
+///   (unless `seek` is used), it will behave as if end of file had been
+///   reached, in order to avoid running into infinite loops when still
+///   attempting to read the next record when one has errored.
 /// * When reading CSV data into `String` or `&str` fields (e.g., via a
 ///   [`StringRecord`](struct.StringRecord.html)), UTF-8 is strictly
 ///   enforced. If CSV data is invalid UTF-8, then an error is returned. If
@@ -746,24 +746,28 @@ struct ReaderState {
     seeked: bool,
     /// Whether EOF of the underlying reader has been reached or not.
     ///
-    /// IO errors on the underlying reader will be considered as an EOF for subsequent read attempts,
-    /// as it would be incorrect to keep on trying to read when the underlying reader has broken.
+    /// IO errors on the underlying reader will be considered as an EOF for
+    /// subsequent read attempts, as it would be incorrect to keep on trying
+    /// to read when the underlying reader has broken.
     ///
-    /// For clarity, having the best `Debug` impl and in case they need to be treated differently at
-    /// some point, we store whether the `EOF` is considered because an actual EOF happened, or
-    /// because we encoundered an IO error.
+    /// For clarity, having the best `Debug` impl and in case they need to be
+    /// treated differently at some point, we store whether the `EOF` is
+    /// considered because an actual EOF happened, or because we encoundered
+    /// an IO error.
     /// This has no additional runtime cost.
     eof: ReaderEofState,
 }
 
 /// Whether EOF of the underlying reader has been reached or not.
 ///
-/// IO errors on the underlying reader will be considered as an EOF for subsequent read attempts,
-/// as it would be incorrect to keep on trying to read when the underlying reader has broken.
+/// IO errors on the underlying reader will be considered as an EOF for
+/// subsequent read attempts, as it would be incorrect to keep on trying
+/// to read when the underlying reader has broken.
 ///
-/// For clarity, having the best `Debug` impl and in case they need to be treated differently at
-/// some point, we store whether the `EOF` is considered because an actual EOF happened, or
-/// because we encoundered an IO error.
+/// For clarity, having the best `Debug` impl and in case they need to be
+/// treated differently at some point, we store whether the `EOF` is
+/// considered because an actual EOF happened, or because we encoundered
+/// an IO error
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReaderEofState {
     NotEof,
