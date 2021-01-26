@@ -777,7 +777,7 @@ impl<W: io::Write> Writer<W> {
     /// ## Non-Struct Containers
     ///
     /// Nested containers are flattened to their scalar components, with the
-    /// exeption of a few types that are not allowed:
+    /// exception of a few types that are not allowed:
     ///
     /// | Name | Example Type | Example Value | Output |
     /// | ---- | ---- | ---- | ---- |
@@ -831,7 +831,7 @@ impl<W: io::Write> Writer<W> {
     /// ```
     ///
     /// However, if `has_headers` were enabled in the above example, then
-    /// serialization would return an error. Speficially, when `has_headers` is
+    /// serialization would return an error. Specifically, when `has_headers` is
     /// `true`, there are two restrictions:
     ///
     /// 1. Named field values in structs must be scalars.
