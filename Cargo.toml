@@ -10,7 +10,7 @@ readme = "README.md"
 keywords = ["csv", "comma", "parser", "delimited", "serde"]
 license = "Unlicense/MIT"
 categories = ["encoding", "parser-implementations"]
-exclude = ["/.travis.yml", "/appveyor.yml", "/ci/*", "/scripts/*"]
+exclude = ["/examples/data/", "/.travis.yml", "/appveyor.yml", "/ci/*", "/scripts/*"]
 edition = "2018"
 
 [badges]
