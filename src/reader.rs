@@ -2050,7 +2050,7 @@ impl<R: io::Read> Iterator for StringRecordsIntoIter<R> {
     fn next(&mut self) -> Option<Result<StringRecord>> {
         match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
-            Ok(true) => Some(Ok(self.rec.clone())),
+            Ok(true) => Some(Ok(self.rec.clone_truncated())),
             Ok(false) => None,
         }
     }
@@ -2087,7 +2087,7 @@ impl<'r, R: io::Read> Iterator for StringRecordsIter<'r, R> {
     fn next(&mut self) -> Option<Result<StringRecord>> {
         match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
-            Ok(true) => Some(Ok(self.rec.clone())),
+            Ok(true) => Some(Ok(self.rec.clone_truncated())),
             Ok(false) => None,
         }
     }
@@ -2126,7 +2126,7 @@ impl<R: io::Read> Iterator for ByteRecordsIntoIter<R> {
     fn next(&mut self) -> Option<Result<ByteRecord>> {
         match self.rdr.read_byte_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
-            Ok(true) => Some(Ok(self.rec.clone())),
+            Ok(true) => Some(Ok(self.rec.clone_truncated())),
             Ok(false) => None,
         }
     }
@@ -2163,7 +2163,7 @@ impl<'r, R: io::Read> Iterator for ByteRecordsIter<'r, R> {
     fn next(&mut self) -> Option<Result<ByteRecord>> {
         match self.rdr.read_byte_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
-            Ok(true) => Some(Ok(self.rec.clone())),
+            Ok(true) => Some(Ok(self.rec.clone_truncated())),
             Ok(false) => None,
         }
     }

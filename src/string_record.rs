@@ -610,6 +610,14 @@ impl StringRecord {
         self.0
     }
 
+    /// Clone this record, but only copy `fields` up to the end of bounds. This
+    /// is useful when one wants to copy a record, but not necessarily any
+    /// excess capacity in that record.
+    #[inline]
+    pub(crate) fn clone_truncated(&self) -> StringRecord {
+        StringRecord(self.0.clone_truncated())
+    }
+
     /// A safe function for reading CSV data into a `StringRecord`.
     ///
     /// This relies on the internal representation of `StringRecord`.

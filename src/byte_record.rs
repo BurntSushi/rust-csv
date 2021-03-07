@@ -497,6 +497,18 @@ impl ByteRecord {
         &self.0.fields[..self.0.bounds.end()]
     }
 
+    /// Clone this record, but only copy `fields` up to the end of bounds. This
+    /// is useful when one wants to copy a record, but not necessarily any
+    /// excess capacity in that record.
+    #[inline]
+    pub(crate) fn clone_truncated(&self) -> ByteRecord {
+        let mut br = ByteRecord::new();
+        br.0.pos = self.0.pos.clone();
+        br.0.bounds = self.0.bounds.clone();
+        br.0.fields = self.0.fields[..self.0.bounds.end()].to_vec();
+        br
+    }
+
     /// Retrieve the underlying parts of a byte record.
     #[inline]
     pub(crate) fn as_parts(&mut self) -> (&mut Vec<u8>, &mut Vec<usize>) {
