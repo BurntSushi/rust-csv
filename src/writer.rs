@@ -548,7 +548,7 @@ enum HeaderState {
 
 /// A simple internal buffer for buffering writes.
 ///
-/// We need this because the `csv_core` APIs wants to write into a `&mut [u8]`,
+/// We need this because the `csv_core` APIs want to write into a `&mut [u8]`,
 /// which is not available with the `std::io::BufWriter` API.
 #[derive(Debug)]
 struct Buffer {
