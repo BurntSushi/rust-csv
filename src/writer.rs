@@ -478,7 +478,7 @@ impl WriterBuilder {
     }
 }
 
-/// A already configured CSV writer.
+/// An already configured CSV writer.
 ///
 /// A CSV writer takes as input Rust values and writes those values in a valid
 /// CSV format as output.
@@ -518,7 +518,7 @@ struct WriterState {
     header: HeaderState,
     /// Whether inconsistent record lengths are allowed.
     flexible: bool,
-    /// The number of fields writtein in the first record. This is compared
+    /// The number of fields written in the first record. This is compared
     /// with `fields_written` on all subsequent records to check for
     /// inconsistent record lengths.
     first_field_count: Option<u64>,
@@ -536,7 +536,7 @@ struct WriterState {
 enum HeaderState {
     /// Indicates that we should attempt to write a header.
     Write,
-    /// Indicates that writing a header was attempt, and a header was written.
+    /// Indicates that writing a header was attempted, and a header was written.
     DidWrite,
     /// Indicates that writing a header was attempted, but no headers were
     /// written or the attempt failed.
