@@ -145,6 +145,12 @@ $ cd rust-csv
 $ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
 ```
 
+## Internally-tagged enums
+
+It should be noted that Serde's [internally-tagged enums] [can not] be deserialized by this crate.
+
+[internally-tagged enums]: https://serde.rs/enum-representations.html#internally-tagged
+[can not]: https://github.com/BurntSushi/rust-csv/issues/211
 */
 
 #![deny(missing_docs)]
