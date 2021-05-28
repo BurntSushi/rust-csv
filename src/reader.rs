@@ -428,9 +428,12 @@ impl ReaderBuilder {
     /// In some variants of CSV, quotes are escaped using a special escape
     /// character like `\` (instead of escaping quotes by doubling them).
     ///
+    /// Other variants of CSV may use an escape character to escape delimiters instead
+    /// of using quoted fields, this is supported only when quoting is disabled.
+    ///
     /// By default, recognizing these idiosyncratic escapes is disabled.
     ///
-    /// # Example
+    /// # Example with escaped quotes
     ///
     /// ```
     /// use std::error::Error;
@@ -450,6 +453,35 @@ impl ReaderBuilder {
     ///         let record = result?;
     ///         assert_eq!(record, vec![
     ///             "Boston", "The \"United\" States", "4628910",
+    ///         ]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// # Example with escaped delimiters
+    ///
+    /// ```
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<dyn Error>> {
+    ///     let data = "\
+    /// city,country,pop
+    /// Boston,The\\, United\\, States,4628910
+    /// ";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .quoting(false)
+    ///         .escape(Some(b'\\'))
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec![
+    ///             "Boston", "The, United, States", "4628910",
     ///         ]);
     ///         Ok(())
     ///     } else {
