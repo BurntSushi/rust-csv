@@ -159,7 +159,7 @@ $ cargo run --example cookbook-read-colon < examples/data/smallpop-colon.csv
 
 The CSV reader in this crate assumes that CSV data has a header record by
 default, but the setting can be toggled. When enabled, the first record in
-CSV data in interpreted as the header record and is skipped. When disabled, the
+CSV data is interpreted as the header record and is skipped. When disabled, the
 first record is not skipped. This example shows how to disable that setting.
 
 ```no_run
