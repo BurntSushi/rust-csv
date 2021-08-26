@@ -9,8 +9,7 @@ use std::process::{self, Command};
 
 static STRANGE: &str = include_str!("../examples/data/strange.csv");
 static USPOP: &str = include_str!("../examples/data/uspop.csv");
-static USPOP_NULL: &str =
-    include_str!("../examples/data/uspop-null.csv");
+static USPOP_NULL: &str = include_str!("../examples/data/uspop-null.csv");
 static USPOP_LATIN1: &[u8] =
     include_bytes!("../examples/data/uspop-latin1.csv");
 static WORLDPOP: &str =

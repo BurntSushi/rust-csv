@@ -2,8 +2,6 @@ use std::fmt;
 use std::io;
 use std::mem;
 
-
-
 use serde::ser::{
     Error as SerdeError, Serialize, SerializeMap, SerializeSeq,
     SerializeStruct, SerializeStructVariant, SerializeTuple,

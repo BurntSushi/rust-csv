@@ -14,8 +14,7 @@ use csv::{
 
 static NFL: &str = include_str!("../examples/data/bench/nfl.csv");
 static GAME: &str = include_str!("../examples/data/bench/game.csv");
-static POP: &str =
-    include_str!("../examples/data/bench/worldcitiespop.csv");
+static POP: &str = include_str!("../examples/data/bench/worldcitiespop.csv");
 static MBTA: &str =
     include_str!("../examples/data/bench/gtfs-mbta-stop-times.csv");
 

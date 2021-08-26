@@ -197,10 +197,7 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
     }
 
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
-        DeserializeError {
-            field: Some(self.field.saturating_sub(1)),
-            kind,
-        }
+        DeserializeError { field: Some(self.field.saturating_sub(1)), kind }
     }
 
     fn infer_deserialize<'de, V: Visitor<'de>>(
@@ -291,10 +288,7 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
     }
 
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
-        DeserializeError {
-            field: Some(self.field.saturating_sub(1)),
-            kind,
-        }
+        DeserializeError { field: Some(self.field.saturating_sub(1)), kind }
     }
 
     fn infer_deserialize<'de, V: Visitor<'de>>(
