@@ -646,7 +646,7 @@ impl StringRecord {
         match (read_res, utf8_res) {
             (Err(err), _) => Err(err),
             (Ok(_), Err(err)) => {
-                Err(Error::new(ErrorKind::Utf8 { pos: Some(pos), err: err }))
+                Err(Error::new(ErrorKind::Utf8 { pos: Some(pos), err }))
             }
             (Ok(eof), Ok(())) => Ok(eof),
         }

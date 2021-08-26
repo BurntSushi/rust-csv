@@ -2,8 +2,8 @@ use std::fmt;
 use std::io;
 use std::mem;
 
-use itoa;
-use ryu;
+
+
 use serde::ser::{
     Error as SerdeError, Serialize, SerializeMap, SerializeSeq,
     SerializeStruct, SerializeStructVariant, SerializeTuple,
@@ -20,7 +20,7 @@ pub fn serialize<S: Serialize, W: io::Write>(
     wtr: &mut Writer<W>,
     value: S,
 ) -> Result<(), Error> {
-    value.serialize(&mut SeRecord { wtr: wtr })
+    value.serialize(&mut SeRecord { wtr })
 }
 
 struct SeRecord<'w, W: 'w + io::Write> {
@@ -452,7 +452,7 @@ struct SeHeader<'w, W: 'w + io::Write> {
 
 impl<'w, W: io::Write> SeHeader<'w, W> {
     fn new(wtr: &'w mut Writer<W>) -> Self {
-        SeHeader { wtr: wtr, state: HeaderState::Write }
+        SeHeader { wtr, state: HeaderState::Write }
     }
 
     fn wrote_header(&self) -> bool {
@@ -1060,16 +1060,16 @@ mod tests {
     #[test]
     fn tuple() {
         let row = (true, 1.5, "hi");
-        let got = serialize(row.clone());
+        let got = serialize(row);
         assert_eq!(got, "true,1.5,hi\n");
-        let (wrote, got) = serialize_header(row.clone());
+        let (wrote, got) = serialize_header(row);
         assert!(!wrote);
         assert_eq!(got, "");
 
         let row = (true, 1.5, vec![1, 2, 3]);
         let got = serialize(row.clone());
         assert_eq!(got, "true,1.5,1,2,3\n");
-        let (wrote, got) = serialize_header(row.clone());
+        let (wrote, got) = serialize_header(row);
         assert!(!wrote);
         assert_eq!(got, "");
     }
@@ -1082,7 +1082,7 @@ mod tests {
         let row = Foo(false, 42, "hi".to_string());
         let got = serialize(row.clone());
         assert_eq!(got, "false,42,hi\n");
-        let (wrote, got) = serialize_header(row.clone());
+        let (wrote, got) = serialize_header(row);
         assert!(!wrote);
         assert_eq!(got, "");
     }
@@ -1100,7 +1100,7 @@ mod tests {
             ErrorKind::Serialize(_) => {}
             ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
         }
-        let err = serialize_header_err(row.clone());
+        let err = serialize_header_err(row);
         match *err.kind() {
             ErrorKind::Serialize(_) => {}
             ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
@@ -1120,7 +1120,7 @@ mod tests {
             ErrorKind::Serialize(_) => {}
             ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
         }
-        let err = serialize_header_err(row.clone());
+        let err = serialize_header_err(row);
         match *err.kind() {
             ErrorKind::Serialize(_) => {}
             ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
@@ -1172,7 +1172,7 @@ mod tests {
         let (wrote, got) = serialize_header(row.clone());
         assert!(wrote);
         assert_eq!(got, "x,y,z");
-        let got = serialize(row.clone());
+        let got = serialize(row);
         assert_eq!(got, "true,5,hi\n");
     }
 
@@ -1197,7 +1197,7 @@ mod tests {
         let got = serialize(row.clone());
         assert_eq!(got, "foo,bar,5\n");
 
-        let err = serialize_header_err(row.clone());
+        let err = serialize_header_err(row);
         match *err.kind() {
             ErrorKind::Serialize(_) => {}
             ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
@@ -1216,7 +1216,7 @@ mod tests {
         let got = serialize(row.clone());
         assert_eq!(got, "foo,1,2,3\n");
 
-        let err = serialize_header_err(row.clone());
+        let err = serialize_header_err(row);
         match *err.kind() {
             ErrorKind::Serialize(_) => {}
             ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
@@ -1245,7 +1245,7 @@ mod tests {
         let got = serialize(row.clone());
         assert_eq!(got, "hi,5.0,true,3,,baz,2.3\n");
 
-        let (wrote, got) = serialize_header(row.clone());
+        let (wrote, got) = serialize_header(row);
         assert!(wrote);
         assert_eq!(got, "label,num,label2,value,empty,label,num");
     }
@@ -1262,7 +1262,7 @@ mod tests {
         let got = serialize(row.clone());
         assert_eq!(got, "3.14,hi,5.0\n");
 
-        let err = serialize_header_err(row.clone());
+        let err = serialize_header_err(row);
         match *err.kind() {
             ErrorKind::Serialize(_) => {}
             ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
@@ -1281,7 +1281,7 @@ mod tests {
         let got = serialize(row.clone());
         assert_eq!(got, "hi,5.0,3.14\n");
 
-        let err = serialize_header_err(row.clone());
+        let err = serialize_header_err(row);
         match *err.kind() {
             ErrorKind::Serialize(_) => {}
             ref x => panic!("expected ErrorKind::Serialize but got '{:?}'", x),
@@ -1303,7 +1303,7 @@ mod tests {
         let got = serialize(row.clone());
         assert_eq!(got, "hi,5.0,baz,2.3\n");
 
-        let (wrote, got) = serialize_header(row.clone());
+        let (wrote, got) = serialize_header(row);
         assert!(wrote);
         assert_eq!(got, "label,num,label,num");
     }
@@ -1334,7 +1334,7 @@ mod tests {
         let got = serialize(row.clone());
         assert_eq!(got, "hi,5.0,true,3,,baz,2.3\n");
 
-        let (wrote, got) = serialize_header(row.clone());
+        let (wrote, got) = serialize_header(row);
         assert!(wrote);
         assert_eq!(got, "label,num,label2,value,empty,label,num");
     }

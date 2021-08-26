@@ -1927,9 +1927,9 @@ impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
             rdr.headers().ok().map(Clone::clone)
         };
         DeserializeRecordsIntoIter {
-            rdr: rdr,
+            rdr,
             rec: StringRecord::new(),
-            headers: headers,
+            headers,
             _priv: PhantomData,
         }
     }
@@ -1985,16 +1985,16 @@ impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
             rdr.headers().ok().map(Clone::clone)
         };
         DeserializeRecordsIter {
-            rdr: rdr,
+            rdr,
             rec: StringRecord::new(),
-            headers: headers,
+            headers,
             _priv: PhantomData,
         }
     }
 
     /// Return a reference to the underlying CSV reader.
     pub fn reader(&self) -> &Reader<R> {
-        &self.rdr
+        self.rdr
     }
 
     /// Return a mutable reference to the underlying CSV reader.
@@ -2025,7 +2025,7 @@ pub struct StringRecordsIntoIter<R> {
 
 impl<R: io::Read> StringRecordsIntoIter<R> {
     fn new(rdr: Reader<R>) -> StringRecordsIntoIter<R> {
-        StringRecordsIntoIter { rdr: rdr, rec: StringRecord::new() }
+        StringRecordsIntoIter { rdr, rec: StringRecord::new() }
     }
 
     /// Return a reference to the underlying CSV reader.
@@ -2067,12 +2067,12 @@ pub struct StringRecordsIter<'r, R: 'r> {
 
 impl<'r, R: io::Read> StringRecordsIter<'r, R> {
     fn new(rdr: &'r mut Reader<R>) -> StringRecordsIter<'r, R> {
-        StringRecordsIter { rdr: rdr, rec: StringRecord::new() }
+        StringRecordsIter { rdr, rec: StringRecord::new() }
     }
 
     /// Return a reference to the underlying CSV reader.
     pub fn reader(&self) -> &Reader<R> {
-        &self.rdr
+        self.rdr
     }
 
     /// Return a mutable reference to the underlying CSV reader.
@@ -2101,7 +2101,7 @@ pub struct ByteRecordsIntoIter<R> {
 
 impl<R: io::Read> ByteRecordsIntoIter<R> {
     fn new(rdr: Reader<R>) -> ByteRecordsIntoIter<R> {
-        ByteRecordsIntoIter { rdr: rdr, rec: ByteRecord::new() }
+        ByteRecordsIntoIter { rdr, rec: ByteRecord::new() }
     }
 
     /// Return a reference to the underlying CSV reader.
@@ -2143,12 +2143,12 @@ pub struct ByteRecordsIter<'r, R: 'r> {
 
 impl<'r, R: io::Read> ByteRecordsIter<'r, R> {
     fn new(rdr: &'r mut Reader<R>) -> ByteRecordsIter<'r, R> {
-        ByteRecordsIter { rdr: rdr, rec: ByteRecord::new() }
+        ByteRecordsIter { rdr, rec: ByteRecord::new() }
     }
 
     /// Return a reference to the underlying CSV reader.
     pub fn reader(&self) -> &Reader<R> {
-        &self.rdr
+        self.rdr
     }
 
     /// Return a mutable reference to the underlying CSV reader.

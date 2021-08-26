@@ -355,5 +355,5 @@ where
     D: Deserializer<'de>,
     Option<T>: Deserialize<'de>,
 {
-    Option::<T>::deserialize(de).or_else(|_| Ok(None))
+    Option::<T>::deserialize(de).or(Ok(None))
 }

@@ -30,7 +30,7 @@ pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
-            err: err,
+            err,
         })
     })
 }
@@ -47,7 +47,7 @@ pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
-            err: err,
+            err,
         })
     })
 }
@@ -199,7 +199,7 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
         DeserializeError {
             field: Some(self.field.saturating_sub(1)),
-            kind: kind,
+            kind,
         }
     }
 
@@ -287,13 +287,13 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
 
     #[inline]
     fn peek_field(&mut self) -> Option<&'r [u8]> {
-        self.it.peek().map(|s| *s)
+        self.it.peek().copied()
     }
 
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
         DeserializeError {
             field: Some(self.field.saturating_sub(1)),
-            kind: kind,
+            kind,
         }
     }
 
@@ -431,7 +431,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        self.next_field().and_then(|f| visitor.visit_str(f.into()))
+        self.next_field().and_then(|f| visitor.visit_str(f))
     }
 
     fn deserialize_bytes<V: Visitor<'de>>(

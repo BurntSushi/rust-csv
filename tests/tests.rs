@@ -7,18 +7,18 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{self, Command};
 
-static STRANGE: &'static str = include_str!("../examples/data/strange.csv");
-static USPOP: &'static str = include_str!("../examples/data/uspop.csv");
-static USPOP_NULL: &'static str =
+static STRANGE: &str = include_str!("../examples/data/strange.csv");
+static USPOP: &str = include_str!("../examples/data/uspop.csv");
+static USPOP_NULL: &str =
     include_str!("../examples/data/uspop-null.csv");
-static USPOP_LATIN1: &'static [u8] =
+static USPOP_LATIN1: &[u8] =
     include_bytes!("../examples/data/uspop-latin1.csv");
-static WORLDPOP: &'static str =
+static WORLDPOP: &str =
     include_str!("../examples/data/bench/worldcitiespop.csv");
-static SMALLPOP: &'static str = include_str!("../examples/data/smallpop.csv");
-static SMALLPOP_COLON: &'static str =
+static SMALLPOP: &str = include_str!("../examples/data/smallpop.csv");
+static SMALLPOP_COLON: &str =
     include_str!("../examples/data/smallpop-colon.csv");
-static SMALLPOP_NO_HEADERS: &'static str =
+static SMALLPOP_NO_HEADERS: &str =
     include_str!("../examples/data/smallpop-no-headers.csv");
 
 #[test]
@@ -188,7 +188,7 @@ fn tutorial_read_serde_02() {
     let mut cmd = cmd_for_example("tutorial-read-serde-02");
     let out = cmd_output_with(&mut cmd, USPOP.as_bytes());
     assert_eq!(out.stdout().lines().count(), 100);
-    assert!(out.stdout().lines().all(|x| x.starts_with("(")));
+    assert!(out.stdout().lines().all(|x| x.starts_with('(')));
 }
 
 #[test]
@@ -435,8 +435,8 @@ impl Output {
         let stderr =
             String::from_utf8(out.stderr).expect("valid utf-8 (stderr)");
         Output {
-            stdout: stdout,
-            stderr: stderr,
+            stdout,
+            stderr,
             command: format!("{:?}", cmd),
             status: out.status,
         }
