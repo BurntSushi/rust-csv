@@ -5,7 +5,7 @@ structures that can be easily serialized to and deserialized from disk.
 
 [![Linux build status](https://api.travis-ci.org/BurntSushi/rust-csv.png)](https://travis-ci.org/BurntSushi/rust-csv)
 [![Windows build status](https://ci.appveyor.com/api/projects/status/github/BurntSushi/rust-csv?svg=true)](https://ci.appveyor.com/project/BurntSushi/rust-csv)
-[![](https://meritbadge.herokuapp.com/csv-index)](https://crates.io/crates/csv-index)
+[![Crates.io](https://img.shields.io/crates/v/csv-index.svg)](https://crates.io/crates/csv-index)
 
 Dual-licensed under MIT or the [UNLICENSE](https://unlicense.org/).
 

@@ -5,7 +5,7 @@ never use the Rust standard library.
 
 [![Linux build status](https://api.travis-ci.org/BurntSushi/rust-csv.png)](https://travis-ci.org/BurntSushi/rust-csv)
 [![Windows build status](https://ci.appveyor.com/api/projects/status/github/BurntSushi/rust-csv?svg=true)](https://ci.appveyor.com/project/BurntSushi/rust-csv)
-[![](https://meritbadge.herokuapp.com/csv-core)](https://crates.io/crates/csv-core)
+[![Crates.io](https://img.shields.io/crates/v/csv-core.svg)](https://crates.io/crates/csv-core)
 
 Dual-licensed under MIT or the [UNLICENSE](https://unlicense.org/).
 
