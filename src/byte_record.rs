@@ -378,7 +378,7 @@ impl ByteRecord {
 
     ///own in place trim
     pub fn trim(&mut self) {
-        // early retunn in case of no records
+        // early return in case of no records
         let length = self.len();
         if length == 0 {
             return;
@@ -389,21 +389,20 @@ impl ByteRecord {
             return;
         };
 
-        let mut read_pos: i64 = 0;
-        let mut write_pos: i64 = 0;
+        let mut read_pos: usize = 0;
+        let mut write_pos: usize = 0;
         let mut element: usize = 0;
         while element < length {
-            let element_end = (self.0.bounds.ends[element] - 1) as i64;
+            let element_end = self.0.bounds.ends[element] - 1;
 
             // left trim
             let mut found_only_whitespace = true;
             while read_pos <= element_end {
                 if !found_only_whitespace
-                    || !self.0.fields[read_pos as usize].is_ascii_whitespace()
+                    || !self.0.fields[read_pos].is_ascii_whitespace()
                 {
                     if read_pos != write_pos {
-                        self.0.fields[write_pos as usize] =
-                            self.0.fields[read_pos as usize];
+                        self.0.fields[write_pos] = self.0.fields[read_pos];
                         write_pos += 1;
                         found_only_whitespace = false;
                     } else {
@@ -414,26 +413,24 @@ impl ByteRecord {
                 read_pos += 1;
             }
 
-            read_pos = element_end - (read_pos - write_pos);
-            write_pos = read_pos + 1;
+            // right trim only if not everything was skipped
+            let skipped = read_pos - write_pos;
+            if skipped <= element_end {
+                read_pos = element_end - skipped;
 
-            // right trim
-            while read_pos > 0
-                && self.0.fields[read_pos as usize].is_ascii_whitespace()
-            {
-                read_pos -= 1;
-                write_pos -= 1;
+                while self.0.fields[read_pos].is_ascii_whitespace()
+                {
+                    read_pos -= 1;
+                }
+                write_pos = read_pos + 1;
             }
 
-            // update end position, move read cursur to `old` start of next record
-            let temp = read_pos + 1;
-            read_pos = self.0.bounds.ends[element] as i64;
-            self.0.bounds.ends[element] = temp as usize;
+            //Update end and new readpos at beginning of next element
+            read_pos = self.0.bounds.ends[element];
+            self.0.bounds.ends[element] = write_pos;
             element += 1;
         }
     }
-
-
 
     /// Add a new field to this record.
     ///
