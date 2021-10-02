@@ -391,13 +391,10 @@ impl ByteRecord {
 
         let mut read_pos: usize = 0;
         let mut write_pos: usize = 0;
-        let mut element: usize = 0;
-        while element < length {
-            let element_end = self.0.bounds.ends[element] - 1;
-
+        for element_end_idx in &mut self.0.bounds.ends[..length]{
             // left trim
             let mut found_only_whitespace = true;
-            while read_pos <= element_end {
+            while read_pos < *element_end_idx {
                 if !found_only_whitespace
                     || !self.0.fields[read_pos].is_ascii_whitespace()
                 {
@@ -415,8 +412,8 @@ impl ByteRecord {
 
             // right trim only if not everything was skipped
             let skipped = read_pos - write_pos;
-            if skipped <= element_end {
-                read_pos = element_end - skipped;
+            if skipped < *element_end_idx {
+                read_pos = *element_end_idx - skipped -1;
 
                 while self.0.fields[read_pos].is_ascii_whitespace()
                 {
@@ -426,9 +423,8 @@ impl ByteRecord {
             }
 
             //Update end and new readpos at beginning of next element
-            read_pos = self.0.bounds.ends[element];
-            self.0.bounds.ends[element] = write_pos;
-            element += 1;
+            read_pos = *element_end_idx;
+            *element_end_idx = write_pos;
         }
     }
 
