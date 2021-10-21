@@ -1612,7 +1612,8 @@ impl<R: io::Read> Reader<R> {
                 }
                 return result;
             }
-        } else if self.state.trim.should_trim_fields() {
+        }
+        if self.state.trim.should_trim_fields() {
             record.trim();
         }
         Ok(ok)
