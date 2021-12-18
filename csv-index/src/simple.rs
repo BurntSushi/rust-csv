@@ -1,7 +1,6 @@
 use std::io;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use csv;
 
 /// A simple index for random access to CSV records.
 ///
@@ -153,7 +152,7 @@ impl<R: io::Read + io::Seek> RandomAccessSimple<R> {
     pub fn open(mut rdr: R) -> csv::Result<RandomAccessSimple<R>> {
         rdr.seek(io::SeekFrom::End(-8))?;
         let len = rdr.read_u64::<BigEndian>()?;
-        Ok(RandomAccessSimple { rdr: rdr, len: len })
+        Ok(RandomAccessSimple { rdr, len })
     }
 
     /// Get the position of the record at index `i`.

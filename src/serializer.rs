@@ -2,8 +2,6 @@ use std::fmt;
 use std::io;
 use std::mem;
 
-use itoa;
-use ryu;
 use serde::ser::{
     Error as SerdeError, Serialize, SerializeMap, SerializeSeq,
     SerializeStruct, SerializeStructVariant, SerializeTuple,
@@ -20,7 +18,7 @@ pub fn serialize<S: Serialize, W: io::Write>(
     wtr: &mut Writer<W>,
     value: S,
 ) -> Result<(), Error> {
-    value.serialize(&mut SeRecord { wtr: wtr })
+    value.serialize(&mut SeRecord { wtr })
 }
 
 struct SeRecord<'w, W: 'w + io::Write> {
@@ -452,7 +450,7 @@ struct SeHeader<'w, W: 'w + io::Write> {
 
 impl<'w, W: io::Write> SeHeader<'w, W> {
     fn new(wtr: &'w mut Writer<W>) -> Self {
-        SeHeader { wtr: wtr, state: HeaderState::Write }
+        SeHeader { wtr, state: HeaderState::Write }
     }
 
     fn wrote_header(&self) -> bool {
