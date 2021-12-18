@@ -30,7 +30,7 @@ pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
-            err: err,
+            err,
         })
     })
 }
@@ -47,7 +47,7 @@ pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
-            err: err,
+            err,
         })
     })
 }
@@ -199,7 +199,7 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
         DeserializeError {
             field: Some(self.field.saturating_sub(1)),
-            kind: kind,
+            kind,
         }
     }
 
@@ -287,13 +287,13 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
 
     #[inline]
     fn peek_field(&mut self) -> Option<&'r [u8]> {
-        self.it.peek().map(|s| *s)
+        self.it.peek().copied()
     }
 
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
         DeserializeError {
             field: Some(self.field.saturating_sub(1)),
-            kind: kind,
+            kind,
         }
     }
 
@@ -335,8 +335,8 @@ macro_rules! deserialize_int {
             visitor: V,
         ) -> Result<V::Value, Self::Error> {
             let field = self.next_field()?;
-            let num = if field.starts_with("0x") {
-                <$inttype>::from_str_radix(&field[2..], 16)
+            let num = if let Some(stripped) = field.strip_prefix("0x") {
+                <$inttype>::from_str_radix(stripped, 16)
             } else {
                 field.parse()
             };
@@ -913,7 +913,7 @@ mod tests {
         struct Foo;
 
         #[derive(Deserialize, Debug, PartialEq)]
-        struct Bar {};
+        struct Bar {}
 
         let got = de_headers::<Foo>(&[], &[]);
         assert_eq!(got.unwrap(), Foo);

@@ -27,7 +27,7 @@ impl WriterBuilder {
             escape: b'\\',
             double_quote: true,
         };
-        WriterBuilder { wtr: wtr }
+        WriterBuilder { wtr }
     }
 
     /// Builder a CSV writer from this configuration.
@@ -171,12 +171,10 @@ pub struct Writer {
 impl Clone for Writer {
     fn clone(&self) -> Writer {
         let mut requires_quotes = [false; 256];
-        for i in 0..256 {
-            requires_quotes[i] = self.requires_quotes[i];
-        }
+        requires_quotes[..256].clone_from_slice(&self.requires_quotes[..256]);
         Writer {
             state: self.state.clone(),
-            requires_quotes: requires_quotes,
+            requires_quotes,
             delimiter: self.delimiter,
             term: self.term,
             style: self.style,
@@ -497,7 +495,7 @@ pub fn is_non_numeric(input: &[u8]) -> bool {
     // I suppose this could be faster if we wrote validators of numbers instead
     // of using the actual parser, but that's probably a lot of work for a bit
     // of a niche feature.
-    !s.parse::<f64>().is_ok() && !s.parse::<i128>().is_ok()
+    s.parse::<f64>().is_err() && s.parse::<i128>().is_err()
 }
 
 /// Escape quotes `input` and writes the result to `output`.
