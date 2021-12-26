@@ -1,7 +1,9 @@
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead, Seek};
 use std::marker::PhantomData;
 use std::path::Path;
+use std::rc::Rc;
 use std::result;
 
 use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
@@ -17,7 +19,6 @@ use crate::{Terminator, Trim};
 /// This builder can be used to tweak the field delimiter, record terminator
 /// and more. Once a CSV `Reader` is built, its configuration cannot be
 /// changed.
-#[derive(Debug)]
 pub struct ReaderBuilder {
     capacity: usize,
     flexible: bool,
@@ -29,6 +30,23 @@ pub struct ReaderBuilder {
     /// entire DFA transition table, which along with other things, tallies up
     /// to almost 500 bytes on the stack.
     builder: Box<CoreReaderBuilder>,
+    missing_field_check: Option<Rc<dyn Fn(&str) -> bool>>,
+}
+
+impl fmt::Debug for ReaderBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ReaderBuilder")
+            .field("capacity", &self.capacity)
+            .field("flexible", &self.flexible)
+            .field("has_headers", &self.has_headers)
+            .field("trim", &self.trim)
+            .field("builder", &self.builder)
+            .field(
+                "missing_field_check",
+                &self.missing_field_check.as_ref().map(|_| "Fn(&str) -> bool"),
+            )
+            .finish()
+    }
 }
 
 impl Default for ReaderBuilder {
@@ -39,6 +57,7 @@ impl Default for ReaderBuilder {
             has_headers: true,
             trim: Trim::default(),
             builder: Box::new(CoreReaderBuilder::default()),
+            missing_field_check: None,
         }
     }
 }
@@ -615,6 +634,17 @@ impl ReaderBuilder {
         self
     }
 
+    /// Set or unset a custom function to use to test for nullability for option fields (when using
+    /// `serde`)
+    pub fn missing_field_check(
+        &mut self,
+        f: Option<impl Fn(&str) -> bool + 'static>,
+    ) -> &mut ReaderBuilder {
+        self.missing_field_check =
+            f.map(|func| Rc::new(func) as Rc<dyn Fn(&str) -> bool + 'static>);
+        self
+    }
+
     /// Enable or disable the NFA for parsing CSV.
     ///
     /// This is intended to be a debug option. The NFA is always slower than
@@ -719,7 +749,6 @@ pub struct Reader<R> {
     state: ReaderState,
 }
 
-#[derive(Debug)]
 struct ReaderState {
     /// When set, this contains the first row of any parsed CSV data.
     ///
@@ -733,6 +762,9 @@ struct ReaderState {
     /// is reported.
     flexible: bool,
     trim: Trim,
+    /// A custom function to detect missing fields. This defaults to looking for
+    /// the empty string
+    missing_field_check: Option<Rc<dyn Fn(&str) -> bool>>,
     /// The number of fields in the first record parsed.
     first_field_count: Option<u64>,
     /// The current position of the parser.
@@ -773,6 +805,26 @@ enum ReaderEofState {
     NotEof,
     Eof,
     IOError,
+}
+
+impl fmt::Debug for ReaderState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ReaderState")
+            .field("headers", &self.headers)
+            .field("has_headers", &self.has_headers)
+            .field("flexible", &self.flexible)
+            .field("trim", &self.trim)
+            .field(
+                "missing_field_check",
+                &self.missing_field_check.as_ref().map(|_| "Fn(&str) -> bool"),
+            )
+            .field("first_field_count", &self.first_field_count)
+            .field("cur_pos", &self.cur_pos)
+            .field("first", &self.first)
+            .field("seeked", &self.seeked)
+            .field("eof", &self.eof)
+            .finish()
+    }
 }
 
 /// Headers encapsulates any data associated with the headers of CSV data.
@@ -826,6 +878,7 @@ impl<R: io::Read> Reader<R> {
                 flexible: builder.flexible,
                 trim: builder.trim,
                 first_field_count: None,
+                missing_field_check: builder.missing_field_check.clone(),
                 cur_pos: Position::new(),
                 first: false,
                 seeked: false,
@@ -1959,7 +2012,16 @@ impl<R: io::Read, D: DeserializeOwned> Iterator
         match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
             Ok(false) => None,
-            Ok(true) => Some(self.rec.deserialize(self.headers.as_ref())),
+            Ok(true) => Some(
+                self.rec.deserialize(
+                    self.headers.as_ref(),
+                    self.rdr
+                        .state
+                        .missing_field_check
+                        .as_ref()
+                        .map(|check| &**check),
+                ),
+            ),
         }
     }
 }
@@ -2012,7 +2074,16 @@ impl<'r, R: io::Read, D: DeserializeOwned> Iterator
         match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
             Ok(false) => None,
-            Ok(true) => Some(self.rec.deserialize(self.headers.as_ref())),
+            Ok(true) => Some(
+                self.rec.deserialize(
+                    self.headers.as_ref(),
+                    self.rdr
+                        .state
+                        .missing_field_check
+                        .as_ref()
+                        .map(|check| &**check),
+                ),
+            ),
         }
     }
 }
