@@ -5,9 +5,11 @@ use std::ops::{self, Range};
 use std::result;
 use std::str;
 
+#[cfg(feature = "serde")]
 use serde::de::Deserialize;
 
 use crate::byte_record::{ByteRecord, ByteRecordIter, Position};
+#[cfg(feature = "serde")]
 use crate::deserializer::deserialize_string_record;
 use crate::error::{Error, ErrorKind, FromUtf8Error, Result};
 use crate::reader::Reader;
@@ -289,6 +291,7 @@ impl StringRecord {
     ///     Ok(())
     /// }
     /// ```
+    #[cfg(feature = "serde")]
     pub fn deserialize<'de, D: Deserialize<'de>>(
         &'de self,
         headers: Option<&'de StringRecord>,

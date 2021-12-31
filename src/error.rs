@@ -4,6 +4,7 @@ use std::io;
 use std::result;
 
 use crate::byte_record::{ByteRecord, Position};
+#[cfg(feature = "serde")]
 use crate::deserializer::DeserializeError;
 
 /// A type alias for `Result<T, csv::Error>`.
@@ -89,9 +90,11 @@ pub enum ErrorKind {
     /// the first record.
     Seek,
     /// An error of this kind occurs only when using the Serde serializer.
+    #[cfg(feature = "serde")]
     Serialize(String),
     /// An error of this kind occurs only when performing automatic
     /// deserialization with serde.
+    #[cfg(feature = "serde")]
     Deserialize {
         /// The position of this error, if available.
         pos: Option<Position>,
@@ -116,6 +119,7 @@ impl ErrorKind {
         match *self {
             ErrorKind::Utf8 { ref pos, .. } => pos.as_ref(),
             ErrorKind::UnequalLengths { ref pos, .. } => pos.as_ref(),
+            #[cfg(feature = "serde")]
             ErrorKind::Deserialize { ref pos, .. } => pos.as_ref(),
             _ => None,
         }
@@ -141,7 +145,9 @@ impl StdError for Error {
             ErrorKind::Utf8 { ref err, .. } => Some(err),
             ErrorKind::UnequalLengths { .. } => None,
             ErrorKind::Seek => None,
+            #[cfg(feature = "serde")]
             ErrorKind::Serialize(_) => None,
+            #[cfg(feature = "serde")]
             ErrorKind::Deserialize { ref err, .. } => Some(err),
             _ => unreachable!(),
         }
@@ -195,12 +201,15 @@ impl fmt::Display for Error {
                  when the parser was seeked before the first record \
                  could be read"
             ),
+            #[cfg(feature = "serde")]
             ErrorKind::Serialize(ref err) => {
                 write!(f, "CSV write error: {}", err)
             }
+            #[cfg(feature = "serde")]
             ErrorKind::Deserialize { pos: None, ref err } => {
                 write!(f, "CSV deserialize error: {}", err)
             }
+            #[cfg(feature = "serde")]
             ErrorKind::Deserialize { pos: Some(ref pos), ref err } => write!(
                 f,
                 "CSV deserialize error: record {} \

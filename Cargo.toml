@@ -23,12 +23,15 @@ members = ["csv-core", "csv-index"]
 [lib]
 bench = false
 
+[features]
+default = ["serde"]
+
 [dependencies]
 bstr = { version = "0.2.1", features = ["serde1"] }
 csv-core = { path = "csv-core", version = "0.1.6" }
 itoa = "1"
 ryu = "1"
-serde = "1.0.55"
+serde = { version = "1.0.55", optional = true }
 
 [dev-dependencies]
 serde = { version = "1.0.55", features = ["derive"] }
@@ -38,3 +41,63 @@ debug = true
 
 [profile.bench]
 debug = true
+
+[[bench]]
+name = "bench"
+required-features = ["serde"]
+
+[[example]]
+name = "cookbook-read-serde"
+required-features = ["serde"]
+
+[[example]]
+name = "cookbook-write-serde"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-perf-serde-01"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-perf-serde-02"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-perf-serde-03"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-read-serde-01"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-read-serde-02"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-read-serde-03"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-pipeline-pop-01"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-read-serde-04"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-read-serde-invalid-01"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-read-serde-invalid-02"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-write-serde-01"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-write-serde-02"
+required-features = ["serde"]

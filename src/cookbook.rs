@@ -62,7 +62,8 @@ $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
 $ cargo run --example cookbook-read-basic < examples/data/smallpop.csv
 ```
-
+*/
+#![cfg_attr(feature = "serde", doc = r#"
 # Reading: with Serde
 
 This is like the previous example, except it shows how to deserialize each
@@ -116,7 +117,8 @@ $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
 $ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
 ```
-
+"#)]
+/*!
 # Reading: setting a different delimiter
 
 This example shows how to read CSV data from stdin where fields are separated
@@ -232,7 +234,8 @@ $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
 $ cargo run --example cookbook-write-basic > /tmp/simplepop.csv
 ```
-
+*/
+#![cfg_attr(feature = "serde", doc = r#"
 # Writing: with Serde
 
 This example shows how to write CSV data to stdout with Serde. Namely, we
@@ -291,4 +294,4 @@ $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
 $ cargo run --example cookbook-write-serde > /tmp/simplepop.csv
 ```
-*/
+"#)]

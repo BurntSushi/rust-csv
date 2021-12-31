@@ -28,6 +28,7 @@ fn cookbook_read_basic() {
     assert_eq!(out.stdout().lines().count(), 10);
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn cookbook_read_serde() {
     let mut cmd = cmd_for_example("cookbook-read-serde");
@@ -56,6 +57,7 @@ fn cookbook_write_basic() {
     assert_eq!(out.stdout().lines().count(), 3);
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn cookbook_write_serde() {
     let mut cmd = cmd_for_example("cookbook-write-serde");
@@ -175,6 +177,7 @@ fn tutorial_read_delimiter_01() {
     assert_eq!(out.stdout().lines().count(), 6);
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn tutorial_read_serde_01() {
     let mut cmd = cmd_for_example("tutorial-read-serde-01");
@@ -183,6 +186,7 @@ fn tutorial_read_serde_01() {
     assert!(out.stdout().lines().all(|x| x.contains("pop:")));
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn tutorial_read_serde_02() {
     let mut cmd = cmd_for_example("tutorial-read-serde-02");
@@ -191,6 +195,7 @@ fn tutorial_read_serde_02() {
     assert!(out.stdout().lines().all(|x| x.starts_with("(")));
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn tutorial_read_serde_03() {
     let mut cmd = cmd_for_example("tutorial-read-serde-03");
@@ -199,6 +204,7 @@ fn tutorial_read_serde_03() {
     assert!(out.stdout().lines().all(|x| x.contains("\"City\":")));
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn tutorial_read_serde_04() {
     let mut cmd = cmd_for_example("tutorial-read-serde-04");
@@ -207,6 +213,7 @@ fn tutorial_read_serde_04() {
     assert!(out.stdout().lines().all(|x| x.starts_with("Record { latitude:")));
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn tutorial_read_serde_05_invalid() {
     let mut cmd = cmd_for_example("tutorial-read-serde-invalid-01");
@@ -215,6 +222,7 @@ fn tutorial_read_serde_05_invalid() {
     assert!(out.stdout().lines().all(|x| x.starts_with("Record { latitude:")));
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn tutorial_read_serde_05_invalid_errored() {
     let mut cmd = cmd_for_example("tutorial-read-serde-invalid-01");
@@ -222,6 +230,7 @@ fn tutorial_read_serde_05_invalid_errored() {
     assert!(out.stdout_failed().contains("CSV deserialize error:"));
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn tutorial_read_serde_invalid_06() {
     let mut cmd = cmd_for_example("tutorial-read-serde-invalid-02");
@@ -245,6 +254,7 @@ fn tutorial_write_delimiter_01() {
     assert!(out.stdout().lines().all(|x| x.contains('\t')));
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn tutorial_write_serde_01() {
     let mut cmd = cmd_for_example("tutorial-write-serde-01");
@@ -252,6 +262,7 @@ fn tutorial_write_serde_01() {
     assert_eq!(out.stdout().lines().count(), 4);
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn tutorial_write_serde_02() {
     let mut cmd = cmd_for_example("tutorial-write-serde-02");
@@ -312,6 +323,7 @@ fn tutorial_perf_alloc_03() {
     assert_eq!(out.stdout(), "11\n");
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn tutorial_perf_serde_01() {
     let mut cmd = cmd_for_example("tutorial-perf-serde-01");
@@ -319,6 +331,7 @@ fn tutorial_perf_serde_01() {
     assert_eq!(out.stdout(), "11\n");
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn tutorial_perf_serde_02() {
     let mut cmd = cmd_for_example("tutorial-perf-serde-02");
@@ -326,6 +339,7 @@ fn tutorial_perf_serde_02() {
     assert_eq!(out.stdout(), "11\n");
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn tutorial_perf_serde_03() {
     let mut cmd = cmd_for_example("tutorial-perf-serde-03");

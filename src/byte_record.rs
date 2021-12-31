@@ -5,10 +5,14 @@ use std::ops::{self, Range};
 use std::result;
 
 use bstr::{BString, ByteSlice};
+#[cfg(feature = "serde")]
 use serde::de::Deserialize;
 
+#[cfg(feature = "serde")]
 use crate::deserializer::deserialize_byte_record;
-use crate::error::{new_utf8_error, Result, Utf8Error};
+#[cfg(feature = "serde")]
+use crate::error::Result;
+use crate::error::{new_utf8_error, Utf8Error};
 use crate::string_record::StringRecord;
 
 /// A single CSV record stored as raw bytes.
@@ -226,6 +230,7 @@ impl ByteRecord {
     ///     Ok(())
     /// }
     /// ```
+    #[cfg(feature = "serde")]
     pub fn deserialize<'de, D: Deserialize<'de>>(
         &'de self,
         headers: Option<&'de ByteRecord>,
