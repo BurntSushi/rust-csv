@@ -361,22 +361,6 @@ impl ByteRecord {
     /// record.trim();
     /// assert_eq!(record, vec!["", "foo", "bar", "b a z"]);
     /// ```
-    pub fn trim_original(&mut self) {
-        let length = self.len();
-        if length == 0 {
-            return;
-        }
-        // TODO: We could likely do this in place, but for now, we allocate.
-        let mut trimmed =
-            ByteRecord::with_capacity(self.as_slice().len(), self.len());
-        trimmed.set_position(self.position().cloned());
-        for field in &*self {
-            trimmed.push_field(field.trim());
-        }
-        *self = trimmed;
-    }
-
-    ///own in place trim
     pub fn trim(&mut self) {
         // early return in case of no records
         let length = self.len();
