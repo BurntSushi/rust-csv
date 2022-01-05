@@ -362,18 +362,53 @@ impl ByteRecord {
     /// assert_eq!(record, vec!["", "foo", "bar", "b a z"]);
     /// ```
     pub fn trim(&mut self) {
+        // early return in case of no records
         let length = self.len();
         if length == 0 {
             return;
         }
-        // TODO: We could likely do this in place, but for now, we allocate.
-        let mut trimmed =
-            ByteRecord::with_capacity(self.as_slice().len(), self.len());
-        trimmed.set_position(self.position().cloned());
-        for field in &*self {
-            trimmed.push_field(field.trim());
+
+        // early return if last record ends at 0 -> all empty
+        if self.0.bounds.ends[length - 1] == 0 {
+            return;
+        };
+
+        let mut read_pos: usize = 0;
+        let mut write_pos: usize = 0;
+        for element_end_idx in &mut self.0.bounds.ends[..length] {
+            // left trim
+            let mut found_only_whitespace = true;
+            while read_pos < *element_end_idx {
+                if !found_only_whitespace
+                    || !self.0.fields[read_pos].is_ascii_whitespace()
+                {
+                    if read_pos == write_pos {
+                        break;
+                    } else {
+                        self.0.fields[write_pos] = self.0.fields[read_pos];
+                        write_pos += 1;
+                        found_only_whitespace = false;
+                    }
+                }
+
+                read_pos += 1;
+            }
+
+            // right trim only if not everything was skipped
+            let skipped = read_pos - write_pos;
+            if skipped < *element_end_idx {
+                read_pos = *element_end_idx - skipped - 1;
+
+                while self.0.fields[read_pos].is_ascii_whitespace() {
+                    read_pos -= 1;
+                }
+                write_pos = read_pos + 1;
+            }
+
+            //Update end and new readpos at beginning of next element
+            read_pos = *element_end_idx;
+            *element_end_idx = write_pos;
         }
-        *self = trimmed;
     }
 
     /// Add a new field to this record.
@@ -939,6 +974,49 @@ mod tests {
     }
 
     #[test]
+    fn trim_middle() {
+        let mut rec = ByteRecord::from(vec![b"a bc"]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("a bc")));
+    }
+
+    #[test]
+    fn trim_multiple_middles() {
+        let mut rec =
+            ByteRecord::from(vec![b"a bc d ", b" a bc d", b" b d dd"]);
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("a bc d")));
+        assert_eq!(rec.get(1), Some(b("a bc d")));
+        assert_eq!(rec.get(2), Some(b("b d dd")));
+    }
+
+    #[test]
+    fn big_trim() {
+        let mut rec = ByteRecord::from(vec![b"   "]);
+        rec.push_field(b"");
+        rec.push_field(b"  a");
+        rec.push_field(b"b");
+        rec.push_field(b"c ");
+        rec.push_field(b"d  e");
+        rec.push_field(b" f g");
+        rec.push_field(b"  h i ");
+        rec.push_field(b"   ");
+        rec.push_field(b" ");
+
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("")));
+        assert_eq!(rec.get(1), Some(b("")));
+        assert_eq!(rec.get(2), Some(b("a")));
+        assert_eq!(rec.get(3), Some(b("b")));
+        assert_eq!(rec.get(4), Some(b("c")));
+        assert_eq!(rec.get(5), Some(b("d  e")));
+        assert_eq!(rec.get(6), Some(b("f g")));
+        assert_eq!(rec.get(7), Some(b("h i")));
+        assert_eq!(rec.get(8), Some(b("")));
+        assert_eq!(rec.get(9), Some(b("")));
+    }
+
+    #[test]
     fn trim_does_not_panic_on_empty_records_1() {
         let mut rec = ByteRecord::from(vec![b""]);
         rec.trim();
@@ -958,6 +1036,17 @@ mod tests {
         let mut rec = ByteRecord::new();
         rec.trim();
         assert_eq!(rec.as_slice().len(), 0);
+    }
+
+    #[test]
+    fn trim_does_not_panic_on_empty_records_4() {
+        let mut rec = ByteRecord::from(vec![b"a "]);
+        rec.push_field(b"");
+        rec.push_field(b" a");
+        rec.trim();
+        assert_eq!(rec.get(0), Some(b("a")));
+        assert_eq!(rec.get(1), Some(b("")));
+        assert_eq!(rec.get(2), Some(b("a")));
     }
 
     #[test]

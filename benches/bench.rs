@@ -13,6 +13,8 @@ use csv::{
 };
 
 static NFL: &'static str = include_str!("../examples/data/bench/nfl.csv");
+static NFL_WHITESPACE: &'static str =
+    include_str!("../examples/data/bench/nfl_with_trimmable_whitespace.csv");
 static GAME: &'static str = include_str!("../examples/data/bench/game.csv");
 static POP: &'static str =
     include_str!("../examples/data/bench/worldcitiespop.csv");
@@ -309,6 +311,12 @@ bench_serde_borrowed_str!(
 );
 bench!(count_nfl_iter_bytes, NFL, count_iter_bytes, 130000);
 bench_trimmed!(count_nfl_iter_bytes_trimmed, NFL, count_iter_bytes, 130000);
+bench_trimmed!(
+    count_nfl_iter_bytes_trimmed_whitespace,
+    NFL_WHITESPACE,
+    count_iter_bytes,
+    130000
+);
 bench!(count_nfl_iter_str, NFL, count_iter_str, 130000);
 bench_trimmed!(count_nfl_iter_str_trimmed, NFL, count_iter_str, 130000);
 bench!(count_nfl_read_bytes, NFL, count_read_bytes, 130000);
