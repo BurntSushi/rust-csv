@@ -11,7 +11,7 @@ keywords = ["csv", "comma", "parser", "delimited", "serde"]
 license = "Unlicense/MIT"
 categories = ["encoding", "parser-implementations"]
 exclude = ["/.travis.yml", "/appveyor.yml", "/ci/*", "/scripts/*"]
-edition = "2018"
+edition = "2021"
 
 [badges]
 travis-ci = { repository = "BurntSushi/rust-csv" }
