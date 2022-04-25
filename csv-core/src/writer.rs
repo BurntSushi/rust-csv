@@ -684,12 +684,33 @@ mod tests {
     }
 
     #[test]
+    fn writer_one_empty_field_terminator_quote_style_never() {
+        let mut wtr = Writer::new();
+        wtr.style = QuoteStyle::Never;
+        let out = &mut [0; 1024];
+
+        assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
+        assert_write!(wtr, terminator, &mut out[..], 1, InputEmpty, "\n");
+        assert_write!(wtr, finish, &mut out[..], 0, InputEmpty, "");
+    }
+
+    #[test]
     fn writer_one_empty_field_finish() {
         let mut wtr = Writer::new();
         let out = &mut [0; 1024];
 
         assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
         assert_write!(wtr, finish, &mut out[..], 2, InputEmpty, "\"\"");
+    }
+
+    #[test]
+    fn writer_one_empty_field_finish_quote_style_never() {
+        let mut wtr = Writer::new();
+        wtr.style = QuoteStyle::Never;
+        let out = &mut [0; 1024];
+
+        assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
+        assert_write!(wtr, finish, &mut out[..], 0, InputEmpty, "");
     }
 
     #[test]
