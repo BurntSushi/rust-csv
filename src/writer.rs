@@ -476,6 +476,17 @@ impl WriterBuilder {
         self.capacity = capacity;
         self
     }
+
+    /// The comment character that will be used when later reading the file.
+    ///
+    /// If `quote_style` is set to `QuoteStyle::Necessary`, a field will
+    /// be quoted if the comment character is detected anywhere in the field.
+    ///
+    /// The default value is None.
+    pub fn comment(&mut self, comment: Option<u8>) -> &mut WriterBuilder {
+        self.builder.comment(comment);
+        self
+    }
 }
 
 /// An already configured CSV writer.

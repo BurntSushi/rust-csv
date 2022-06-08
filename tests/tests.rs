@@ -357,6 +357,15 @@ fn no_infinite_loop_on_io_errors() {
     assert!(record_results.next().is_none());
 }
 
+#[test]
+fn comment_char_is_automatically_quoted() {
+    let mut wtr =
+        csv::WriterBuilder::new().comment(Some(b'#')).from_writer(Vec::new());
+    wtr.write_record(&["# comment", "another"]).unwrap();
+    let buf = wtr.into_inner().unwrap();
+    assert_eq!(String::from_utf8(buf).unwrap(), "\"# comment\",another\n");
+}
+
 // Helper functions follow.
 
 /// Return the target/debug directory path.
