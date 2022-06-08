@@ -26,6 +26,7 @@ impl WriterBuilder {
             quote: b'"',
             escape: b'\\',
             double_quote: true,
+            comment: None,
         };
         WriterBuilder { wtr: wtr }
     }
@@ -55,6 +56,13 @@ impl WriterBuilder {
                 wtr.requires_quotes[b as usize] = true;
             }
             _ => unreachable!(),
+        }
+        // If the first field of a row starts with a comment character,
+        // it needs to be quoted, or the row will not be readable later.
+        // As requires_quotes is calculated in advance, we force quotes
+        // when a comment character is encountered anywhere in the field.
+        if let Some(comment) = self.wtr.comment {
+            wtr.requires_quotes[comment as usize] = true;
         }
         wtr
     }
@@ -119,6 +127,17 @@ impl WriterBuilder {
         self.wtr.double_quote = yes;
         self
     }
+
+    /// The comment character that will be used when later reading the file.
+    ///
+    /// If `quote_style` is set to `QuoteStyle::Necessary`, a field will
+    /// be quoted if the comment character is detected anywhere in the field.
+    ///
+    /// The default value is None.
+    pub fn comment(&mut self, comment: Option<u8>) -> &mut WriterBuilder {
+        self.wtr.comment = comment;
+        self
+    }
 }
 
 impl Default for WriterBuilder {
@@ -166,6 +185,7 @@ pub struct Writer {
     quote: u8,
     escape: u8,
     double_quote: bool,
+    comment: Option<u8>,
 }
 
 impl Clone for Writer {
@@ -183,6 +203,7 @@ impl Clone for Writer {
             quote: self.quote,
             escape: self.escape,
             double_quote: self.double_quote,
+            comment: self.comment,
         }
     }
 }
@@ -1043,5 +1064,22 @@ mod tests {
         assert_quote!(inp, out, 1, 1, OutputFull, "d");
         inp = &inp[1..];
         assert_quote!(inp, out, 1, 2, InputEmpty, r#""""#);
+    }
+
+    #[test]
+    fn comment_char_is_automatically_quoted() {
+        let mut wtr = WriterBuilder::new().comment(Some(b'#')).build();
+        let out = &mut [0; 1024];
+
+        assert_field!(
+            wtr,
+            b("# abc"),
+            &mut out[..],
+            5,
+            6,
+            InputEmpty,
+            "\"# abc"
+        );
+        assert_write!(wtr, finish, &mut out[..], 1, InputEmpty, "\"");
     }
 }

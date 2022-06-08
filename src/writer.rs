@@ -470,6 +470,34 @@ impl WriterBuilder {
         self
     }
 
+    /// The comment character that will be used when later reading the file.
+    ///
+    /// If `quote_style` is set to `QuoteStyle::Necessary`, a field will
+    /// be quoted if the comment character is detected anywhere in the field.
+    ///
+    /// The default value is None.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<dyn Error>> {
+    ///     let mut wtr =
+    ///         WriterBuilder::new().comment(Some(b'#')).from_writer(Vec::new());
+    ///     wtr.write_record(&["# comment", "another"]).unwrap();
+    ///     let buf = wtr.into_inner().unwrap();
+    ///     assert_eq!(String::from_utf8(buf).unwrap(), "\"# comment\",another\n");
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn comment(&mut self, comment: Option<u8>) -> &mut WriterBuilder {
+        self.builder.comment(comment);
+        self
+    }
+
     /// Set the capacity (in bytes) of the internal buffer used in the CSV
     /// writer. This defaults to a reasonable setting.
     pub fn buffer_capacity(&mut self, capacity: usize) -> &mut WriterBuilder {
@@ -1413,5 +1441,14 @@ mod tests {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.serialize((true, 1.3, "hi")).unwrap();
         assert_eq!(wtr_as_string(wtr), "true,1.3,hi\n");
+    }
+
+    #[test]
+    fn comment_char_is_automatically_quoted() {
+        let mut wtr =
+            WriterBuilder::new().comment(Some(b'#')).from_writer(Vec::new());
+        wtr.write_record(&["# comment", "another"]).unwrap();
+        let buf = wtr.into_inner().unwrap();
+        assert_eq!(String::from_utf8(buf).unwrap(), "\"# comment\",another\n");
     }
 }
