@@ -14,6 +14,7 @@ For **reading** CSV:
 2. [With Serde](#reading-with-serde)
 3. [Setting a different delimiter](#reading-setting-a-different-delimiter)
 4. [Without headers](#reading-without-headers)
+5. [With whitspace](#reading-with-whitespace)
 
 For **writing** CSV:
 
@@ -193,6 +194,46 @@ The above example can be run like so:
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
 $ cargo run --example cookbook-read-no-headers < examples/data/smallpop-no-headers.csv
+```
+
+# Reading: with whitespace
+
+This example shows how to read CSV data seperated by whitespace as well as a comma. 
+
+```no_run
+# //cookbook-read-whitespace.rs
+use std::error::Error;
+use std::io;
+use std::process;
+
+fn example() -> Result<(), Box<dyn Error>> {
+    // Build the CSV reader and iterate over each record.
+    let mut rdr = csv::ReaderBuilder::new()
+        .trim(csv::Trim::All)
+        .from_reader(io::stdin());
+    for result in rdr.records() {
+        // The iterator yields Result<StringRecord, Error>, so we check the
+        // error here..
+        let record = result?;
+        println!("{:?}", record);
+    }
+    Ok(())
+}
+
+fn main() {
+    if let Err(err) = example() {
+        println!("error running example: {}", err);
+        process::exit(1);
+    }
+}
+```
+
+The above example can be run like so:
+
+```ignore
+$ git clone git://github.com/BurntSushi/rust-csv
+$ cd rust-csv
+$ cargo run --example cookbook-read-whitespace < examples/data/smallpop-whitespace.csv
 ```
 
 # Writing: basic
