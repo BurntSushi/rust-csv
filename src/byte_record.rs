@@ -86,6 +86,8 @@ impl fmt::Debug for ByteRecord {
 struct ByteRecordInner {
     /// The position of this byte record.
     pos: Option<Position>,
+    /// The source span represented by this byte record.
+    span: Option<Span>,
     /// All fields in this record, stored contiguously.
     fields: Vec<u8>,
     /// The number of and location of each field in this record.
@@ -136,6 +138,7 @@ impl ByteRecord {
     pub fn with_capacity(buffer: usize, fields: usize) -> ByteRecord {
         ByteRecord(Box::new(ByteRecordInner {
             pos: None,
+            span: None,
             fields: vec![0; buffer],
             bounds: Bounds::with_capacity(fields),
         }))
@@ -370,6 +373,7 @@ impl ByteRecord {
         let mut trimmed =
             ByteRecord::with_capacity(self.as_slice().len(), self.len());
         trimmed.set_position(self.position().cloned());
+        trimmed.set_span(self.span().cloned());
         for field in &*self {
             trimmed.push_field(field.trim());
         }
@@ -458,6 +462,18 @@ impl ByteRecord {
     #[inline]
     pub fn set_position(&mut self, pos: Option<Position>) {
         self.0.pos = pos;
+    }
+
+    /// Return the source span of this record, if available.
+    #[inline]
+    pub fn span(&self) -> Option<&Span> {
+        self.0.span.as_ref()
+    }
+
+    /// Sets the source span of this record.
+    #[inline]
+    pub fn set_span(&mut self, span: Option<Span>) {
+        self.0.span = span;
     }
 
     /// Return the start and end position of a field in this record.
@@ -636,6 +652,40 @@ impl Position {
     pub fn set_record(&mut self, record: u64) -> &mut Position {
         self.record = record;
         self
+    }
+}
+
+/// A span in a CSV source bytes
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct Span {
+    start: u64,
+    end: u64,
+}
+
+impl Span {
+    /// Create a new span
+    #[inline]
+    pub fn new(start: u64, end: u64) -> Self {
+        assert!(end >= start);
+        Span { start, end }
+    }
+
+    /// Retrieve the start of this span
+    #[inline]
+    pub fn start(&self) -> u64 {
+        self.start
+    }
+
+    /// Retrieve the end of this span
+    #[inline]
+    pub fn end(&self) -> u64 {
+        self.end
+    }
+
+    /// Retrieve the length of this span
+    #[inline]
+    pub fn len(&self) -> usize {
+        (self.end - self.start) as usize
     }
 }
 

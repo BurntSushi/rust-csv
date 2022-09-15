@@ -7,7 +7,7 @@ use std::result;
 use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
 use serde::de::DeserializeOwned;
 
-use crate::byte_record::{ByteRecord, Position};
+use crate::byte_record::{ByteRecord, Position, Span};
 use crate::error::{Error, ErrorKind, Result, Utf8Error};
 use crate::string_record::StringRecord;
 use crate::{Terminator, Trim};
@@ -1667,6 +1667,7 @@ impl<R: io::Read> Reader<R> {
                 }
                 Record => {
                     record.set_len(endlen);
+                    record.set_span(Some(Span::new(record.position().unwrap().byte(), self.state.cur_pos.byte())));
                     self.state.add_record(record)?;
                     return Ok(true);
                 }
