@@ -954,7 +954,10 @@ impl<W: io::Write> Writer<W> {
             // The maximum number of bytes for the terminator.
             + 2;
         if self.buf.writable().len() < upper_bound {
-            return self.write_record(record);
+            // Flush before writing a record, so we only flush on whole records
+            self.flush_buf()?;
+            // Fail if we cannot free enough buffer space
+            assert!(self.buf.writable().len() >= upper_bound, "Not enough buffer space");
         }
         let mut first = true;
         for field in record.iter() {
