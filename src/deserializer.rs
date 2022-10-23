@@ -18,15 +18,24 @@ use crate::string_record::{StringRecord, StringRecordIter};
 
 use self::DeserializeErrorKind as DEK;
 
+/// Create a deserializer for a single CSV record stored as a UTF-8 string.
+pub fn string_record_deserializer<'de, D: Deserialize<'de>>(
+    record: &'de StringRecord,
+    headers: Option<&'de StringRecord>,
+) -> StringRecordDeserializer<'de> {
+    DeRecordWrap(DeStringRecord {
+        it: record.iter().peekable(),
+        headers: headers.map(|r| r.iter()),
+        field: 0,
+    })
+}
+
 pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
     record: &'de StringRecord,
     headers: Option<&'de StringRecord>,
 ) -> Result<D, Error> {
-    let mut deser = DeRecordWrap(DeStringRecord {
-        it: record.iter().peekable(),
-        headers: headers.map(|r| r.iter()),
-        field: 0,
-    });
+    let mut deser = string_record_deserializer::<D>(record, headers);
+
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
@@ -35,15 +44,24 @@ pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
     })
 }
 
+/// Create a deserializer for a single CSV record stored as raw bytes.
+pub fn byte_record_deserializer<'de, D: Deserialize<'de>>(
+    record: &'de ByteRecord,
+    headers: Option<&'de ByteRecord>,
+) -> ByteRecordDeserializer<'de> {
+    DeRecordWrap(DeByteRecord {
+        it: record.iter().peekable(),
+        headers: headers.map(|r| r.iter()),
+        field: 0,
+    })
+}
+
 pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
     record: &'de ByteRecord,
     headers: Option<&'de ByteRecord>,
 ) -> Result<D, Error> {
-    let mut deser = DeRecordWrap(DeByteRecord {
-        it: record.iter().peekable(),
-        headers: headers.map(|r| r.iter()),
-        field: 0,
-    });
+    let mut deser = byte_record_deserializer::<D>(record, headers);
+
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
@@ -99,7 +117,13 @@ trait DeRecord<'r> {
     ) -> Result<V::Value, DeserializeError>;
 }
 
-struct DeRecordWrap<T>(T);
+pub struct DeRecordWrap<T>(T);
+
+/// Deserializer for a single CSV record stored as a UTF-8 string.
+pub type StringRecordDeserializer<'r> = DeRecordWrap<DeStringRecord<'r>>;
+
+/// Deserializer for a single CSV record stored as raw bytes.
+pub type ByteRecordDeserializer<'r> = DeRecordWrap<DeByteRecord<'r>>;
 
 impl<'r, T: DeRecord<'r>> DeRecord<'r> for DeRecordWrap<T> {
     #[inline]
@@ -148,7 +172,7 @@ impl<'r, T: DeRecord<'r>> DeRecord<'r> for DeRecordWrap<T> {
     }
 }
 
-struct DeStringRecord<'r> {
+pub struct DeStringRecord<'r> {
     it: iter::Peekable<StringRecordIter<'r>>,
     headers: Option<StringRecordIter<'r>>,
     field: u64,
@@ -232,7 +256,7 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
     }
 }
 
-struct DeByteRecord<'r> {
+pub struct DeByteRecord<'r> {
     it: iter::Peekable<ByteRecordIter<'r>>,
     headers: Option<ByteRecordIter<'r>>,
     field: u64,
