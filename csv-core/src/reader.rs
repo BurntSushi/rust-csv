@@ -2,6 +2,9 @@ use core::fmt;
 
 use crate::Terminator;
 
+const MAX_NUM_WHITESPACES: usize = 6;
+const ALL_WHITESPACES: [u8;MAX_NUM_WHITESPACES] = [b' ', b'\t', b'\n', b'\r', b'\x0B', b'\x0C'];
+
 // BE ADVISED
 //
 // This may just be one of the more complicated CSV parsers you'll come across.
@@ -115,6 +118,11 @@ pub struct Reader {
     /// If enabled (the default), then quotes are respected. When disabled,
     /// quotes are not treated specially.
     quoting: bool,
+    /// Whether to trim leading spaces of a field.
+    trim_left: bool,
+    /// chars to trim when trim_left is true, including [ \t\r\n\v\f], excluding term and delimiter.
+    chars_to_trim: [u8;6],
+    num_chars_to_trim: usize,
     /// Whether to use the NFA for parsing.
     ///
     /// Generally this is for debugging. There's otherwise no good reason
@@ -141,6 +149,9 @@ impl Default for Reader {
             double_quote: true,
             comment: None,
             quoting: true,
+            trim_left: false,
+            chars_to_trim: ALL_WHITESPACES,
+            num_chars_to_trim: MAX_NUM_WHITESPACES,
             use_nfa: false,
             line: 1,
             has_read: false,
@@ -235,6 +246,46 @@ impl ReaderBuilder {
     /// This is disabled by default.
     pub fn comment(&mut self, comment: Option<u8>) -> &mut ReaderBuilder {
         self.rdr.comment = comment;
+        self
+    }
+
+    /// Whether to trim leading spaces of a field.
+    /// Spaces including [ \t\r\n\v\f], excluding term and delimiter if used.
+    ///
+    /// This is disabled by default.
+    pub fn trim_left(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.rdr.trim_left = yes;
+        let mut flags = [true; MAX_NUM_WHITESPACES];
+        match self.rdr.term {
+            Terminator::CRLF => {
+               flags[2] = false;
+               flags[3] = false;
+            }
+            Terminator::Any(b) => {
+                for i in 0..MAX_NUM_WHITESPACES {
+                    if  self.rdr.chars_to_trim[i] == b {
+                        flags[i] = false;
+                    }
+                }
+            }
+            Terminator::__Nonexhaustive => {
+                unreachable!()
+            }
+        };
+        for i in 0..MAX_NUM_WHITESPACES {
+            if  self.rdr.chars_to_trim[i] == self.rdr.delimiter {
+                flags[i] = false;
+            }
+        }
+        let mut dst = 0;
+        for i in 0..MAX_NUM_WHITESPACES {
+            if flags[i] {
+                self.rdr.chars_to_trim[dst] = self.rdr.chars_to_trim[i];
+                dst += 1;
+            }
+        }
+
+        self.rdr.num_chars_to_trim = dst;
         self
     }
 
@@ -820,6 +871,11 @@ impl Reader {
             }
             _ => unreachable!(),
         }
+        if self.trim_left {
+            for c in &self.chars_to_trim[..self.num_chars_to_trim] {
+                self.dfa.classes.add(*c);
+            }
+        }
         // Build the DFA transition table by computing the DFA state for all
         // possible combinations of state and input byte.
         for &state in NFA_STATES {
@@ -1007,6 +1063,8 @@ impl Reader {
                     (EndFieldDelim, NfaInputAction::Discard)
                 } else if self.term.equals(c) {
                     (EndFieldTerm, NfaInputAction::Epsilon)
+                } else if self.trim_left && self.chars_to_trim[..self.num_chars_to_trim].contains(&c) {
+                    (StartField, NfaInputAction::Discard)
                 } else {
                     (InField, NfaInputAction::CopyToOutput)
                 }
@@ -1071,13 +1129,13 @@ impl Reader {
 /// The number of slots in the DFA transition table.
 ///
 /// This number is computed by multiplying the maximum number of transition
-/// classes (7) by the total number of NFA states that are used in the DFA
+/// classes (13 by the total number of NFA states that are used in the DFA
 /// (10).
 ///
 /// The number of transition classes is determined by an equivalence class of
 /// bytes, where every byte in the same equivalence classes is
 /// indistinguishable from any other byte with respect to the DFA. For example,
-/// if neither `a` nor `b` are specifed as a delimiter/quote/terminator/escape,
+/// if neither `a` nor `b` are specified as a delimiter/quote/terminator/escape,
 /// then the DFA will never discriminate between `a` or `b`, so they can
 /// effectively be treated as identical. This reduces storage space
 /// substantially.
@@ -1086,7 +1144,7 @@ impl Reader {
 /// NFA states that are in the DFA. In particular, any NFA state that can only
 /// be reached by epsilon transitions will never have explicit usage in the
 /// DFA.
-const TRANS_CLASSES: usize = 7;
+const TRANS_CLASSES: usize = 7 + MAX_NUM_WHITESPACES;
 const DFA_STATES: usize = 10;
 const TRANS_SIZE: usize = TRANS_CLASSES * DFA_STATES;
 
@@ -1723,6 +1781,24 @@ mod tests {
         csv![["foo", "#bar", "baz"]],
         |b: &mut ReaderBuilder| {
             b.comment(Some(b'#'));
+        }
+    );
+
+    parses_to!(
+        trim_left_no_quote,
+        "foo, bar,  baz",
+        csv![["foo", "bar", "baz"]],
+        |b: &mut ReaderBuilder| {
+            b.trim_left(true);
+        }
+    );
+
+    parses_to!(
+        trim_left_quoted,
+        r#""abc"," foo", " bar", " ",  """#,
+        csv![["abc", " foo", " bar", " ", ""]],
+        |b: &mut ReaderBuilder| {
+            b.trim_left(true);
         }
     );
 
