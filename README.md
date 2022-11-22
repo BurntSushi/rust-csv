@@ -4,7 +4,7 @@ A fast and flexible CSV reader and writer for Rust, with support for Serde.
 
 [![Linux build status](https://api.travis-ci.org/BurntSushi/rust-csv.svg)](https://travis-ci.org/BurntSushi/rust-csv)
 [![Windows build status](https://ci.appveyor.com/api/projects/status/github/BurntSushi/rust-csv?svg=true)](https://ci.appveyor.com/project/BurntSushi/rust-csv)
-[![Crates.io](https://img.shields.io/crates/v/csv.svg)](https://crates.io/crates/csv)
+[![crates.io](https://img.shields.io/crates/v/csv.svg)](https://crates.io/crates/csv)
 
 Dual-licensed under MIT or the [UNLICENSE](https://unlicense.org/).
 
