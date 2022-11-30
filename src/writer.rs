@@ -1085,6 +1085,11 @@ impl<W: io::Write> Writer<W> {
         }
     }
 
+    /// Return an immutable reference to the underlying writer.
+    pub fn inner(&self) -> &W {
+        self.wtr.as_ref().expect("Called inner() with a None self.wtr")
+    }
+
     /// Write a CSV delimiter.
     fn write_delimiter(&mut self) -> Result<()> {
         loop {
