@@ -954,7 +954,10 @@ impl<W: io::Write> Writer<W> {
             // The maximum number of bytes for the terminator.
             + 2;
         if self.buf.writable().len() < upper_bound {
-            return self.write_record(record);
+            // Flush before writing a record, so we only flush on whole records
+            self.flush_buf()?;
+            // Fail if we cannot free enough buffer space
+            assert!(self.buf.writable().len() >= upper_bound, "Not enough buffer space");
         }
         let mut first = true;
         for field in record.iter() {
@@ -1080,6 +1083,11 @@ impl<W: io::Write> Writer<W> {
             Ok(()) => Ok(self.wtr.take().unwrap()),
             Err(err) => Err(IntoInnerError::new(self, err)),
         }
+    }
+
+    /// Return an immutable reference to the underlying writer.
+    pub fn inner(&self) -> &W {
+        self.wtr.as_ref().expect("Called inner() with a None self.wtr")
     }
 
     /// Write a CSV delimiter.

@@ -153,7 +153,7 @@ use std::result;
 
 use serde::{Deserialize, Deserializer};
 
-pub use crate::byte_record::{ByteRecord, ByteRecordIter, Position};
+pub use crate::byte_record::{ByteRecord, ByteRecordIter, Position, Span};
 pub use crate::deserializer::{DeserializeError, DeserializeErrorKind};
 pub use crate::error::{
     Error, ErrorKind, FromUtf8Error, IntoInnerError, Result, Utf8Error,
