@@ -2,9 +2,8 @@ csv
 ===
 A fast and flexible CSV reader and writer for Rust, with support for Serde.
 
-[![Linux build status](https://api.travis-ci.org/BurntSushi/rust-csv.svg)](https://travis-ci.org/BurntSushi/rust-csv)
-[![Windows build status](https://ci.appveyor.com/api/projects/status/github/BurntSushi/rust-csv?svg=true)](https://ci.appveyor.com/project/BurntSushi/rust-csv)
-[![](http://meritbadge.herokuapp.com/csv)](https://crates.io/crates/csv)
+[![Build status](https://github.com/BurntSushi/csv/workflows/ci/badge.svg)](https://github.com/BurntSushi/csv/actions)
+[![crates.io](https://img.shields.io/crates/v/csv.svg)](https://crates.io/crates/csv)
 
 Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
 
@@ -24,7 +23,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-csv = "1.1"
+csv = "1.2"
 ```
 
 ### Example
@@ -36,9 +35,7 @@ There are more examples in the
 [cookbook](https://docs.rs/csv/1.0.0/csv/cookbook/index.html).
 
 ```rust
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn example() -> Result<(), Box<dyn Error>> {
     // Build the CSV reader and iterate over each record.
@@ -75,13 +72,9 @@ By default, the member names of the struct are matched with the values in the
 header record of your CSV data.
 
 ```rust
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 struct Record {
     city: String,
     region: String,
