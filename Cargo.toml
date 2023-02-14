@@ -12,6 +12,7 @@ license = "Unlicense/MIT"
 categories = ["encoding", "parser-implementations"]
 exclude = ["/.github", "/ci/*", "/scripts/*"]
 edition = "2021"
+resolver = "2"
 
 [workspace]
 members = ["csv-core", "csv-index"]
@@ -20,13 +21,13 @@ members = ["csv-core", "csv-index"]
 bench = false
 
 [dependencies]
-bstr = { version = "0.2.1", features = ["serde1"] }
-csv-core = { path = "csv-core", version = "0.1.6" }
+csv-core = { path = "csv-core", version = "0.1.10" }
 itoa = "1"
 ryu = "1"
 serde = "1.0.55"
 
 [dev-dependencies]
+bstr = { version = "1.2.0", default-features = false, features = ["alloc", "serde"] }
 serde = { version = "1.0.55", features = ["derive"] }
 
 [profile.release]

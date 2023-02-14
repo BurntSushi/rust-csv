@@ -164,6 +164,7 @@ pub use crate::{
 
 mod byte_record;
 pub mod cookbook;
+mod debug;
 mod deserializer;
 mod error;
 mod reader;
