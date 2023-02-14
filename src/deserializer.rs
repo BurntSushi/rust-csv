@@ -1,20 +1,20 @@
-use std::error::Error as StdError;
-use std::fmt;
-use std::iter;
-use std::num;
-use std::str;
+use std::{error::Error as StdError, fmt, iter, num, str};
 
-use serde::de::value::BorrowedBytesDeserializer;
-use serde::de::{
-    Deserialize, DeserializeSeed, Deserializer, EnumAccess,
-    Error as SerdeError, IntoDeserializer, MapAccess, SeqAccess, Unexpected,
-    VariantAccess, Visitor,
+use serde::{
+    de::value::BorrowedBytesDeserializer,
+    de::{
+        Deserialize, DeserializeSeed, Deserializer, EnumAccess,
+        Error as SerdeError, IntoDeserializer, MapAccess, SeqAccess,
+        Unexpected, VariantAccess, Visitor,
+    },
+    serde_if_integer128,
 };
-use serde::serde_if_integer128;
 
-use crate::byte_record::{ByteRecord, ByteRecordIter};
-use crate::error::{Error, ErrorKind};
-use crate::string_record::{StringRecord, StringRecordIter};
+use crate::{
+    byte_record::{ByteRecord, ByteRecordIter},
+    error::{Error, ErrorKind},
+    string_record::{StringRecord, StringRecordIter},
+};
 
 use self::DeserializeErrorKind as DEK;
 
@@ -795,13 +795,16 @@ fn try_float_bytes(s: &[u8]) -> Option<f64> {
 mod tests {
     use std::collections::HashMap;
 
-    use bstr::BString;
-    use serde::{de::DeserializeOwned, serde_if_integer128, Deserialize};
+    use {
+        bstr::BString,
+        serde::{de::DeserializeOwned, serde_if_integer128, Deserialize},
+    };
+
+    use crate::{
+        byte_record::ByteRecord, error::Error, string_record::StringRecord,
+    };
 
     use super::{deserialize_byte_record, deserialize_string_record};
-    use crate::byte_record::ByteRecord;
-    use crate::error::Error;
-    use crate::string_record::StringRecord;
 
     fn de<D: DeserializeOwned>(fields: &[&str]) -> Result<D, Error> {
         let record = StringRecord::from(fields);
