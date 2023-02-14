@@ -133,19 +133,7 @@ impl From<Error> for io::Error {
     }
 }
 
-impl StdError for Error {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match *self.0 {
-            ErrorKind::Io(ref err) => Some(err),
-            ErrorKind::Utf8 { ref err, .. } => Some(err),
-            ErrorKind::UnequalLengths { .. } => None,
-            ErrorKind::Seek => None,
-            ErrorKind::Serialize(_) => None,
-            ErrorKind::Deserialize { ref err, .. } => Some(err),
-            _ => unreachable!(),
-        }
-    }
-}
+impl StdError for Error {}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -333,11 +321,7 @@ impl<W> IntoInnerError<W> {
     }
 }
 
-impl<W: std::any::Any> StdError for IntoInnerError<W> {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        self.err.source()
-    }
-}
+impl<W: std::any::Any> StdError for IntoInnerError<W> {}
 
 impl<W> fmt::Display for IntoInnerError<W> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
