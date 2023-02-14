@@ -13,10 +13,6 @@ categories = ["encoding", "parser-implementations"]
 exclude = ["/.travis.yml", "/appveyor.yml", "/ci/*", "/scripts/*"]
 edition = "2018"
 
-[badges]
-travis-ci = { repository = "BurntSushi/rust-csv" }
-appveyor = { repository = "BurntSushi/rust-csv" }
-
 [workspace]
 members = ["csv-core", "csv-index"]
 

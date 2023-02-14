@@ -1,0 +1,99 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches:
+    - master
+  schedule:
+    - cron: '00 01 * * *'
+jobs:
+  test:
+    name: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # The docs seem to suggest that we can have a matrix with just an
+        # include directive, but it results in a "matrix must define at least
+        # one vector" error in the CI system.
+        build: [pinned, stable, beta, nightly, macos, win-msvc, win-gnu]
+        include:
+        - build: pinned
+          os: ubuntu-22.04
+          rust: 1.60.0
+        - build: stable
+          os: ubuntu-22.04
+          rust: stable
+        - build: beta
+          os: ubuntu-22.04
+          rust: beta
+        - build: nightly
+          os: ubuntu-22.04
+          rust: nightly
+        - build: macos
+          os: macos-12
+          rust: stable
+        - build: win-msvc
+          os: windows-2022
+          rust: stable
+        - build: win-gnu
+          os: windows-2022
+          rust: stable-x86_64-gnu
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+    - run: cargo build --verbose
+    - run: cargo doc --verbose
+    - run: cargo test --verbose
+    - run: cargo test --verbose --manifest-path csv-core/Cargo.toml
+    - run: cargo test --verbose --manifest-path csv-index/Cargo.toml
+    - if: matrix.build == 'nightly'
+      run: cargo bench --verbose --no-run
+
+  rustfmt:
+    name: check tutorial and cookbook examples
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        components: rustfmt
+    - name: check that cookbook examples are up to date and in sync
+      run: ci/check-copy cookbook
+    - name: check that tutorial examples are up to date and in sync
+      run: ci/check-copy tutorial
+
+  check-doc-sync:
+    name: rustfmt
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        components: rustfmt
+    - name: Check formatting
+      run: cargo fmt --check
+
+  miri:
+    name: miri
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@miri
+    - run: cargo miri test --lib --verbose
+      env:
+        MIRIFLAGS: -Zmiri-strict-provenance
+    - run: cargo miri test --doc --verbose
+      env:
+        MIRIFLAGS: -Zmiri-strict-provenance
