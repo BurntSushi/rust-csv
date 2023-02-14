@@ -1,18 +1,21 @@
-use std::fmt;
-use std::io;
-use std::mem;
+use std::{fmt, io, mem};
 
-use itoa;
-use ryu;
-use serde::ser::{
-    Error as SerdeError, Serialize, SerializeMap, SerializeSeq,
-    SerializeStruct, SerializeStructVariant, SerializeTuple,
-    SerializeTupleStruct, SerializeTupleVariant, Serializer,
+use {
+    itoa, ryu,
+    serde::{
+        ser::{
+            Error as SerdeError, Serialize, SerializeMap, SerializeSeq,
+            SerializeStruct, SerializeStructVariant, SerializeTuple,
+            SerializeTupleStruct, SerializeTupleVariant, Serializer,
+        },
+        serde_if_integer128,
+    },
 };
-use serde::serde_if_integer128;
 
-use crate::error::{Error, ErrorKind};
-use crate::writer::Writer;
+use crate::{
+    error::{Error, ErrorKind},
+    writer::Writer,
+};
 
 /// Serialize the given value to the given writer, and return an error if
 /// anything went wrong.
@@ -20,7 +23,7 @@ pub fn serialize<S: Serialize, W: io::Write>(
     wtr: &mut Writer<W>,
     value: S,
 ) -> Result<(), Error> {
-    value.serialize(&mut SeRecord { wtr: wtr })
+    value.serialize(&mut SeRecord { wtr })
 }
 
 struct SeRecord<'w, W: 'w + io::Write> {
@@ -452,7 +455,7 @@ struct SeHeader<'w, W: 'w + io::Write> {
 
 impl<'w, W: io::Write> SeHeader<'w, W> {
     fn new(wtr: &'w mut Writer<W>) -> Self {
-        SeHeader { wtr: wtr, state: HeaderState::Write }
+        SeHeader { wtr, state: HeaderState::Write }
     }
 
     fn wrote_header(&self) -> bool {
@@ -818,11 +821,15 @@ impl<'a, 'w, W: io::Write> SerializeStructVariant for &'a mut SeHeader<'w, W> {
 
 #[cfg(test)]
 mod tests {
-    use bstr::ByteSlice;
-    use serde::{serde_if_integer128, Serialize};
+    use {
+        bstr::ByteSlice,
+        serde::{serde_if_integer128, Serialize},
+    };
 
-    use crate::error::{Error, ErrorKind};
-    use crate::writer::Writer;
+    use crate::{
+        error::{Error, ErrorKind},
+        writer::Writer,
+    };
 
     use super::{SeHeader, SeRecord};
 

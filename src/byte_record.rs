@@ -1,15 +1,20 @@
-use std::cmp;
-use std::fmt;
-use std::iter::FromIterator;
-use std::ops::{self, Range};
-use std::result;
+use std::{
+    cmp, fmt,
+    iter::FromIterator,
+    ops::{self, Range},
+    result,
+};
 
-use bstr::{BString, ByteSlice};
-use serde::de::Deserialize;
+use {
+    bstr::{BString, ByteSlice},
+    serde::de::Deserialize,
+};
 
-use crate::deserializer::deserialize_byte_record;
-use crate::error::{new_utf8_error, Result, Utf8Error};
-use crate::string_record::StringRecord;
+use crate::{
+    deserializer::deserialize_byte_record,
+    error::{new_utf8_error, Result, Utf8Error},
+    string_record::StringRecord,
+};
 
 /// A single CSV record stored as raw bytes.
 ///
@@ -681,7 +686,7 @@ impl Bounds {
             None => 0,
             Some(&start) => start,
         };
-        Some(ops::Range { start: start, end: end })
+        Some(ops::Range { start, end })
     }
 
     /// Returns a slice of ending positions of all fields.

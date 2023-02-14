@@ -1,16 +1,18 @@
-use std::fmt;
-use std::io;
-use std::iter::FromIterator;
-use std::ops::{self, Range};
-use std::result;
-use std::str;
+use std::{
+    fmt, io,
+    iter::FromIterator,
+    ops::{self, Range},
+    result, str,
+};
 
 use serde::de::Deserialize;
 
-use crate::byte_record::{ByteRecord, ByteRecordIter, Position};
-use crate::deserializer::deserialize_string_record;
-use crate::error::{Error, ErrorKind, FromUtf8Error, Result};
-use crate::reader::Reader;
+use crate::{
+    byte_record::{ByteRecord, ByteRecordIter, Position},
+    deserializer::deserialize_string_record,
+    error::{Error, ErrorKind, FromUtf8Error, Result},
+    reader::Reader,
+};
 
 /// A single CSV record stored as valid UTF-8 bytes.
 ///
@@ -226,9 +228,8 @@ impl StringRecord {
     /// use std::error::Error;
     ///
     /// use csv::StringRecord;
-    /// use serde::Deserialize;
     ///
-    /// #[derive(Deserialize)]
+    /// #[derive(serde::Deserialize)]
     /// struct Row<'a> {
     ///     city: &'a str,
     ///     country: &'a str,
@@ -262,9 +263,8 @@ impl StringRecord {
     /// use std::error::Error;
     ///
     /// use csv::StringRecord;
-    /// use serde::Deserialize;
     ///
-    /// #[derive(Deserialize)]
+    /// #[derive(serde::Deserialize)]
     /// struct Row {
     ///     city: String,
     ///     country: String,
@@ -646,7 +646,7 @@ impl StringRecord {
         match (read_res, utf8_res) {
             (Err(err), _) => Err(err),
             (Ok(_), Err(err)) => {
-                Err(Error::new(ErrorKind::Utf8 { pos: Some(pos), err: err }))
+                Err(Error::new(ErrorKind::Utf8 { pos: Some(pos), err }))
             }
             (Ok(eof), Ok(())) => Ok(eof),
         }

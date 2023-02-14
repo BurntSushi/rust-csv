@@ -1,10 +1,9 @@
-use std::error::Error as StdError;
-use std::fmt;
-use std::io;
-use std::result;
+use std::{error::Error as StdError, fmt, io, result};
 
-use crate::byte_record::{ByteRecord, Position};
-use crate::deserializer::DeserializeError;
+use crate::{
+    byte_record::{ByteRecord, Position},
+    deserializer::DeserializeError,
+};
 
 /// A type alias for `Result<T, csv::Error>`.
 pub type Result<T> = result::Result<T, Error>;
@@ -227,8 +226,8 @@ pub struct FromUtf8Error {
 
 impl FromUtf8Error {
     /// Create a new FromUtf8Error.
-    pub(crate) fn new(rec: ByteRecord, err: Utf8Error) -> FromUtf8Error {
-        FromUtf8Error { record: rec, err: err }
+    pub(crate) fn new(record: ByteRecord, err: Utf8Error) -> FromUtf8Error {
+        FromUtf8Error { record, err }
     }
 
     /// Access the underlying `ByteRecord` that failed UTF-8 validation.
@@ -271,7 +270,7 @@ pub struct Utf8Error {
 
 /// Create a new UTF-8 error.
 pub fn new_utf8_error(field: usize, valid_up_to: usize) -> Utf8Error {
-    Utf8Error { field: field, valid_up_to: valid_up_to }
+    Utf8Error { field, valid_up_to }
 }
 
 impl Utf8Error {
@@ -315,7 +314,7 @@ impl<W> IntoInnerError<W> {
     /// (This is a visibility hack. It's public in this module, but not in the
     /// crate.)
     pub(crate) fn new(wtr: W, err: io::Error) -> IntoInnerError<W> {
-        IntoInnerError { wtr: wtr, err: err }
+        IntoInnerError { wtr, err }
     }
 
     /// Returns the error which caused the call to `into_inner` to fail.
