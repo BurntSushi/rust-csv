@@ -1,6 +1,4 @@
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 // This introduces a type alias so that we can conveniently reference our
 // record type.

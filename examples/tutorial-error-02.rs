@@ -1,5 +1,4 @@
-use std::io;
-use std::process;
+use std::{io, process};
 
 fn main() {
     let mut rdr = csv::Reader::from_reader(io::stdin());

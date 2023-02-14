@@ -1,7 +1,4 @@
-use std::env;
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{env, error::Error, io, process};
 
 use serde::{Deserialize, Serialize};
 

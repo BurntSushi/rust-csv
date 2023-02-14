@@ -281,8 +281,7 @@ let's get rid of the panic and print an error message manually:
 
 ```no_run
 //tutorial-error-02.rs
-use std::io;
-use std::process;
+use std::{io, process};
 
 fn main() {
     let mut rdr = csv::Reader::from_reader(io::stdin());
@@ -320,9 +319,7 @@ error, which our `main` function can then inspect and decide what to do with.
 
 ```no_run
 //tutorial-error-03.rs
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn main() {
     if let Err(err) = run() {
@@ -360,9 +357,7 @@ special Rust language feature: the question mark.
 
 ```no_run
 //tutorial-error-04.rs
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn main() {
     if let Err(err) = run() {
@@ -416,11 +411,13 @@ path argument instead of stdin.
 
 ```no_run
 //tutorial-read-01.rs
-use std::env;
-use std::error::Error;
-use std::ffi::OsString;
-use std::fs::File;
-use std::process;
+use std::{
+    env,
+    error::Error,
+    ffi::OsString,
+    fs::File,
+    process,
+};
 
 fn run() -> Result<(), Box<dyn Error>> {
     let file_path = get_first_arg()?;
@@ -524,9 +521,7 @@ produces terser examples.)
 
 ```no_run
 //tutorial-read-headers-01.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# use std::{error::Error, io, process};
 #
 fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::ReaderBuilder::new()
@@ -565,9 +560,7 @@ method like so:
 
 ```no_run
 //tutorial-read-headers-02.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# use std::{error::Error, io, process};
 #
 fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
@@ -646,9 +639,7 @@ as seen in the following example:
 
 ```no_run
 //tutorial-read-delimiter-01.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# use std::{error::Error, io, process};
 #
 fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::ReaderBuilder::new()
@@ -734,9 +725,7 @@ a lot of manual work. This next example shows how.
 
 ```no_run
 //tutorial-read-serde-01.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# use std::{error::Error, io, process};
 #
 fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
@@ -777,9 +766,7 @@ type: `(String, String, Option<u64>, f64, f64)`.
 
 ```no_run
 //tutorial-read-serde-02.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# use std::{error::Error, io, process};
 #
 // This introduces a type alias so that we can conveniently reference our
 // record type.
@@ -831,9 +818,7 @@ a new `use` statement that imports `HashMap` from the standard library:
 ```no_run
 //tutorial-read-serde-03.rs
 use std::collections::HashMap;
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# use std::{error::Error, io, process};
 
 // This introduces a type alias so that we can conveniently reference our
 // record type.
@@ -889,9 +874,8 @@ how. Don't miss the new Serde imports!
 
 ```no_run
 //tutorial-read-serde-04.rs
-use std::error::Error;
-use std::io;
-use std::process;
+# #![allow(dead_code)]
+# use std::{error::Error, io, process};
 
 // This lets us write `#[derive(Deserialize)]`.
 use serde::Deserialize;
@@ -1027,9 +1011,8 @@ Let's start by running our program from the previous section:
 
 ```no_run
 //tutorial-read-serde-invalid-01.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# #![allow(dead_code)]
+# use std::{error::Error, io, process};
 #
 # use serde::Deserialize;
 #
@@ -1096,9 +1079,8 @@ to a `None` value, as shown in this next example:
 
 ```no_run
 //tutorial-read-serde-invalid-02.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# #![allow(dead_code)]
+# use std::{error::Error, io, process};
 #
 # use serde::Deserialize;
 #[derive(Debug, Deserialize)]
@@ -1164,9 +1146,7 @@ Let's start with the most basic example: writing a few CSV records to `stdout`.
 
 ```no_run
 //tutorial-write-01.rs
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
@@ -1273,10 +1253,12 @@ of `stdout`:
 
 ```no_run
 //tutorial-write-02.rs
-use std::env;
-use std::error::Error;
-use std::ffi::OsString;
-use std::process;
+use std::{
+    env,
+    error::Error,
+    ffi::OsString,
+    process,
+};
 
 fn run() -> Result<(), Box<dyn Error>> {
     let file_path = get_first_arg()?;
@@ -1334,9 +1316,7 @@ Here's an example:
 
 ```no_run
 //tutorial-write-delimiter-01.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# use std::{error::Error, io, process};
 #
 fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::WriterBuilder::new()
@@ -1390,9 +1370,7 @@ As with reading, let's start by seeing how we can serialize a Rust tuple.
 
 ```no_run
 //tutorial-write-serde-01.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# use std::{error::Error, io, process};
 #
 fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
@@ -1460,9 +1438,7 @@ shown in the example:
 
 ```no_run
 //tutorial-write-serde-02.rs
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 use serde::Serialize;
 
@@ -1589,10 +1565,7 @@ rows with a field that matches the query.
 
 ```no_run
 //tutorial-pipeline-search-01.rs
-use std::env;
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{env, error::Error, io, process};
 
 fn run() -> Result<(), Box<dyn Error>> {
     // Get the query from the positional arguments.
@@ -1709,10 +1682,7 @@ change:
 
 ```no_run
 //tutorial-pipeline-search-02.rs
-# use std::env;
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# use std::{env, error::Error, io, process};
 #
 fn run() -> Result<(), Box<dyn Error>> {
     let query = match env::args().nth(1) {
@@ -1781,10 +1751,7 @@ Now here's the code:
 
 ```no_run
 //tutorial-pipeline-pop-01.rs
-use std::env;
-use std::error::Error;
-use std::io;
-use std::process;
+# use std::{env, error::Error, io, process};
 
 use serde::{Deserialize, Serialize};
 
@@ -1914,9 +1881,7 @@ adapting a previous example to count the number of records in
 
 ```no_run
 //tutorial-perf-alloc-01.rs
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
@@ -1972,9 +1937,7 @@ shown in the next example:
 
 ```no_run
 //tutorial-perf-alloc-02.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# use std::{error::Error, io, process};
 #
 fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
@@ -2055,9 +2018,7 @@ method.
 
 ```no_run
 //tutorial-perf-alloc-03.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# use std::{error::Error, io, process};
 #
 fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
@@ -2136,9 +2097,8 @@ example using Serde in a previous section:
 
 ```no_run
 //tutorial-perf-serde-01.rs
-use std::error::Error;
-use std::io;
-use std::process;
+# #![allow(dead_code)]
+use std::{error::Error, io, process};
 
 use serde::Deserialize;
 
@@ -2205,10 +2165,8 @@ like:
 
 ```no_run
 //tutorial-perf-serde-02.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
-#
+# #![allow(dead_code)]
+# use std::{error::Error, io, process};
 # use serde::Deserialize;
 #
 #[derive(Debug, Deserialize)]
@@ -2292,9 +2250,8 @@ of `StringRecord`:
 
 ```no_run
 //tutorial-perf-serde-03.rs
-# use std::error::Error;
-# use std::io;
-# use std::process;
+# #![allow(dead_code)]
+# use std::{error::Error, io, process};
 #
 # use serde::Deserialize;
 #

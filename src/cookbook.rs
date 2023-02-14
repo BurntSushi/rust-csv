@@ -31,9 +31,7 @@ stdout.
 
 ```no_run
 # //cookbook-read-basic.rs
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn example() -> Result<(), Box<dyn Error>> {
     // Build the CSV reader and iterate over each record.
@@ -74,9 +72,8 @@ method.
 
 ```no_run
 # //cookbook-read-serde.rs
-use std::error::Error;
-use std::io;
-use std::process;
+# #![allow(dead_code)]
+use std::{error::Error, io, process};
 
 use serde::Deserialize;
 
@@ -124,9 +121,7 @@ by `:` instead of `,`.
 
 ```no_run
 # //cookbook-read-colon.rs
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn example() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::ReaderBuilder::new()
@@ -164,9 +159,7 @@ first record is not skipped. This example shows how to disable that setting.
 
 ```no_run
 # //cookbook-read-no-headers.rs
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn example() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::ReaderBuilder::new()
@@ -201,9 +194,7 @@ This example shows how to write CSV data to stdout.
 
 ```no_run
 # //cookbook-write-basic.rs
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn example() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
@@ -241,9 +232,7 @@ headers are written automatically.
 
 ```no_run
 # //cookbook-write-serde.rs
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 use serde::Serialize;
 

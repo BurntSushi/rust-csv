@@ -1,8 +1,6 @@
-use std::error::Error;
-use std::io;
-use std::process;
-
+#![allow(dead_code)]
 use serde::Deserialize;
+use std::{error::Error, io, process};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
