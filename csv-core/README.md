@@ -3,11 +3,10 @@ csv-core
 A fast CSV reader and write for use in a `no_std` context. This crate will
 never use the Rust standard library.
 
-[![Linux build status](https://api.travis-ci.org/BurntSushi/rust-csv.png)](https://travis-ci.org/BurntSushi/rust-csv)
-[![Windows build status](https://ci.appveyor.com/api/projects/status/github/BurntSushi/rust-csv?svg=true)](https://ci.appveyor.com/project/BurntSushi/rust-csv)
-[![](http://meritbadge.herokuapp.com/csv-core)](https://crates.io/crates/csv-core)
+[![Build status](https://github.com/BurntSushi/rust-csv/workflows/ci/badge.svg)](https://github.com/BurntSushi/rust-csv/actions)
+[![crates.io](https://img.shields.io/crates/v/csv-core.svg)](https://crates.io/crates/csv-core)
 
-Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
+Dual-licensed under MIT or the [UNLICENSE](https://unlicense.org/).
 
 ### Documentation
 
@@ -19,7 +18,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-csv-core = "0.1.6"
+csv-core = "0.1.10"
 ```
 
 ### Build features

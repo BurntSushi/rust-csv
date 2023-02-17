@@ -42,7 +42,7 @@ the book first.
 
 In this section, we'll get you setup with a simple program that reads CSV data
 and prints a "debug" version of each record. This assumes that you have the
-[Rust toolchain installed](https://www.rust-lang.org/install.html),
+[Rust toolchain installed](https://www.rust-lang.org/tools/install),
 which includes both Rust and Cargo.
 
 We'll start by creating a new Cargo project:
@@ -148,7 +148,7 @@ Note that
 contains an
 [introduction to general error handling](https://doc.rust-lang.org/book/second-edition/ch09-00-error-handling.html).
 For a deeper dive, see
-[my blog post on error handling in Rust](http://blog.burntsushi.net/rust-error-handling/).
+[my blog post on error handling in Rust](https://blog.burntsushi.net/rust-error-handling/).
 The blog post is especially important if you plan on building Rust libraries.
 
 With that out of the way, error handling in Rust comes in two different forms:
@@ -391,7 +391,7 @@ inspect the specific error condition that occurred. However, since this is a
 tutorial on writing command line programs that do CSV parsing, we will consider
 ourselves satisfied. If you'd like to know more, or are interested in writing
 a library that handles CSV data, then you should check out my
-[blog post on error handling](http://blog.burntsushi.net/rust-error-handling/).
+[blog post on error handling](https://blog.burntsushi.net/rust-error-handling/).
 
 With all that said, if all you're doing is writing a one-off program to do
 CSV transformations, then using methods like `expect` and panicking when an
@@ -1853,7 +1853,7 @@ such a dataset, we'll use the original source of `uspop.csv`. **Warning: the
 download is 41MB compressed and decompresses to 145MB.**
 
 ```text
-$ curl -LO http://burntsushi.net/stuff/worldcitiespop.csv.gz
+$ curl -LO https://burntsushi.net/stuff/worldcitiespop.csv.gz
 $ gunzip worldcitiespop.csv.gz
 $ wc worldcitiespop.csv
   3173959   5681543 151492068 worldcitiespop.csv

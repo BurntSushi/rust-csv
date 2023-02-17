@@ -3,11 +3,10 @@ csv-index
 A collection of data structures for indexing CSV data, with a focus on data
 structures that can be easily serialized to and deserialized from disk.
 
-[![Linux build status](https://api.travis-ci.org/BurntSushi/rust-csv.png)](https://travis-ci.org/BurntSushi/rust-csv)
-[![Windows build status](https://ci.appveyor.com/api/projects/status/github/BurntSushi/rust-csv?svg=true)](https://ci.appveyor.com/project/BurntSushi/rust-csv)
-[![](http://meritbadge.herokuapp.com/csv-index)](https://crates.io/crates/csv-index)
+[![Build status](https://github.com/BurntSushi/rust-csv/workflows/ci/badge.svg)](https://github.com/BurntSushi/rust-csv/actions)
+[![crates.io](https://img.shields.io/crates/v/csv-index.svg)](https://crates.io/crates/csv-index)
 
-Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
+Dual-licensed under MIT or the [UNLICENSE](https://unlicense.org/).
 
 ### Documentation
 
