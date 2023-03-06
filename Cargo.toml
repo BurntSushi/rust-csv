@@ -1,6 +1,6 @@
 [package]
 name = "csv"
-version = "1.2.0"  #:version
+version = "1.2.1"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 description = "Fast CSV parsing with support for serde."
 documentation = "https://docs.rs/csv"
