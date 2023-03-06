@@ -312,6 +312,15 @@ impl<W> IntoInnerError<W> {
         &self.err
     }
 
+    /// Consumes the [`IntoInnerError`] and returns the error which caused the
+    /// call to [`Writer::into_inner`](crate::Writer::into_inner) to fail.
+    ///
+    /// Unlike [`IntoInnerError::error`], this can be used to obtain ownership
+    /// of the underlying error.
+    pub fn into_error(self) -> io::Error {
+        self.err
+    }
+
     /// Returns the underlying writer which generated the error.
     ///
     /// The returned value can be used for error recovery, such as
