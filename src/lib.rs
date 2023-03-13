@@ -42,20 +42,12 @@ position information, configuration knobs or iterator types.
 
 # Setup
 
-Add this to your `Cargo.toml`:
-
-```toml
-[dependencies]
-csv = "1.1"
-```
+Run `cargo add csv` to add the latest version of the `csv` crate to your
+Cargo.toml.
 
 If you want to use Serde's custom derive functionality on your custom structs,
-then add this to your `[dependencies]` section of `Cargo.toml`:
-
-```toml
-[dependencies]
-serde = { version = "1", features = ["derive"] }
-```
+then run `cargo add serde --features derive` to add the `serde` crate with its
+`derive` feature enabled to your `Cargo.toml`.
 
 # Example
 
