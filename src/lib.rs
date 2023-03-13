@@ -46,7 +46,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-csv = "1.1"
+csv = "1.2"
 ```
 
 If you want to use Serde's custom derive functionality on your custom structs,
