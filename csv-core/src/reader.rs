@@ -1238,7 +1238,7 @@ impl DfaClasses {
             panic!("added too many classes")
         }
         self.classes[b as usize] = self.next_class as u8;
-        self.next_class = self.next_class + 1;
+        self.next_class += 1;
     }
 
     fn num_classes(&self) -> usize {
