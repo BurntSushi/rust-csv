@@ -1,5 +1,3 @@
-use std::{error::Error as StdError, fmt, iter, num, str};
-
 use serde::{
     de::value::BorrowedBytesDeserializer,
     de::{
@@ -9,6 +7,7 @@ use serde::{
     },
     serde_if_integer128,
 };
+use std::{error::Error as StdError, fmt, iter, num, str};
 
 use crate::{
     byte_record::{ByteRecord, ByteRecordIter},
@@ -22,11 +21,14 @@ pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
     record: &'de StringRecord,
     headers: Option<&'de StringRecord>,
 ) -> Result<D, Error> {
-    let mut deser = DeRecordWrap(DeStringRecord {
-        it: record.iter().peekable(),
-        headers: headers.map(|r| r.iter()),
-        field: 0,
-    });
+    let mut deser = DeRecordWrap(
+        DeStringRecord {
+            it: record.iter().peekable(),
+            headers: headers.map(|r| r.iter()),
+            field: 0,
+        },
+        None,
+    );
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
@@ -39,11 +41,14 @@ pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
     record: &'de ByteRecord,
     headers: Option<&'de ByteRecord>,
 ) -> Result<D, Error> {
-    let mut deser = DeRecordWrap(DeByteRecord {
-        it: record.iter().peekable(),
-        headers: headers.map(|r| r.iter()),
-        field: 0,
-    });
+    let mut deser = DeRecordWrap(
+        DeByteRecord {
+            it: record.iter().peekable(),
+            headers: headers.map(|r| r.iter()),
+            field: 0,
+        },
+        None,
+    );
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
@@ -99,7 +104,7 @@ trait DeRecord<'r> {
     ) -> Result<V::Value, DeserializeError>;
 }
 
-struct DeRecordWrap<T>(T);
+struct DeRecordWrap<T>(T, Option<Vec<u8>>); // inner, fieldName
 
 impl<'r, T: DeRecord<'r>> DeRecord<'r> for DeRecordWrap<T> {
     #[inline]
@@ -638,6 +643,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> MapAccess<'de>
             None => return Ok(None),
             Some(field) => field,
         };
+        self.1 = Some(field.to_owned());
         seed.deserialize(BorrowedBytesDeserializer::new(field)).map(Some)
     }
 
@@ -645,7 +651,25 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> MapAccess<'de>
         &mut self,
         seed: K,
     ) -> Result<K::Value, Self::Error> {
-        seed.deserialize(&mut **self)
+        let field_value = self.peek_field();
+        seed.deserialize(&mut **self).map_err(|e| {
+            // enhance error with field name and field value
+            let DeserializeError { field, kind } = e;
+            DeserializeError {
+                field,
+                kind: DeserializeErrorKind::Message(format!(
+                    "{}. (Field '{}' has a value '{}')",
+                    kind.to_string(),
+                    self.1
+                        .clone()
+                        .map_or("".to_owned(), |x| String::from_utf8(x)
+                            .unwrap()),
+                    field_value.map_or("n/a".to_owned(), |d| {
+                        String::from_utf8(d.to_owned()).unwrap()
+                    })
+                )),
+            }
+        })
     }
 }
 
