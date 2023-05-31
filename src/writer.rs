@@ -1068,6 +1068,11 @@ impl<W: io::Write> Writer<W> {
         Ok(())
     }
 
+    /// Return a reference to the underlying writer.
+    pub fn get_ref(&self) -> &W {
+        self.wtr.as_ref().unwrap()
+    }
+
     /// Flush the contents of the internal buffer and return the underlying
     /// writer.
     pub fn into_inner(
