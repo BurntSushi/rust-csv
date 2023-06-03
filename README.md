@@ -5,7 +5,7 @@ A fast and flexible CSV reader and writer for Rust, with support for Serde.
 [![Build status](https://github.com/BurntSushi/rust-csv/workflows/ci/badge.svg)](https://github.com/BurntSushi/rust-csv/actions)
 [![crates.io](https://img.shields.io/crates/v/csv.svg)](https://crates.io/crates/csv)
 
-Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
+Dual-licensed under MIT or the [UNLICENSE](https://unlicense.org/).
 
 
 ### Documentation
@@ -13,7 +13,7 @@ Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
 https://docs.rs/csv
 
 If you're new to Rust, the
-[tutorial](https://docs.rs/csv/1.0.0/csv/tutorial/index.html)
+[tutorial](https://docs.rs/csv/*/csv/tutorial/index.html)
 is a good place to start.
 
 
@@ -32,7 +32,7 @@ This example shows how to read CSV data from stdin and print each record to
 stdout.
 
 There are more examples in the
-[cookbook](https://docs.rs/csv/1.0.0/csv/cookbook/index.html).
+[cookbook](https://docs.rs/csv/*/csv/cookbook/index.html).
 
 ```rust
 use std::{error::Error, io, process};
