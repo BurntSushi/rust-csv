@@ -1127,6 +1127,7 @@ impl<W: io::Write> Writer<W> {
                 self.buf.writable()[0] = b;
                 self.buf.written(1);
             }
+            csv_core::Terminator::NONE => {}
             _ => unreachable!(),
         }
         self.state.fields_written = 0;
@@ -1413,5 +1414,15 @@ mod tests {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.serialize((true, 1.3, "hi")).unwrap();
         assert_eq!(wtr_as_string(wtr), "true,1.3,hi\n");
+    }
+
+    #[test]
+    fn quoting_witout_terminator_char() {
+        let mut wtr = WriterBuilder::new()
+            .terminator(crate::Terminator::NONE)
+            .from_writer(vec![]);
+
+        wtr.write_record(&["foo \" bar"]).unwrap();
+        assert_eq!(wtr_as_string(wtr), "\"foo \"\" bar\"");
     }
 }

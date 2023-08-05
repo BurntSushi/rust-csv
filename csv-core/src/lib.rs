@@ -120,6 +120,9 @@ pub enum Terminator {
     CRLF,
     /// Parses the byte given as a record terminator.
     Any(u8),
+    /// Disable line terminator
+    /// This is useful when writing single line field by field with proper qoting
+    NONE,
     /// Hints that destructuring should not be exhaustive.
     ///
     /// This enum may grow additional variants, so this makes sure clients

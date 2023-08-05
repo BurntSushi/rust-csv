@@ -54,6 +54,9 @@ impl WriterBuilder {
             Any(b) => {
                 wtr.requires_quotes[b as usize] = true;
             }
+            NONE => {
+                wtr.requires_quotes[usize::MIN] = true;
+            }
             _ => unreachable!(),
         }
         wtr
@@ -375,6 +378,7 @@ impl Writer {
         let (res, o) = match self.term {
             Terminator::CRLF => write_pessimistic(&[b'\r', b'\n'], output),
             Terminator::Any(b) => write_pessimistic(&[b], output),
+            Terminator::NONE => write_pessimistic(&[], output),
             _ => unreachable!(),
         };
         if o == 0 {
