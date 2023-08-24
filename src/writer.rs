@@ -1059,7 +1059,7 @@ impl<W: io::Write> Writer<W> {
 
     /// Flush the contents of the internal buffer to the underlying writer,
     /// without flushing the underlying writer.
-    fn flush_buf(&mut self) -> io::Result<()> {
+    pub fn flush_buf(&mut self) -> io::Result<()> {
         self.state.panicked = true;
         let result = self.wtr.as_mut().unwrap().write_all(self.buf.readable());
         self.state.panicked = false;
