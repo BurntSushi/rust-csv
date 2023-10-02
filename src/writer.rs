@@ -493,7 +493,6 @@ impl WriterBuilder {
     ///     Ok(())
     /// }
     /// ```
-
     pub fn comment(&mut self, comment: Option<u8>) -> &mut WriterBuilder {
         self.builder.comment(comment);
         self

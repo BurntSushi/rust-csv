@@ -1065,4 +1065,21 @@ mod tests {
         inp = &inp[1..];
         assert_quote!(inp, out, 1, 2, InputEmpty, r#""""#);
     }
+
+    #[test]
+    fn comment_char_is_automatically_quoted() {
+        let mut wtr = WriterBuilder::new().comment(Some(b'#')).build();
+        let out = &mut [0; 1024];
+
+        assert_field!(
+            wtr,
+            b("# abc"),
+            &mut out[..],
+            5,
+            6,
+            InputEmpty,
+            "\"# abc"
+        );
+        assert_write!(wtr, finish, &mut out[..], 1, InputEmpty, "\"");
+    }
 }
