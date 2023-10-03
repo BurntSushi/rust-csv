@@ -12,8 +12,7 @@ license = "Unlicense/MIT"
 categories = ["encoding", "parser-implementations"]
 exclude = ["/.github", "/ci/*", "/scripts/*"]
 edition = "2021"
-resolver = "2"
-rust-version = "1.60"
+rust-version = "1.61"
 
 [workspace]
 members = ["csv-core", "csv-index"]
