@@ -18,29 +18,29 @@ jobs:
         build: [pinned, stable, beta, nightly, macos, win-msvc, win-gnu]
         include:
         - build: pinned
-          os: ubuntu-22.04
+          os: ubuntu-latest
           rust: 1.60.0
         - build: stable
-          os: ubuntu-22.04
+          os: ubuntu-latest
           rust: stable
         - build: beta
-          os: ubuntu-22.04
+          os: ubuntu-latest
           rust: beta
         - build: nightly
-          os: ubuntu-22.04
+          os: ubuntu-latest
           rust: nightly
         - build: macos
-          os: macos-12
+          os: macos-latest
           rust: stable
         - build: win-msvc
-          os: windows-2022
+          os: windows-latest
           rust: stable
         - build: win-gnu
-          os: windows-2022
+          os: windows-latest
           rust: stable-x86_64-gnu
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -53,12 +53,12 @@ jobs:
     - if: matrix.build == 'nightly'
       run: cargo bench --verbose --no-run
 
-  rustfmt:
+  check-doc-sync:
     name: check tutorial and cookbook examples
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -69,26 +69,25 @@ jobs:
     - name: check that tutorial examples are up to date and in sync
       run: ci/check-copy tutorial
 
-  check-doc-sync:
-    name: rustfmt
-    runs-on: ubuntu-22.04
+  rustfmt:
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
         components: rustfmt
     - name: Check formatting
-      run: cargo fmt --check
+      run: cargo fmt --all --check
 
   miri:
     name: miri
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Install Rust
       uses: dtolnay/rust-toolchain@miri
     - run: cargo miri test --lib --verbose
