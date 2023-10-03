@@ -21,7 +21,7 @@ members = ["csv-core", "csv-index"]
 bench = false
 
 [dependencies]
-csv-core = { path = "csv-core", version = "0.1.10" }
+csv-core = { path = "csv-core", version = "0.1.11" }
 itoa = "1"
 ryu = "1"
 serde = "1.0.55"
