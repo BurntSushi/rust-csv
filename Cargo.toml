@@ -12,7 +12,7 @@ license = "Unlicense/MIT"
 categories = ["encoding", "parser-implementations"]
 exclude = ["/.github", "/ci/*", "/scripts/*"]
 edition = "2021"
-rust-version = "1.61"
+rust-version = "1.65"
 
 [workspace]
 members = ["csv-core", "csv-index"]
@@ -27,7 +27,7 @@ ryu = "1"
 serde = "1.0.55"
 
 [dev-dependencies]
-bstr = { version = "1.2.0", default-features = false, features = ["alloc", "serde"] }
+bstr = { version = "1.7.0", default-features = false, features = ["alloc", "serde"] }
 serde = { version = "1.0.55", features = ["derive"] }
 
 [profile.release]
