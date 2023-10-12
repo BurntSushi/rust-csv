@@ -362,6 +362,41 @@ impl ReaderBuilder {
         self
     }
 
+    /// Whether blank lines are ignored.
+    ///
+    /// By default blank lines are ignored.
+    ///
+    /// When disabled 
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::error::Error;
+    /// use csv::ReaderBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<dyn Error>> {
+    ///     let data = "\na,b";
+    ///     let mut rdr = ReaderBuilder::new()
+    ///         .skip_blank_lines(false)
+    ///         .flexible(true)
+    ///         .has_headers(false)
+    ///         .from_reader(data.as_bytes());
+    ///
+    ///     if let Some(result) = rdr.records().next() {
+    ///         let record = result?;
+    ///         assert_eq!(record, vec![""]);
+    ///         Ok(())
+    ///     } else {
+    ///         Err(From::from("expected at least one record but got none"))
+    ///     }
+    /// }
+    /// ```
+    pub fn skip_blank_lines(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.builder.skip_blank_lines(yes);
+        self
+    }
+
     /// The record terminator to use when parsing CSV.
     ///
     /// A record terminator can be any single byte. The default is a special
@@ -2506,6 +2541,32 @@ mod tests {
         assert_eq!("foo", &headers[0]);
         assert_eq!("bar", &headers[1]);
         assert_eq!("baz", &headers[2]);
+    }
+
+    #[test]
+    fn read_record_blank_lines() {
+        let data = b("foo,bar,baz\n\na,b,c\nd,e,f");
+        let mut rdr = ReaderBuilder::new()
+            .flexible(true).skip_blank_lines(false).has_headers(false).from_reader(data);
+        let mut rec = StringRecord::new();
+        
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("foo", &rec[0]);
+        
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(1, rec.len());
+        assert_eq!("", &rec[0]);
+        
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("a", &rec[0]);
+        
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(3, rec.len());
+        assert_eq!("d", &rec[0]);
+        
+        assert!(!rdr.read_record(&mut rec).unwrap());
     }
 
     #[test]
