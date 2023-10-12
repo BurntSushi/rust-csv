@@ -428,14 +428,15 @@ enum NfaState {
     InQuotedField = 3,
     InEscapedQuote = 4,
     InDoubleEscapedQuote = 5,
-    InComment = 6,
+    InEscapeSequence = 6,
+    InComment = 7,
     // All states below are "final field" states.
     // Namely, they indicate that a field has been parsed.
-    EndFieldDelim = 7,
+    EndFieldDelim = 8,
     // All states below are "final record" states.
     // Namely, they indicate that a record has been parsed.
-    EndRecord = 8,
-    CRLF = 9,
+    EndRecord = 9,
+    CRLF = 10,
 }
 
 /// A list of NFA states that have an explicit representation in the DFA.
@@ -447,6 +448,7 @@ const NFA_STATES: &'static [NfaState] = &[
     NfaState::InQuotedField,
     NfaState::InEscapedQuote,
     NfaState::InDoubleEscapedQuote,
+    NfaState::InEscapeSequence,
     NfaState::InComment,
     NfaState::EndRecord,
     NfaState::CRLF,
@@ -805,9 +807,9 @@ impl Reader {
         self.dfa.classes.add(self.delimiter);
         if self.quoting {
             self.dfa.classes.add(self.quote);
-            if let Some(escape) = self.escape {
-                self.dfa.classes.add(escape);
-            }
+        }
+        if let Some(escape) = self.escape {
+            self.dfa.classes.add(escape);
         }
         if let Some(comment) = self.comment {
             self.dfa.classes.add(comment);
@@ -970,7 +972,7 @@ impl Reader {
         match state {
             End | StartRecord | EndRecord | InComment | CRLF => End,
             StartField | EndFieldDelim | EndFieldTerm | InField
-            | InQuotedField | InEscapedQuote | InDoubleEscapedQuote
+            | InQuotedField | InEscapedQuote | InDoubleEscapedQuote | InEscapeSequence
             | InRecordTerm => EndRecord,
         }
     }
@@ -1007,6 +1009,8 @@ impl Reader {
                     (EndFieldDelim, NfaInputAction::Discard)
                 } else if self.term.equals(c) {
                     (EndFieldTerm, NfaInputAction::Epsilon)
+                } else if !self.quoting && self.escape == Some(c) {
+                    (InEscapeSequence, NfaInputAction::Discard)
                 } else {
                     (InField, NfaInputAction::CopyToOutput)
                 }
@@ -1018,6 +1022,8 @@ impl Reader {
                     (EndFieldDelim, NfaInputAction::Discard)
                 } else if self.term.equals(c) {
                     (EndFieldTerm, NfaInputAction::Epsilon)
+                } else if !self.quoting && self.escape == Some(c) {
+                    (InEscapeSequence, NfaInputAction::Discard)
                 } else {
                     (InField, NfaInputAction::CopyToOutput)
                 }
@@ -1043,6 +1049,7 @@ impl Reader {
                     (InField, NfaInputAction::CopyToOutput)
                 }
             }
+            InEscapeSequence => (InField, NfaInputAction::CopyToOutput),
             InComment => {
                 if b'\n' == c {
                     (StartRecord, NfaInputAction::Discard)
@@ -1087,7 +1094,7 @@ impl Reader {
 /// be reached by epsilon transitions will never have explicit usage in the
 /// DFA.
 const TRANS_CLASSES: usize = 7;
-const DFA_STATES: usize = 10;
+const DFA_STATES: usize = 11;
 const TRANS_SIZE: usize = TRANS_CLASSES * DFA_STATES;
 
 /// The number of possible transition classes. (See the comment on `TRANS_SIZE`
@@ -1119,6 +1126,8 @@ struct Dfa {
     in_field: DfaState,
     /// The DFA state corresponding to being inside an quoted field.
     in_quoted: DfaState,
+    /// The DFA state corresponding to being in an escape sequence.
+    in_escape_sequence: DfaState,
     /// The minimum DFA state that indicates a field has been parsed. All DFA
     /// states greater than this are also final-field states.
     final_field: DfaState,
@@ -1135,6 +1144,7 @@ impl Dfa {
             classes: DfaClasses::new(),
             in_field: DfaState(0),
             in_quoted: DfaState(0),
+            in_escape_sequence: DfaState(0),
             final_field: DfaState(0),
             final_record: DfaState(0),
         }
@@ -1170,6 +1180,7 @@ impl Dfa {
     fn finish(&mut self) {
         self.in_field = self.new_state(NfaState::InField);
         self.in_quoted = self.new_state(NfaState::InQuotedField);
+        self.in_escape_sequence = self.new_state(NfaState::InEscapeSequence);
         self.final_field = self.new_state(NfaState::EndFieldDelim);
         self.final_record = self.new_state(NfaState::EndRecord);
     }
@@ -1666,6 +1677,15 @@ mod tests {
     );
 
     parses_to!(
+        escape_sequence,
+        "a\\,b\\\\c,\\,fo\"o\\,,bar",
+        csv![["a,b\\c", ",fo\"o,", "bar"]],
+        |b: &mut ReaderBuilder| {
+            b.quoting(false).escape(Some(b'\\'));
+        }
+    );
+
+    parses_to!(
         delimiter_tabs,
         "a\tb",
         csv![["a", "b"]],
@@ -1858,6 +1878,25 @@ mod tests {
 
         assert_read!(rdr, b("\"o"), &mut out[2..], 2, 2, InputEmpty);
         assert_eq!(&out[..4], b("fo\"o"));
+
+        assert_read!(rdr, &[], out, 0, 0, Field { record_end: true });
+        assert_read!(rdr, &[], out, 0, 0, End);
+    }
+
+    // Test we can read escape sequences correctly in a stream.
+    #[test]
+    fn stream_escape_sequence() {
+        use crate::ReadFieldResult::*;
+
+        let out = &mut [0; 10];
+        let mut builder = ReaderBuilder::new();
+        let mut rdr = builder.quoting(false).escape(Some(b'\\')).build();
+
+        assert_read!(rdr, b("\\,f\\\\o\\"), out, 7, 4, InputEmpty);
+        assert_eq!(&out[..4], b(",f\\o"));
+
+        assert_read!(rdr, b(",o\\,"), &mut out[4..], 4, 3, InputEmpty);
+        assert_eq!(&out[..7], b(",f\\o,o,"));
 
         assert_read!(rdr, &[], out, 0, 0, Field { record_end: true });
         assert_read!(rdr, &[], out, 0, 0, End);
