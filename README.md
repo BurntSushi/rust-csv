@@ -13,18 +13,15 @@ Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
 https://docs.rs/csv
 
 If you're new to Rust, the
-[tutorial](https://docs.rs/csv/1.0.0/csv/tutorial/index.html)
+[tutorial](https://docs.rs/csv/1.*/csv/tutorial/index.html)
 is a good place to start.
 
 
 ### Usage
 
-Add this to your `Cargo.toml`:
+To bring this crate into your repository, either add `csv` to your
+`Cargo.toml`, or run `cargo add csv`.
 
-```toml
-[dependencies]
-csv = "1.2"
-```
 
 ### Example
 
@@ -32,7 +29,7 @@ This example shows how to read CSV data from stdin and print each record to
 stdout.
 
 There are more examples in the
-[cookbook](https://docs.rs/csv/1.0.0/csv/cookbook/index.html).
+[cookbook](https://docs.rs/csv/1.*/csv/cookbook/index.html).
 
 ```rust
 use std::{error::Error, io, process};
@@ -103,7 +100,7 @@ fn main() {
 
 The above example can be run like so:
 
-```text
+```
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
 $ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
