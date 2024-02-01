@@ -1101,6 +1101,11 @@ impl<W: io::Write> Writer<W> {
         self.wtr.as_ref().unwrap()
     }
 
+    /// Return a mutable reference to the underlying writer.
+    pub fn get_mut(&mut self) -> &mut W {
+        self.wtr.as_mut().unwrap()
+    }
+
     /// Flush the contents of the internal buffer and return the underlying
     /// writer.
     pub fn into_inner(
