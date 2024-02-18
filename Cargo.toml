@@ -28,6 +28,7 @@ serde = "1.0.55"
 
 [dev-dependencies]
 bstr = { version = "1.7.0", default-features = false, features = ["alloc", "serde"] }
+eyre = "~0.6.12"
 serde = { version = "1.0.55", features = ["derive"] }
 
 [profile.release]

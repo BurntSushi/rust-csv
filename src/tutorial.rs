@@ -310,7 +310,7 @@ foo,bar
 quux,baz,foobar
 $ ./target/debug/csvtutor < invalid
 StringRecord { position: Some(Position { byte: 16, line: 2, record: 1 }), fields: ["foo", "bar"] }
-error reading CSV from <stdin>: CSV error: record 2 (line: 3, byte: 24): found record with 3 fields, but the previous record has 2 fields
+error reading CSV from <stdin>: CSV error: record 2 (line: 3, byte: 24)
 ```
 
 The second step for moving to recoverable errors is to put our CSV record loop
@@ -352,7 +352,7 @@ error." A `Box<dyn Error>` is hard to inspect if we cared about the specific err
 that occurred. But for our purposes, all we need to do is gracefully print an
 error message and exit the program.
 
-The third and final step is to replace our explicit `match` expression with a
+The third step is to replace our explicit `match` expression with a
 special Rust language feature: the question mark.
 
 ```no_run
@@ -398,6 +398,35 @@ CSV transformations, then using methods like `expect` and panicking when an
 error occurs is a perfectly reasonable thing to do. Nevertheless, this tutorial
 will endeavor to show idiomatic code.
 
+One final point that we'll address is pretty printing the errors. `eyre` is a
+crate that allows us to produce a nicely formatted error report of the error,
+we just need to wrap it in an `eyre::Report` before printing it and use the
+[`Debug`] representation. Any kind of error can be converted to an
+`eyre::Report`. `eyre` also provides a `Result` in which the error is an
+`eyre::Report`, which makes using the `?` very convenient.
+
+```no_run
+//tutorial-error-05.rs
+use eyre::Result;
+use std::{io, process};
+
+fn main() {
+    if let Err(err) = run() {
+        println!("{:?}", err);
+        process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+    for result in rdr.records() {
+        let record = result?;
+        println!("{:?}", record);
+    }
+    Ok(())
+}
+```
+
 # Reading CSV
 
 Now that we've got you setup and covered basic error handling, it's time to do
@@ -411,15 +440,15 @@ path argument instead of stdin.
 
 ```no_run
 //tutorial-read-01.rs
+use eyre::{eyre, Result};
 use std::{
     env,
-    error::Error,
     ffi::OsString,
     fs::File,
     process,
 };
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let file_path = get_first_arg()?;
     let file = File::open(file_path)?;
     let mut rdr = csv::Reader::from_reader(file);
@@ -432,16 +461,16 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 /// Returns the first positional argument sent to this process. If there are no
 /// positional arguments, then this returns an error.
-fn get_first_arg() -> Result<OsString, Box<dyn Error>> {
+fn get_first_arg() -> Result<OsString> {
     match env::args_os().nth(1) {
-        None => Err(From::from("expected 1 argument, but got none")),
+        None => Err(eyre!("expected 1 argument, but got none")),
         Some(file_path) => Ok(file_path),
     }
 }
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }
@@ -521,9 +550,10 @@ produces terser examples.)
 
 ```no_run
 //tutorial-read-headers-01.rs
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 #
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false)
         .from_reader(io::stdin());
@@ -536,7 +566,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 #
 # fn main() {
 #     if let Err(err) = run() {
-#         println!("{}", err);
+#         println!("{:?}", err);
 #         process::exit(1);
 #     }
 # }
@@ -560,9 +590,10 @@ method like so:
 
 ```no_run
 //tutorial-read-headers-02.rs
+# use eyre::Result;
 # use std::{error::Error, io, process};
 #
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     {
         // We nest this call in its own scope because of lifetimes.
@@ -582,7 +613,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 #
 # fn main() {
 #     if let Err(err) = run() {
-#         println!("{}", err);
+#         println!("{:?}", err);
 #         process::exit(1);
 #     }
 # }
@@ -639,9 +670,10 @@ as seen in the following example:
 
 ```no_run
 //tutorial-read-delimiter-01.rs
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 #
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false)
         .delimiter(b';')
@@ -659,7 +691,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 #
 # fn main() {
 #     if let Err(err) = run() {
-#         println!("{}", err);
+#         println!("{:?}", err);
 #         process::exit(1);
 #     }
 # }
@@ -725,9 +757,10 @@ a lot of manual work. This next example shows how.
 
 ```no_run
 //tutorial-read-serde-01.rs
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 #
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.records() {
         let record = result?;
@@ -753,7 +786,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 #
 # fn main() {
 #     if let Err(err) = run() {
-#         println!("{}", err);
+#         println!("{:?}", err);
 #         process::exit(1);
 #     }
 # }
@@ -766,13 +799,14 @@ type: `(String, String, Option<u64>, f64, f64)`.
 
 ```no_run
 //tutorial-read-serde-02.rs
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 #
 // This introduces a type alias so that we can conveniently reference our
 // record type.
 type Record = (String, String, Option<u64>, f64, f64);
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     // Instead of creating an iterator with the `records` method, we create
     // an iterator with the `deserialize` method.
@@ -786,7 +820,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 #
 # fn main() {
 #     if let Err(err) = run() {
-#         println!("{}", err);
+#         println!("{:?}", err);
 #         process::exit(1);
 #     }
 # }
@@ -817,14 +851,15 @@ a new `use` statement that imports `HashMap` from the standard library:
 
 ```no_run
 //tutorial-read-serde-03.rs
+use eyre::Result;
 use std::collections::HashMap;
-# use std::{error::Error, io, process};
+# use std::{io, process};
 
 // This introduces a type alias so that we can conveniently reference our
 // record type.
 type Record = HashMap<String, String>;
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         let record: Record = result?;
@@ -835,7 +870,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 #
 # fn main() {
 #     if let Err(err) = run() {
-#         println!("{}", err);
+#         println!("{:?}", err);
 #         process::exit(1);
 #     }
 # }
@@ -875,7 +910,8 @@ how. Don't miss the new Serde imports!
 ```no_run
 //tutorial-read-serde-04.rs
 # #![allow(dead_code)]
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 
 // This lets us write `#[derive(Deserialize)]`.
 use serde::Deserialize;
@@ -895,7 +931,7 @@ struct Record {
     state: String,
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         let record: Record = result?;
@@ -908,7 +944,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }
@@ -1012,7 +1048,8 @@ Let's start by running our program from the previous section:
 ```no_run
 //tutorial-read-serde-invalid-01.rs
 # #![allow(dead_code)]
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 #
 # use serde::Deserialize;
 #
@@ -1026,7 +1063,7 @@ struct Record {
     state: String,
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         let record: Record = result?;
@@ -1037,7 +1074,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 #
 # fn main() {
 #     if let Err(err) = run() {
-#         println!("{}", err);
+#         println!("{:?}", err);
 #         process::exit(1);
 #     }
 # }
@@ -1080,6 +1117,7 @@ to a `None` value, as shown in this next example:
 ```no_run
 //tutorial-read-serde-invalid-02.rs
 # #![allow(dead_code)]
+# use eyre::Report;
 # use std::{error::Error, io, process};
 #
 # use serde::Deserialize;
@@ -1105,7 +1143,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 #
 # fn main() {
 #     if let Err(err) = run() {
-#         println!("{}", err);
+#         println!("{:?}", err);
 #         process::exit(1);
 #     }
 # }
@@ -1146,9 +1184,10 @@ Let's start with the most basic example: writing a few CSV records to `stdout`.
 
 ```no_run
 //tutorial-write-01.rs
-use std::{error::Error, io, process};
+use eyre::Result;
+use std::{io, process};
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
     // Since we're writing records manually, we must explicitly write our
     // header record. A header record is written the same way that other
@@ -1166,7 +1205,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }
@@ -1253,14 +1292,14 @@ of `stdout`:
 
 ```no_run
 //tutorial-write-02.rs
+use eyre::{eyre, Result};
 use std::{
     env,
-    error::Error,
     ffi::OsString,
     process,
 };
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let file_path = get_first_arg()?;
     let mut wtr = csv::Writer::from_path(file_path)?;
 
@@ -1275,16 +1314,16 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 /// Returns the first positional argument sent to this process. If there are no
 /// positional arguments, then this returns an error.
-fn get_first_arg() -> Result<OsString, Box<dyn Error>> {
+fn get_first_arg() -> Result<OsString> {
     match env::args_os().nth(1) {
-        None => Err(From::from("expected 1 argument, but got none")),
+        None => Err(eyre!("expected 1 argument, but got none")),
         Some(file_path) => Ok(file_path),
     }
 }
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }
@@ -1316,9 +1355,10 @@ Here's an example:
 
 ```no_run
 //tutorial-write-delimiter-01.rs
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 #
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut wtr = csv::WriterBuilder::new()
         .delimiter(b'\t')
         .quote_style(csv::QuoteStyle::NonNumeric)
@@ -1335,7 +1375,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 #
 # fn main() {
 #     if let Err(err) = run() {
-#         println!("{}", err);
+#         println!("{:?}", err);
 #         process::exit(1);
 #     }
 # }
@@ -1370,9 +1410,10 @@ As with reading, let's start by seeing how we can serialize a Rust tuple.
 
 ```no_run
 //tutorial-write-serde-01.rs
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 #
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
     // We still need to write headers manually.
@@ -1394,7 +1435,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 #
 # fn main() {
 #     if let Err(err) = run() {
-#         println!("{}", err);
+#         println!("{:?}", err);
 #         process::exit(1);
 #     }
 # }
@@ -1438,7 +1479,8 @@ shown in the example:
 
 ```no_run
 //tutorial-write-serde-02.rs
-use std::{error::Error, io, process};
+use eyre::Result;
+use std::{io, process};
 
 use serde::Serialize;
 
@@ -1453,7 +1495,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
     wtr.serialize(Record {
@@ -1484,7 +1526,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }
@@ -1565,13 +1607,14 @@ rows with a field that matches the query.
 
 ```no_run
 //tutorial-pipeline-search-01.rs
-use std::{env, error::Error, io, process};
+use eyre::{eyre, Result};
+use std::{env, io, process};
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     // Get the query from the positional arguments.
     // If one doesn't exist, return an error.
     let query = match env::args().nth(1) {
-        None => return Err(From::from("expected 1 argument, but got none")),
+        None => return Err(eyre!("expected 1 argument, but got none")),
         Some(query) => query,
     };
 
@@ -1598,7 +1641,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }
@@ -1682,11 +1725,12 @@ change:
 
 ```no_run
 //tutorial-pipeline-search-02.rs
-# use std::{env, error::Error, io, process};
+# use eyre::{eyre, Result};
+# use std::{env, io, process};
 #
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let query = match env::args().nth(1) {
-        None => return Err(From::from("expected 1 argument, but got none")),
+        None => return Err(eyre!("expected 1 argument, but got none")),
         Some(query) => query,
     };
 
@@ -1710,7 +1754,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 #
 # fn main() {
 #     if let Err(err) = run() {
-#         println!("{}", err);
+#         println!("{:?}", err);
 #         process::exit(1);
 #     }
 # }
@@ -1751,7 +1795,8 @@ Now here's the code:
 
 ```no_run
 //tutorial-pipeline-pop-01.rs
-# use std::{env, error::Error, io, process};
+# use eyre::{eyre, Result};
+# use std::{env, io, process};
 
 use serde::{Deserialize, Serialize};
 
@@ -1767,11 +1812,11 @@ struct Record {
     longitude: f64,
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     // Get the query from the positional arguments.
     // If one doesn't exist or isn't an integer, return an error.
     let minimum_pop: u64 = match env::args().nth(1) {
-        None => return Err(From::from("expected 1 argument, but got none")),
+        None => return Err(eyre!("expected 1 argument, but got none")),
         Some(arg) => arg.parse()?,
     };
 
@@ -1806,7 +1851,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }
@@ -1881,9 +1926,10 @@ adapting a previous example to count the number of records in
 
 ```no_run
 //tutorial-perf-alloc-01.rs
-use std::{error::Error, io, process};
+use eyre::Result;
+use std::{io, process};
 
-fn run() -> Result<u64, Box<dyn Error>> {
+fn run() -> Result<u64> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
 
     let mut count = 0;
@@ -1902,7 +1948,7 @@ fn main() {
             println!("{}", count);
         }
         Err(err) => {
-            println!("{}", err);
+            println!("{:?}", err);
             process::exit(1);
         }
     }
@@ -1937,9 +1983,10 @@ shown in the next example:
 
 ```no_run
 //tutorial-perf-alloc-02.rs
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 #
-fn run() -> Result<u64, Box<dyn Error>> {
+fn run() -> Result<u64> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
 
     let mut count = 0;
@@ -1958,7 +2005,7 @@ fn run() -> Result<u64, Box<dyn Error>> {
 #             println!("{}", count);
 #         }
 #         Err(err) => {
-#             println!("{}", err);
+#             println!("{:?}", err);
 #             process::exit(1);
 #         }
 #     }
@@ -2018,9 +2065,10 @@ method.
 
 ```no_run
 //tutorial-perf-alloc-03.rs
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 #
-fn run() -> Result<u64, Box<dyn Error>> {
+fn run() -> Result<u64> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     let mut record = csv::ByteRecord::new();
 
@@ -2039,7 +2087,7 @@ fn run() -> Result<u64, Box<dyn Error>> {
 #             println!("{}", count);
 #         }
 #         Err(err) => {
-#             println!("{}", err);
+#             println!("{:?}", err);
 #             process::exit(1);
 #         }
 #     }
@@ -2098,6 +2146,7 @@ example using Serde in a previous section:
 ```no_run
 //tutorial-perf-serde-01.rs
 # #![allow(dead_code)]
+use eyre::Result;
 use std::{error::Error, io, process};
 
 use serde::Deserialize;
@@ -2133,7 +2182,7 @@ fn main() {
             println!("{}", count);
         }
         Err(err) => {
-            println!("{}", err);
+            println!("{:?}", err);
             process::exit(1);
         }
     }
@@ -2166,7 +2215,8 @@ like:
 ```no_run
 //tutorial-perf-serde-02.rs
 # #![allow(dead_code)]
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 # use serde::Deserialize;
 #
 #[derive(Debug, Deserialize)]
@@ -2181,7 +2231,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
-fn run() -> Result<u64, Box<dyn Error>> {
+fn run() -> Result<u64> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     let mut raw_record = csv::StringRecord::new();
     let headers = rdr.headers()?.clone();
@@ -2202,7 +2252,7 @@ fn run() -> Result<u64, Box<dyn Error>> {
 #             println!("{}", count);
 #         }
 #         Err(err) => {
-#             println!("{}", err);
+#             println!("{:?}", err);
 #             process::exit(1);
 #         }
 #     }
@@ -2251,7 +2301,8 @@ of `StringRecord`:
 ```no_run
 //tutorial-perf-serde-03.rs
 # #![allow(dead_code)]
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 #
 # use serde::Deserialize;
 #
@@ -2267,7 +2318,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
-fn run() -> Result<u64, Box<dyn Error>> {
+fn run() -> Result<u64> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     let mut raw_record = csv::ByteRecord::new();
     let headers = rdr.byte_headers()?.clone();
@@ -2288,7 +2339,7 @@ fn run() -> Result<u64, Box<dyn Error>> {
 #             println!("{}", count);
 #         }
 #         Err(err) => {
-#             println!("{}", err);
+#             println!("{:?}", err);
 #             process::exit(1);
 #         }
 #     }
@@ -2346,6 +2397,7 @@ access to I/O, which would be harder without the standard library.)
 
 ```no_run
 //tutorial-perf-core-01.rs
+use eyre::Report;
 use std::io::{self, Read};
 use std::process;
 
@@ -2411,7 +2463,7 @@ fn main() {
     // Read the entire contents of stdin up front.
     let mut data = vec![];
     if let Err(err) = io::stdin().read_to_end(&mut data) {
-        println!("{}", err);
+        println!("{:?}", Report::new(err));
         process::exit(1);
     }
     match run(&data) {

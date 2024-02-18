@@ -1,6 +1,7 @@
-use std::{error::Error, io, process};
+use eyre::Result;
+use std::{io, process};
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
     // We still need to write headers manually.
@@ -34,7 +35,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
+use eyre::Result;
 use serde::Deserialize;
-use std::{error::Error, io, process};
+use std::{io, process};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -14,7 +15,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
-fn run() -> Result<u64, Box<dyn Error>> {
+fn run() -> Result<u64> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     let mut raw_record = csv::StringRecord::new();
     let headers = rdr.headers()?.clone();
@@ -35,7 +36,7 @@ fn main() {
             println!("{}", count);
         }
         Err(err) => {
-            println!("{}", err);
+            println!("{:?}", err);
             process::exit(1);
         }
     }

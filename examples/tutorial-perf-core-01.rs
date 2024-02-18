@@ -1,3 +1,4 @@
+use eyre::Report;
 use std::io::{self, Read};
 use std::process;
 
@@ -63,7 +64,7 @@ fn main() {
     // Read the entire contents of stdin up front.
     let mut data = vec![];
     if let Err(err) = io::stdin().read_to_end(&mut data) {
-        println!("{}", err);
+        println!("{:?}", Report::from(err));
         process::exit(1);
     }
     match run(&data) {

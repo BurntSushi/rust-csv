@@ -1,6 +1,7 @@
-use std::{env, error::Error, ffi::OsString, process};
+use eyre::{eyre, Result};
+use std::{env, ffi::OsString, process};
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let file_path = get_first_arg()?;
     let mut wtr = csv::Writer::from_path(file_path)?;
 
@@ -27,16 +28,16 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 /// Returns the first positional argument sent to this process. If there are no
 /// positional arguments, then this returns an error.
-fn get_first_arg() -> Result<OsString, Box<dyn Error>> {
+fn get_first_arg() -> Result<OsString> {
     match env::args_os().nth(1) {
-        None => Err(From::from("expected 1 argument, but got none")),
+        None => Err(eyre!("expected 1 argument, but got none")),
         Some(file_path) => Ok(file_path),
     }
 }
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }

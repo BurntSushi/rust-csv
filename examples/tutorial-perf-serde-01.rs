@@ -1,5 +1,6 @@
 #![allow(dead_code)]
-use std::{error::Error, io, process};
+use eyre::Result;
+use std::{io, process};
 
 use serde::Deserialize;
 
@@ -15,7 +16,7 @@ struct Record {
     longitude: f64,
 }
 
-fn run() -> Result<u64, Box<dyn Error>> {
+fn run() -> Result<u64> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
 
     let mut count = 0;
@@ -34,7 +35,7 @@ fn main() {
             println!("{}", count);
         }
         Err(err) => {
-            println!("{}", err);
+            println!("{:?}", err);
             process::exit(1);
         }
     }
