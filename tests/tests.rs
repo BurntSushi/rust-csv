@@ -147,6 +147,25 @@ quux,baz,foobar
 }
 
 #[test]
+fn tutorial_error_05() {
+    let mut cmd = cmd_for_example("tutorial-error-05");
+    let out = cmd_output_with(&mut cmd, USPOP.as_bytes());
+    assert_eq!(out.stdout().lines().count(), 100);
+}
+
+#[test]
+fn tutorial_error_05_errored() {
+    let data = "\
+header1,header2
+foo,bar
+quux,baz,foobar
+";
+    let mut cmd = cmd_for_example("tutorial-error-05");
+    let out = cmd_output_with(&mut cmd, data.as_bytes());
+    assert!(out.stdout_failed().contains("CSV error:"));
+}
+
+#[test]
 fn tutorial_read_01() {
     let mut cmd = cmd_for_example("tutorial-read-01");
     cmd.arg(data_dir().join("uspop.csv"));
