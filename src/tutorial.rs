@@ -591,7 +591,7 @@ method like so:
 ```no_run
 //tutorial-read-headers-02.rs
 # use eyre::Result;
-# use std::{error::Error, io, process};
+# use std::{io, process};
 #
 fn run() -> Result<()> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
@@ -1117,8 +1117,8 @@ to a `None` value, as shown in this next example:
 ```no_run
 //tutorial-read-serde-invalid-02.rs
 # #![allow(dead_code)]
-# use eyre::Report;
-# use std::{error::Error, io, process};
+# use eyre::Result;
+# use std::{io, process};
 #
 # use serde::Deserialize;
 #[derive(Debug, Deserialize)]
@@ -1132,7 +1132,7 @@ struct Record {
     state: String,
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
         let record: Record = result?;
@@ -2147,7 +2147,7 @@ example using Serde in a previous section:
 //tutorial-perf-serde-01.rs
 # #![allow(dead_code)]
 use eyre::Result;
-use std::{error::Error, io, process};
+use std::{io, process};
 
 use serde::Deserialize;
 
@@ -2163,7 +2163,7 @@ struct Record {
     longitude: f64,
 }
 
-fn run() -> Result<u64, Box<dyn Error>> {
+fn run() -> Result<u64> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
 
     let mut count = 0;
@@ -2463,7 +2463,7 @@ fn main() {
     // Read the entire contents of stdin up front.
     let mut data = vec![];
     if let Err(err) = io::stdin().read_to_end(&mut data) {
-        println!("{:?}", Report::new(err));
+        println!("{:?}", Report::from(err));
         process::exit(1);
     }
     match run(&data) {
