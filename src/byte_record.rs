@@ -88,7 +88,7 @@ impl fmt::Debug for ByteRecord {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ByteRecordInner {
     /// The position of this byte record.
-    pos: Option<Position>,
+    pos: Position,
     /// All fields in this record, stored contiguously.
     fields: Vec<u8>,
     /// The number of and location of each field in this record.
@@ -138,7 +138,7 @@ impl ByteRecord {
     #[inline]
     pub fn with_capacity(buffer: usize, fields: usize) -> ByteRecord {
         ByteRecord(Box::new(ByteRecordInner {
-            pos: None,
+            pos: Position::new(),
             fields: vec![0; buffer],
             bounds: Bounds::with_capacity(fields),
         }))
@@ -372,7 +372,7 @@ impl ByteRecord {
         // TODO: We could likely do this in place, but for now, we allocate.
         let mut trimmed =
             ByteRecord::with_capacity(self.as_slice().len(), self.len());
-        trimmed.set_position(self.position().cloned());
+        trimmed.set_position(self.position().clone());
         for field in self.iter() {
             trimmed.push_field(trim_ascii(field));
         }
@@ -418,7 +418,7 @@ impl ByteRecord {
     ///
     ///     assert!(rdr.read_byte_record(&mut record)?);
     ///     {
-    ///         let pos = record.position().expect("a record position");
+    ///         let pos = record.position();
     ///         assert_eq!(pos.byte(), 0);
     ///         assert_eq!(pos.line(), 1);
     ///         assert_eq!(pos.record(), 0);
@@ -426,7 +426,7 @@ impl ByteRecord {
     ///
     ///     assert!(rdr.read_byte_record(&mut record)?);
     ///     {
-    ///         let pos = record.position().expect("a record position");
+    ///         let pos = record.position();
     ///         assert_eq!(pos.byte(), 6);
     ///         assert_eq!(pos.line(), 2);
     ///         assert_eq!(pos.record(), 1);
@@ -438,8 +438,8 @@ impl ByteRecord {
     /// }
     /// ```
     #[inline]
-    pub fn position(&self) -> Option<&Position> {
-        self.0.pos.as_ref()
+    pub fn position(&self) -> &Position {
+        &self.0.pos
     }
 
     /// Set the position of this record.
@@ -455,11 +455,11 @@ impl ByteRecord {
     /// pos.set_line(4);
     /// pos.set_record(2);
     ///
-    /// record.set_position(Some(pos.clone()));
-    /// assert_eq!(record.position(), Some(&pos));
+    /// record.set_position(pos.clone());
+    /// assert_eq!(record.position(), &pos);
     /// ```
     #[inline]
-    pub fn set_position(&mut self, pos: Option<Position>) {
+    pub fn set_position(&mut self, pos: Position) {
         self.0.pos = pos;
     }
 

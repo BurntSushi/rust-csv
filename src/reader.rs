@@ -1330,7 +1330,7 @@ impl<R: io::Read> Reader<R> {
         match headers.string_record {
             Ok(ref record) => Ok(record),
             Err(ref err) => Err(Error::new(ErrorKind::Utf8 {
-                pos: headers.byte_record.position().map(Clone::clone),
+                pos: headers.byte_record.position().clone(),
                 err: err.clone(),
             })),
         }
@@ -1622,7 +1622,7 @@ impl<R: io::Read> Reader<R> {
         use csv_core::ReadRecordResult::*;
 
         record.clear();
-        record.set_position(Some(self.state.cur_pos.clone()));
+        record.set_position(self.state.cur_pos.clone());
         if self.state.eof != ReaderEofState::NotEof {
             return Ok(false);
         }
@@ -1887,7 +1887,7 @@ impl ReaderState {
                 Some(expected) => {
                     if record.len() as u64 != expected {
                         return Err(Error::new(ErrorKind::UnequalLengths {
-                            pos: record.position().map(Clone::clone),
+                            pos: record.position().clone(),
                             expected_len: expected,
                             len: record.len() as u64,
                         }));
@@ -2272,7 +2272,7 @@ mod tests {
             assert_eq!(b"baz", &headers[2]);
         }
         match *rdr.headers().unwrap_err().kind() {
-            ErrorKind::Utf8 { pos: Some(ref pos), ref err } => {
+            ErrorKind::Utf8 { ref pos, ref err } => {
                 assert_eq!(pos, &newpos(0, 1, 0));
                 assert_eq!(err.field(), 1);
                 assert_eq!(err.valid_up_to(), 3);
@@ -2320,7 +2320,7 @@ mod tests {
                     ref pos,
                     len: 2,
                 } => {
-                    assert_eq!(pos, &Some(newpos(4, 2, 1)));
+                    assert_eq!(pos, &newpos(4, 2, 1));
                 }
                 ref wrong => panic!("match failed, got {:?}", wrong),
             },
@@ -2369,7 +2369,7 @@ mod tests {
                     ref pos,
                     len: 2,
                 } => {
-                    assert_eq!(pos, &Some(newpos(4, 2, 1)));
+                    assert_eq!(pos, &newpos(4, 2, 1));
                 }
                 wrong => panic!("match failed, got {:?}", wrong),
             },
@@ -2441,7 +2441,7 @@ mod tests {
             assert_eq!(b"baz", &headers[2]);
         }
         match *rdr.headers().unwrap_err().kind() {
-            ErrorKind::Utf8 { pos: Some(ref pos), ref err } => {
+            ErrorKind::Utf8 { ref pos, ref err } => {
                 assert_eq!(pos, &newpos(0, 1, 0));
                 assert_eq!(err.field(), 1);
                 assert_eq!(err.valid_up_to(), 1);
@@ -2571,12 +2571,12 @@ mod tests {
             .from_reader("a,b,c\nx,y,z".as_bytes())
             .into_records();
 
-        let pos = rdr.next().unwrap().unwrap().position().unwrap().clone();
+        let pos = rdr.next().unwrap().unwrap().position().clone();
         assert_eq!(pos.byte(), 0);
         assert_eq!(pos.line(), 1);
         assert_eq!(pos.record(), 0);
 
-        let pos = rdr.next().unwrap().unwrap().position().unwrap().clone();
+        let pos = rdr.next().unwrap().unwrap().position().clone();
         assert_eq!(pos.byte(), 6);
         assert_eq!(pos.line(), 2);
         assert_eq!(pos.record(), 1);
@@ -2590,7 +2590,7 @@ mod tests {
             .from_reader("a,b,c\nx,y,z".as_bytes())
             .into_records();
 
-        let pos = rdr.next().unwrap().unwrap().position().unwrap().clone();
+        let pos = rdr.next().unwrap().unwrap().position().clone();
         assert_eq!(pos.byte(), 6);
         assert_eq!(pos.line(), 2);
         assert_eq!(pos.record(), 1);

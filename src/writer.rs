@@ -12,7 +12,7 @@ use crate::{
     byte_record::ByteRecord,
     error::{Error, ErrorKind, IntoInnerError, Result},
     serializer::{serialize, serialize_header},
-    {QuoteStyle, Terminator},
+    Position, QuoteStyle, Terminator,
 };
 
 /// Builds a CSV writer with various configuration knobs.
@@ -1170,7 +1170,7 @@ impl<W: io::Write> Writer<W> {
                 }
                 Some(expected) if expected != self.state.fields_written => {
                     return Err(Error::new(ErrorKind::UnequalLengths {
-                        pos: None,
+                        pos: Position::new(),
                         expected_len: expected,
                         len: self.state.fields_written,
                     }))
@@ -1219,7 +1219,8 @@ mod tests {
     use serde::{serde_if_integer128, Serialize};
 
     use crate::{
-        byte_record::ByteRecord, error::ErrorKind, string_record::StringRecord,
+        byte_record::ByteRecord, error::ErrorKind,
+        string_record::StringRecord, Position,
     };
 
     use super::{Writer, WriterBuilder};
@@ -1301,7 +1302,7 @@ mod tests {
         let err = wtr.write_record(&ByteRecord::from(vec!["a"])).unwrap_err();
         match *err.kind() {
             ErrorKind::UnequalLengths { ref pos, expected_len, len } => {
-                assert!(pos.is_none());
+                assert_eq!(pos, &Position::new());
                 assert_eq!(expected_len, 3);
                 assert_eq!(len, 1);
             }
@@ -1319,7 +1320,7 @@ mod tests {
             wtr.write_byte_record(&ByteRecord::from(vec!["a"])).unwrap_err();
         match *err.kind() {
             ErrorKind::UnequalLengths { ref pos, expected_len, len } => {
-                assert!(pos.is_none());
+                assert_eq!(pos, &Position::new());
                 assert_eq!(expected_len, 3);
                 assert_eq!(len, 1);
             }

@@ -63,9 +63,8 @@ pub enum ErrorKind {
     /// A UTF-8 decoding error that occured while reading CSV data into Rust
     /// `String`s.
     Utf8 {
-        /// The position of the record in which this error occurred, if
-        /// available.
-        pos: Option<Position>,
+        /// The position of the record in which this error occurred.
+        pos: Position,
         /// The corresponding UTF-8 error.
         err: Utf8Error,
     },
@@ -74,8 +73,8 @@ pub enum ErrorKind {
     /// CSV reader/writer is disabled.
     UnequalLengths {
         /// The position of the first record with an unequal number of fields
-        /// to the previous record, if available.
-        pos: Option<Position>,
+        /// to the previous record, for writers position is not tracked.
+        pos: Position,
         /// The expected number of fields in a record. This is the number of
         /// fields in the record read prior to the record indicated by
         /// `pos`.
@@ -92,8 +91,8 @@ pub enum ErrorKind {
     /// An error of this kind occurs only when performing automatic
     /// deserialization with serde.
     Deserialize {
-        /// The position of this error, if available.
-        pos: Option<Position>,
+        /// The position of this error.
+        pos: Position,
         /// The deserialization error.
         err: DeserializeError,
     },
@@ -113,9 +112,9 @@ impl ErrorKind {
     /// the position on an error without doing case analysis on `ErrorKind`.
     pub fn position(&self) -> Option<&Position> {
         match *self {
-            ErrorKind::Utf8 { ref pos, .. } => pos.as_ref(),
-            ErrorKind::UnequalLengths { ref pos, .. } => pos.as_ref(),
-            ErrorKind::Deserialize { ref pos, .. } => pos.as_ref(),
+            ErrorKind::Utf8 { ref pos, .. } => Some(pos),
+            ErrorKind::UnequalLengths { ref pos, .. } => Some(pos),
+            ErrorKind::Deserialize { ref pos, .. } => Some(pos),
             _ => None,
         }
     }
@@ -139,10 +138,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self.0 {
             ErrorKind::Io(ref err) => err.fmt(f),
-            ErrorKind::Utf8 { pos: None, ref err } => {
-                write!(f, "CSV parse error: field {}: {}", err.field(), err)
-            }
-            ErrorKind::Utf8 { pos: Some(ref pos), ref err } => write!(
+            ErrorKind::Utf8 { ref pos, ref err } => write!(
                 f,
                 "CSV parse error: record {} \
                  (line {}, field: {}, byte: {}): {}",
@@ -152,30 +148,19 @@ impl fmt::Display for Error {
                 pos.byte(),
                 err
             ),
-            ErrorKind::UnequalLengths { pos: None, expected_len, len } => {
+            ErrorKind::UnequalLengths { ref pos, expected_len, len } => {
                 write!(
                     f,
-                    "CSV error: \
-                     found record with {} fields, but the previous record \
-                     has {} fields",
-                    len, expected_len
-                )
-            }
-            ErrorKind::UnequalLengths {
-                pos: Some(ref pos),
-                expected_len,
-                len,
-            } => write!(
-                f,
-                "CSV error: record {} (line: {}, byte: {}): \
+                    "CSV error: record {} (line: {}, byte: {}): \
                  found record with {} fields, but the previous record \
                  has {} fields",
-                pos.record(),
-                pos.line(),
-                pos.byte(),
-                len,
-                expected_len
-            ),
+                    pos.record(),
+                    pos.line(),
+                    pos.byte(),
+                    len,
+                    expected_len
+                )
+            }
             ErrorKind::Seek => write!(
                 f,
                 "CSV error: cannot access headers of CSV data \
@@ -185,10 +170,7 @@ impl fmt::Display for Error {
             ErrorKind::Serialize(ref err) => {
                 write!(f, "CSV write error: {}", err)
             }
-            ErrorKind::Deserialize { pos: None, ref err } => {
-                write!(f, "CSV deserialize error: {}", err)
-            }
-            ErrorKind::Deserialize { pos: Some(ref pos), ref err } => write!(
+            ErrorKind::Deserialize { ref pos, ref err } => write!(
                 f,
                 "CSV deserialize error: record {} \
                  (line: {}, byte: {}): {}",

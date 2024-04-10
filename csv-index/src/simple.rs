@@ -103,14 +103,14 @@ impl<W: io::Write> RandomAccessSimple<W> {
         if rdr.has_headers() {
             let header = rdr.byte_headers()?;
             if !header.is_empty() {
-                let pos = header.position().expect("position on header row");
+                let pos = header.position();
                 wtr.write_u64::<BigEndian>(pos.byte())?;
                 len += 1;
             }
         }
         let mut record = csv::ByteRecord::new();
         while rdr.read_byte_record(&mut record)? {
-            let pos = record.position().expect("position on row");
+            let pos = record.position();
             wtr.write_u64::<BigEndian>(pos.byte())?;
             len += 1;
         }

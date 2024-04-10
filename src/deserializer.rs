@@ -29,7 +29,7 @@ pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
     });
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
-            pos: record.position().map(Clone::clone),
+            pos: record.position().clone(),
             err,
         })
     })
@@ -46,7 +46,7 @@ pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
     });
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
-            pos: record.position().map(Clone::clone),
+            pos: record.position().clone(),
             err,
         })
     })

@@ -433,7 +433,7 @@ impl StringRecord {
         // TODO: We could likely do this in place, but for now, we allocate.
         let mut trimmed =
             StringRecord::with_capacity(self.as_slice().len(), self.len());
-        trimmed.set_position(self.position().cloned());
+        trimmed.set_position(self.position().clone());
         for field in &*self {
             trimmed.push_field(field.trim());
         }
@@ -473,7 +473,7 @@ impl StringRecord {
     ///
     ///     assert!(rdr.read_record(&mut record)?);
     ///     {
-    ///         let pos = record.position().expect("a record position");
+    ///         let pos = record.position();
     ///         assert_eq!(pos.byte(), 0);
     ///         assert_eq!(pos.line(), 1);
     ///         assert_eq!(pos.record(), 0);
@@ -481,7 +481,7 @@ impl StringRecord {
     ///
     ///     assert!(rdr.read_record(&mut record)?);
     ///     {
-    ///         let pos = record.position().expect("a record position");
+    ///         let pos = record.position();
     ///         assert_eq!(pos.byte(), 6);
     ///         assert_eq!(pos.line(), 2);
     ///         assert_eq!(pos.record(), 1);
@@ -493,7 +493,7 @@ impl StringRecord {
     /// }
     /// ```
     #[inline]
-    pub fn position(&self) -> Option<&Position> {
+    pub fn position(&self) -> &Position {
         self.0.position()
     }
 
@@ -510,11 +510,11 @@ impl StringRecord {
     /// pos.set_line(4);
     /// pos.set_record(2);
     ///
-    /// record.set_position(Some(pos.clone()));
-    /// assert_eq!(record.position(), Some(&pos));
+    /// record.set_position(pos.clone());
+    /// assert_eq!(record.position(), &pos);
     /// ```
     #[inline]
-    pub fn set_position(&mut self, pos: Option<Position>) {
+    pub fn set_position(&mut self, pos: Position) {
         self.0.set_position(pos);
     }
 
@@ -645,9 +645,7 @@ impl StringRecord {
         };
         match (read_res, utf8_res) {
             (Err(err), _) => Err(err),
-            (Ok(_), Err(err)) => {
-                Err(Error::new(ErrorKind::Utf8 { pos: Some(pos), err }))
-            }
+            (Ok(_), Err(err)) => Err(Error::new(ErrorKind::Utf8 { pos, err })),
             (Ok(eof), Ok(())) => Ok(eof),
         }
     }
