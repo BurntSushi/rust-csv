@@ -555,7 +555,7 @@ StringRecord(["Oakman", "AL", "", "33.7133333", "-87.3886111"])
 ```
 
 If you ever need to access the header record directly, then you can use the
-[`Reader::header`](../struct.Reader.html#method.headers)
+[`Reader::headers`](../struct.Reader.html#method.headers)
 method like so:
 
 ```no_run
