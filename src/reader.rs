@@ -630,6 +630,15 @@ impl ReaderBuilder {
         self.builder.nfa(yes);
         self
     }
+
+    /// Enable or disable initial space.
+    ///
+    /// When enabled skip any space following the field delimiter when
+    /// parsing CSV.
+    pub fn skip_initial_space(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.builder.skip_initial_space(yes);
+        self
+    }
 }
 
 /// A already configured CSV reader.

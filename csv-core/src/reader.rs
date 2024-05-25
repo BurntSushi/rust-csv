@@ -126,6 +126,8 @@ pub struct Reader {
     has_read: bool,
     /// The current position in the output buffer when reading a record.
     output_pos: usize,
+    /// Skip any space following the delimiter
+    skip_initial_space: bool,
 }
 
 impl Default for Reader {
@@ -145,6 +147,7 @@ impl Default for Reader {
             line: 1,
             has_read: false,
             output_pos: 0,
+            skip_initial_space: false,
         }
     }
 }
@@ -254,6 +257,15 @@ impl ReaderBuilder {
     #[doc(hidden)]
     pub fn nfa(&mut self, yes: bool) -> &mut ReaderBuilder {
         self.rdr.use_nfa = yes;
+        self
+    }
+
+    /// Enable or disable initial space.
+    ///
+    /// When enabled skip any space following the field delimiter when
+    /// parsing CSV.
+    pub fn skip_initial_space(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.rdr.skip_initial_space = yes;
         self
     }
 }
@@ -671,6 +683,12 @@ impl Reader {
             if has_out {
                 output[nout] = input[nin];
                 nout += 1;
+            } else if self.skip_initial_space
+                && nin < input.len() - 1
+                && input[nin] == self.delimiter
+                && input[nin + 1] == b' '
+            {
+                nin += 1;
             }
             nin += 1;
             if state >= self.dfa.final_field {
@@ -731,6 +749,12 @@ impl Reader {
             if has_out {
                 output[nout] = b;
                 nout += 1;
+            } else if self.skip_initial_space
+                && nin < input.len() - 1
+                && input[nin] == self.delimiter
+                && input[nin + 1] == b' '
+            {
+                nin += 1;
             }
             nin += 1;
             if state >= self.dfa.final_field {
@@ -893,6 +917,12 @@ impl Reader {
                     nin += 1;
                 }
                 NfaInputAction::Discard => {
+                    if self.skip_initial_space
+                        && nin < input.len() - 1
+                        && input[nin + 1] == b' '
+                    {
+                        nin += 1;
+                    }
                     nin += 1;
                 }
                 NfaInputAction::Epsilon => {}
@@ -944,6 +974,12 @@ impl Reader {
                     nin += 1;
                 }
                 NfaInputAction::Discard => {
+                    if self.skip_initial_space
+                        && nin < input.len() - 1
+                        && input[nin + 1] == b' '
+                    {
+                        nin += 1;
+                    }
                     nin += 1;
                 }
                 NfaInputAction::Epsilon => (),
@@ -1723,6 +1759,14 @@ mod tests {
         csv![["foo", "#bar", "baz"]],
         |b: &mut ReaderBuilder| {
             b.comment(Some(b'#'));
+        }
+    );
+    parses_to!(
+        issue_337,
+        "a, \"b\", c",
+        csv![["a", "b", "c"]],
+        |b: &mut ReaderBuilder| {
+            b.skip_initial_space(true);
         }
     );
 
