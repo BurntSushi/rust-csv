@@ -28,7 +28,7 @@ impl WriterBuilder {
             double_quote: true,
             comment: None,
         };
-        WriterBuilder { wtr: wtr }
+        WriterBuilder { wtr }
     }
 
     /// Builder a CSV writer from this configuration.
@@ -196,7 +196,7 @@ impl Clone for Writer {
         }
         Writer {
             state: self.state.clone(),
-            requires_quotes: requires_quotes,
+            requires_quotes,
             delimiter: self.delimiter,
             term: self.term,
             style: self.style,
