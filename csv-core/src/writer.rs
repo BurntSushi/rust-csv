@@ -191,9 +191,7 @@ pub struct Writer {
 impl Clone for Writer {
     fn clone(&self) -> Writer {
         let mut requires_quotes = [false; 256];
-        for i in 0..256 {
-            requires_quotes[i] = self.requires_quotes[i];
-        }
+        requires_quotes.copy_from_slice(&self.requires_quotes);
         Writer {
             state: self.state.clone(),
             requires_quotes,
