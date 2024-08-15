@@ -425,7 +425,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        self.next_field().and_then(|f| visitor.visit_str(f.into()))
+        self.next_field().and_then(|f| visitor.visit_str(f))
     }
 
     fn deserialize_bytes<V: Visitor<'de>>(
