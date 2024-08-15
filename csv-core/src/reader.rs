@@ -1242,7 +1242,7 @@ impl DfaClasses {
     }
 
     fn num_classes(&self) -> usize {
-        self.next_class as usize
+        self.next_class
     }
 
     /// Scan and copy the input bytes to the output buffer quickly.
