@@ -60,7 +60,7 @@ impl Error {
 pub enum ErrorKind {
     /// An I/O error that occurred while reading CSV data.
     Io(io::Error),
-    /// A UTF-8 decoding error that occured while reading CSV data into Rust
+    /// A UTF-8 decoding error that occurred while reading CSV data into Rust
     /// `String`s.
     Utf8 {
         /// The position of the record in which this error occurred, if
