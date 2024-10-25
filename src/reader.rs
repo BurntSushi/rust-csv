@@ -1606,7 +1606,9 @@ impl<R: io::Read> Reader<R> {
                 }
                 return result;
             }
-        } else if self.state.trim.should_trim_fields() {
+        }
+        // It should be a record, since we have no headers, trim if necessary
+        if !self.state.has_headers && self.state.trim.should_trim_fields() {
             record.trim();
         }
         Ok(ok)
