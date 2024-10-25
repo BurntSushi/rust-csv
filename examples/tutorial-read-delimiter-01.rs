@@ -1,6 +1,7 @@
-use std::{error::Error, io, process};
+use eyre::Result;
+use std::{io, process};
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false)
         .delimiter(b';')
@@ -18,7 +19,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }
