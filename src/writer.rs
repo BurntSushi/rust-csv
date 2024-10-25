@@ -215,7 +215,9 @@ impl WriterBuilder {
     ///
     /// # fn main() { example().unwrap(); }
     /// fn example() -> Result<(), Box<dyn Error>> {
-    ///     let mut wtr = WriterBuilder::new().from_writer(vec![]);
+    ///     let mut wtr = WriterBuilder::new()
+    ///         .has_headers(false)
+    ///         .from_writer(vec![]);
     ///     wtr.serialize(("Boston", "United States", 4628910))?;
     ///     wtr.serialize(("Concord", "United States", 42695))?;
     ///
