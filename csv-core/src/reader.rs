@@ -487,6 +487,7 @@ impl Reader {
         self.nfa_state = NfaState::StartRecord;
         self.line = 1;
         self.has_read = false;
+        self.output_pos = 0;
     }
 
     /// Return the current line number as measured by the number of occurrences
@@ -2001,5 +2002,28 @@ mod tests {
         assert_eq!(ends[0], 3);
 
         assert_read_record!(rdr, &inp, out, ends, 0, 0, 0, End);
+    }
+
+    #[test]
+    fn reset_input_partial() {
+        use crate::ReadRecordResult::*;
+
+        let inp = b("foo,bar\nbaz");
+        let out = &mut [0; 1024];
+        let ends = &mut [0; 10];
+        let mut rdr = Reader::new();
+
+        assert_read_record!(rdr, &inp, out, ends, 8, 6, 2, Record);
+
+        // Try to read incomplete record.
+        let (result, _, _, _) = rdr.read_record(&inp[8..], out, ends);
+        assert_eq!(result, InputEmpty);
+
+        rdr.reset();
+
+        let inp = b("baz,raz\n");
+        let (result, _, _, _) = rdr.read_record(inp, out, ends);
+        assert_eq!(result, Record);
+        assert_eq!(ends[0], 3);
     }
 }
