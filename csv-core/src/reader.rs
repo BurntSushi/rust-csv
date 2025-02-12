@@ -2015,7 +2015,7 @@ mod tests {
 
         assert_read_record!(rdr, &inp, out, ends, 8, 6, 2, Record);
 
-        // Try to incomplete record.
+        // Try to read incomplete record.
         let (result, _, _, _) = rdr.read_record(&inp[8..], out, ends);
         assert_eq!(result, InputEmpty);
 
