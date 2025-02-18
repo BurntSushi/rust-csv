@@ -208,12 +208,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         self,
         _len: Option<usize>,
     ) -> Result<Self::SerializeMap, Self::Error> {
-        // The right behavior for serializing maps isn't clear.
-        Err(Error::custom(
-            "serializing maps is not supported, \
-             if you have a use case, please file an issue at \
-             https://github.com/BurntSushi/rust-csv",
-        ))
+        Ok(self)
     }
 
     fn serialize_struct(
@@ -303,22 +298,34 @@ impl<'a, 'w, W: io::Write> SerializeMap for &'a mut SeRecord<'w, W> {
     type Ok = ();
     type Error = Error;
 
+    fn serialize_entry<K, V>(
+        &mut self,
+        _key: &K,
+        value: &V,
+    ) -> Result<(), Self::Error>
+    where
+        K: ?Sized + Serialize,
+        V: ?Sized + Serialize,
+    {
+        value.serialize(&mut **self)
+    }
+
     fn serialize_key<T: ?Sized + Serialize>(
         &mut self,
         _key: &T,
     ) -> Result<(), Self::Error> {
-        unreachable!()
+        Ok(())
     }
 
     fn serialize_value<T: ?Sized + Serialize>(
         &mut self,
         _value: &T,
     ) -> Result<(), Self::Error> {
-        unreachable!()
+        Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unreachable!()
+        Ok(())
     }
 }
 
@@ -658,12 +665,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
         self,
         _len: Option<usize>,
     ) -> Result<Self::SerializeMap, Self::Error> {
-        // The right behavior for serializing maps isn't clear.
-        Err(Error::custom(
-            "serializing maps is not supported, \
-             if you have a use case, please file an issue at \
-             https://github.com/BurntSushi/rust-csv",
-        ))
+        Ok(self)
     }
 
     fn serialize_struct(
@@ -753,22 +755,51 @@ impl<'a, 'w, W: io::Write> SerializeMap for &'a mut SeHeader<'w, W> {
     type Ok = ();
     type Error = Error;
 
+    fn serialize_entry<K, V>(
+        &mut self,
+        key: &K,
+        value: &V,
+    ) -> Result<(), Self::Error>
+    where
+        K: ?Sized + Serialize,
+        V: ?Sized + Serialize,
+    {
+        // Grab old state and update state to `EncounteredStructField`.
+        let old_state =
+            mem::replace(&mut self.state, HeaderState::EncounteredStructField);
+        if let HeaderState::ErrorIfWrite(err) = old_state {
+            return Err(err);
+        }
+
+        let mut serializer = SeRecord {
+            wtr: self.wtr,
+        };
+        key.serialize(&mut serializer)?;
+
+        // Check that there aren't any containers in the value.
+        self.state = HeaderState::InStructField;
+        value.serialize(&mut **self)?;
+        self.state = HeaderState::EncounteredStructField;
+
+        Ok(())
+    }
+
     fn serialize_key<T: ?Sized + Serialize>(
         &mut self,
         _key: &T,
     ) -> Result<(), Self::Error> {
-        unreachable!()
+        Ok(())
     }
 
     fn serialize_value<T: ?Sized + Serialize>(
         &mut self,
         _value: &T,
     ) -> Result<(), Self::Error> {
-        unreachable!()
+        Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unreachable!()
+        Ok(())
     }
 }
 
@@ -1344,5 +1375,51 @@ mod tests {
         let (wrote, got) = serialize_header(row.clone());
         assert!(wrote);
         assert_eq!(got, "label,num,label2,value,empty,label,num");
+    }
+
+    #[test]
+    fn struct_nested() {
+        #[derive(Clone, Serialize)]
+        struct Inner {
+            inner_a: i32,
+            inner_b: i32,
+        }
+
+        #[derive(Clone, Serialize)]
+        struct Middle {
+            #[serde(flatten)]
+            inner: Inner,
+            middle_a: i32,
+            middle_b: i32,
+        }
+
+        #[derive(Clone, Serialize)]
+        struct Outer {
+            // arbitrary structure nesting.
+            #[serde(flatten)]
+            middle: Middle,
+            outer_a: i32,
+            outer_b: i32,
+        }
+
+        let outer = Outer {
+            middle: Middle {
+                inner: Inner {
+                    inner_a: 0,
+                    inner_b: 1
+                },
+                middle_a: 2,
+                middle_b: 3,
+            },
+            outer_a: 4,
+            outer_b: 5,
+        };
+
+        let (wrote, got) = serialize_header(outer.clone());
+        assert!(wrote);
+        assert_eq!(got, "inner_a,inner_b,middle_a,middle_b,outer_a,outer_b");
+
+        let got = serialize(outer);
+        assert_eq!(got, "0,1,2,3,4,5\n");
     }
 }
