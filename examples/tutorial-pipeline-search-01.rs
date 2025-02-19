@@ -1,10 +1,11 @@
-use std::{env, error::Error, io, process};
+use eyre::{eyre, Result};
+use std::{env, io, process};
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     // Get the query from the positional arguments.
     // If one doesn't exist, return an error.
     let query = match env::args().nth(1) {
-        None => return Err(From::from("expected 1 argument, but got none")),
+        None => return Err(eyre!("expected 1 argument, but got none")),
         Some(query) => query,
     };
 
@@ -31,7 +32,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }
