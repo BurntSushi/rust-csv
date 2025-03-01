@@ -1,11 +1,10 @@
 use std::{error::Error as StdError, fmt, iter, num, str};
 
 use serde::{
-    de::value::BorrowedBytesDeserializer,
     de::{
-        Deserialize, DeserializeSeed, Deserializer, EnumAccess,
-        Error as SerdeError, IntoDeserializer, MapAccess, SeqAccess,
-        Unexpected, VariantAccess, Visitor,
+        self, value::BorrowedBytesDeserializer, Deserialize, DeserializeSeed,
+        Deserializer, EnumAccess, Error as SerdeError, IntoDeserializer,
+        MapAccess, SeqAccess, Unexpected, VariantAccess, Visitor,
     },
     serde_if_integer128,
 };
@@ -27,7 +26,8 @@ pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
         headers: headers.map(|r| r.iter()),
         field: 0,
     });
-    D::deserialize(&mut deser).map_err(|err| {
+    D::deserialize(&mut deser).map_err(|mut err| {
+        err.field = Some(deser.0.field);
         Error::new(ErrorKind::Deserialize {
             pos: record.position().map(Clone::clone),
             err,
