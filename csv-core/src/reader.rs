@@ -819,7 +819,6 @@ impl Reader {
                 self.dfa.classes.add(b'\r');
                 self.dfa.classes.add(b'\n');
             }
-            _ => unreachable!(),
         }
         // Build the DFA transition table by computing the DFA state for all
         // possible combinations of state and input byte.
