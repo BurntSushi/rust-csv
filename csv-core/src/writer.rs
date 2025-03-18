@@ -55,7 +55,6 @@ impl WriterBuilder {
             Any(b) => {
                 wtr.requires_quotes[b as usize] = true;
             }
-            _ => unreachable!(),
         }
         // If the first field of a row starts with a comment character,
         // it needs to be quoted, or the row will not be readable later.
@@ -396,7 +395,6 @@ impl Writer {
         let (res, o) = match self.term {
             Terminator::CRLF => write_pessimistic(&[b'\r', b'\n'], output),
             Terminator::Any(b) => write_pessimistic(&[b], output),
-            _ => unreachable!(),
         };
         if o == 0 {
             return (res, nout);
@@ -446,7 +444,6 @@ impl Writer {
             QuoteStyle::Never => false,
             QuoteStyle::NonNumeric => is_non_numeric(input),
             QuoteStyle::Necessary => self.needs_quotes(input),
-            _ => unreachable!(),
         }
     }
 
