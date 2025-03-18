@@ -1,15 +1,12 @@
 use std::{fmt, io, mem};
 
-use {
-    itoa, ryu,
-    serde::{
-        ser::{
-            Error as SerdeError, Serialize, SerializeMap, SerializeSeq,
-            SerializeStruct, SerializeStructVariant, SerializeTuple,
-            SerializeTupleStruct, SerializeTupleVariant, Serializer,
-        },
-        serde_if_integer128,
+use serde::{
+    ser::{
+        Error as SerdeError, Serialize, SerializeMap, SerializeSeq,
+        SerializeStruct, SerializeStructVariant, SerializeTuple,
+        SerializeTupleStruct, SerializeTupleVariant, Serializer,
     },
+    serde_if_integer128,
 };
 
 use crate::{
@@ -124,7 +121,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        self.wtr.write_field(&[])
+        self.wtr.write_field([])
     }
 
     fn serialize_some<T: ?Sized + Serialize>(
