@@ -40,10 +40,7 @@ impl Error {
     /// If this is true, the underlying `ErrorKind` is guaranteed to be
     /// `ErrorKind::Io`.
     pub fn is_io_error(&self) -> bool {
-        match *self.0 {
-            ErrorKind::Io(_) => true,
-            _ => false,
-        }
+        matches!(*self.0, ErrorKind::Io(_))
     }
 
     /// Return the position for this error, if one exists.

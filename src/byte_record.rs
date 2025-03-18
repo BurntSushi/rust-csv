@@ -698,7 +698,7 @@ impl Bounds {
     /// If there are no fields, this returns `0`.
     #[inline]
     fn end(&self) -> usize {
-        self.ends().last().map(|&i| i).unwrap_or(0)
+        self.ends().last().copied().unwrap_or(0)
     }
 
     /// Returns the number of fields in these bounds.

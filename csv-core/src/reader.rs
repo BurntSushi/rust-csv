@@ -439,7 +439,7 @@ enum NfaState {
 }
 
 /// A list of NFA states that have an explicit representation in the DFA.
-const NFA_STATES: &'static [NfaState] = &[
+const NFA_STATES: &[NfaState] = &[
     NfaState::StartRecord,
     NfaState::StartField,
     NfaState::EndFieldDelim,
@@ -455,21 +455,18 @@ const NFA_STATES: &'static [NfaState] = &[
 impl NfaState {
     /// Returns true if this state indicates that a field has been parsed.
     fn is_field_final(&self) -> bool {
-        match *self {
+        matches!(
+            *self,
             NfaState::End
-            | NfaState::EndRecord
-            | NfaState::CRLF
-            | NfaState::EndFieldDelim => true,
-            _ => false,
-        }
+                | NfaState::EndRecord
+                | NfaState::CRLF
+                | NfaState::EndFieldDelim
+        )
     }
 
     /// Returns true if this state indicates that a record has been parsed.
     fn is_record_final(&self) -> bool {
-        match *self {
-            NfaState::End | NfaState::EndRecord | NfaState::CRLF => true,
-            _ => false,
-        }
+        matches!(*self, NfaState::End | NfaState::EndRecord | NfaState::CRLF)
     }
 }
 
@@ -1238,11 +1235,11 @@ impl DfaClasses {
             panic!("added too many classes")
         }
         self.classes[b as usize] = self.next_class as u8;
-        self.next_class = self.next_class + 1;
+        self.next_class += 1;
     }
 
     fn num_classes(&self) -> usize {
-        self.next_class as usize
+        self.next_class
     }
 
     /// Scan and copy the input bytes to the output buffer quickly.

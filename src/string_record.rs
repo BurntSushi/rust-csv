@@ -664,7 +664,7 @@ impl ops::Index<usize> for StringRecord {
 impl<T: AsRef<str>> From<Vec<T>> for StringRecord {
     #[inline]
     fn from(xs: Vec<T>) -> StringRecord {
-        StringRecord::from_iter(xs.into_iter())
+        StringRecord::from_iter(xs)
     }
 }
 
