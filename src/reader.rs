@@ -1330,7 +1330,7 @@ impl<R: io::Read> Reader<R> {
         match headers.string_record {
             Ok(ref record) => Ok(record),
             Err(ref err) => Err(Error::new(ErrorKind::Utf8 {
-                pos: headers.byte_record.position().map(Clone::clone),
+                pos: headers.byte_record.position().cloned(),
                 err: err.clone(),
             })),
         }
@@ -1888,7 +1888,7 @@ impl ReaderState {
                 Some(expected) => {
                     if record.len() as u64 != expected {
                         return Err(Error::new(ErrorKind::UnequalLengths {
-                            pos: record.position().map(Clone::clone),
+                            pos: record.position().cloned(),
                             expected_len: expected,
                             len: record.len() as u64,
                         }));
@@ -1916,7 +1916,7 @@ impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
         let headers = if !rdr.state.has_headers {
             None
         } else {
-            rdr.headers().ok().map(Clone::clone)
+            rdr.headers().ok().cloned()
         };
         DeserializeRecordsIntoIter {
             rdr,
@@ -1974,7 +1974,7 @@ impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
         let headers = if !rdr.state.has_headers {
             None
         } else {
-            rdr.headers().ok().map(Clone::clone)
+            rdr.headers().ok().cloned()
         };
         DeserializeRecordsIter {
             rdr,
