@@ -642,6 +642,13 @@ impl Position {
     }
 }
 
+impl Default for Position {
+    #[inline]
+    fn default() -> Self {
+        Position::new()
+    }
+}
+
 /// The bounds of fields in a single record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Bounds {
