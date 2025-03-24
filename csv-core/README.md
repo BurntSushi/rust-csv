@@ -18,7 +18,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-csv-core = "0.1.10"
+csv-core = "0.1.12"
 ```
 
 ### Build features
