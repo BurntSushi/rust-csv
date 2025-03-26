@@ -56,10 +56,10 @@ fn main() {
 
 The above example can be run like so:
 
-```text
-$ git clone git://github.com/BurntSushi/rust-csv
-$ cd rust-csv
-$ cargo run --example cookbook-read-basic < examples/data/smallpop.csv
+```console
+git clone git@github.com:BurntSushi/rust-csv.git
+cd rust-csv
+cargo run --example cookbook-read-basic < examples/data/smallpop.csv
 ```
 
 ### Example with Serde
