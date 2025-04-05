@@ -29,7 +29,7 @@ pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
     });
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
-            pos: record.position().map(Clone::clone),
+            pos: record.position().cloned(),
             err,
         })
     })
@@ -46,7 +46,7 @@ pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
     });
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
-            pos: record.position().map(Clone::clone),
+            pos: record.position().cloned(),
             err,
         })
     })
@@ -284,7 +284,7 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
 
     #[inline]
     fn peek_field(&mut self) -> Option<&'r [u8]> {
-        self.it.peek().map(|s| *s)
+        self.it.peek().copied()
     }
 
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
@@ -329,8 +329,8 @@ macro_rules! deserialize_int {
             visitor: V,
         ) -> Result<V::Value, Self::Error> {
             let field = self.next_field()?;
-            let num = if field.starts_with("0x") {
-                <$inttype>::from_str_radix(&field[2..], 16)
+            let num = if let Some(digits) = field.strip_prefix("0x") {
+                <$inttype>::from_str_radix(digits, 16)
             } else {
                 field.parse()
             };
@@ -425,7 +425,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        self.next_field().and_then(|f| visitor.visit_str(f.into()))
+        self.next_field().and_then(|f| visitor.visit_str(f))
     }
 
     fn deserialize_bytes<V: Visitor<'de>>(
@@ -449,7 +449,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
     ) -> Result<V::Value, Self::Error> {
         match self.peek_field() {
             None => visitor.visit_none(),
-            Some(f) if f.is_empty() => {
+            Some([]) => {
                 self.next_field().expect("empty field");
                 visitor.visit_none()
             }
