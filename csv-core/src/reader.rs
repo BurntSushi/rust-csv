@@ -115,6 +115,8 @@ pub struct Reader {
     /// If enabled (the default), then quotes are respected. When disabled,
     /// quotes are not treated specially.
     quoting: bool,
+    /// If enabled (the default) blank lines are ignored.
+    skip_blank_lines: bool,
     /// Whether to use the NFA for parsing.
     ///
     /// Generally this is for debugging. There's otherwise no good reason
@@ -141,6 +143,7 @@ impl Default for Reader {
             double_quote: true,
             comment: None,
             quoting: true,
+            skip_blank_lines: true,
             use_nfa: false,
             line: 1,
             has_read: false,
@@ -224,6 +227,16 @@ impl ReaderBuilder {
     /// quotes are not treated specially.
     pub fn quoting(&mut self, yes: bool) -> &mut ReaderBuilder {
         self.rdr.quoting = yes;
+        self
+    }
+
+    /// Enable or disable skipping of blank lines
+    ///
+    /// This is enabled by default, but it may be disabled. When enabled,
+    /// blank lines are ignored. If present, the finally trailing blank line
+    /// will be ignored.
+    pub fn skip_blank_lines(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.rdr.skip_blank_lines = yes;
         self
     }
 
@@ -989,7 +1002,11 @@ impl Reader {
             End => (End, NfaInputAction::Epsilon),
             StartRecord => {
                 if self.term.equals(c) {
-                    (StartRecord, NfaInputAction::Discard)
+                    if self.skip_blank_lines {
+                        (StartRecord, NfaInputAction::Discard)
+                    } else {
+                        (CRLF, NfaInputAction::Discard)
+                    }
                 } else if self.comment == Some(c) {
                     (InComment, NfaInputAction::Discard)
                 } else {
@@ -1722,6 +1739,15 @@ mod tests {
             b.comment(Some(b'#'));
         }
     );
+
+    fn enable_blank(builder: &mut ReaderBuilder) -> &mut ReaderBuilder {
+        builder.skip_blank_lines(false)
+    }
+    parses_to!(blank_lines_one_row_one_field, "a", csv![["a"]], enable_blank);
+    parses_to!(blank_lines_one_row_one_field_lf, "a\n", csv![["a"]], enable_blank);
+    parses_to!(blank_lines_one_row_one_field_lf_lf, "a\n\n", csv![["a"], [""]], enable_blank);
+    parses_to!(blank_lines_one_row_lf_one_field_lf, "\na\n", csv![[""], ["a"]], enable_blank);
+    parses_to!(blank_lines_crlf, "\r\na\r\n", csv![[""], ["a"]], enable_blank);
 
     macro_rules! assert_read {
         (
