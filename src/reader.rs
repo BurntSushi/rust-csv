@@ -632,7 +632,7 @@ impl ReaderBuilder {
     }
 }
 
-/// A already configured CSV reader.
+/// An already configured CSV reader.
 ///
 /// A CSV reader takes as input CSV data and transforms that into standard Rust
 /// values. The most flexible way to read CSV data is as a sequence of records,
