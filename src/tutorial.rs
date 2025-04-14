@@ -1136,6 +1136,62 @@ function is a generic helper function that does one very simple thing: when
 applied to `Option` fields, it will convert any deserialization error into a
 `None` value. This is useful when you need to work with messy CSV data.
 
+Sometimes you might need to return invalid fields instead of discarding them.
+For this you can use the similar
+[`invalid_result`](../fn.invalid_result.html)
+function, which works as follows: when applied to `Result<T, String>` fields,
+it will convert any invalid filed to a `String` and return it as `Err(string)`.
+Note that any invalid UTF-8 bytes are lossily converted to `String`, therefore
+this function will never fail.
+
+This behavior can be achieved with very minor changes to the previous example:
+
+```no_run
+//tutorial-read-serde-invalid-03.rs
+# #![allow(dead_code)]
+# use std::{error::Error, io, process};
+#
+# use serde::Deserialize;
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct Record {
+    latitude: f64,
+    longitude: f64,
+    #[serde(deserialize_with = "csv::invalid_result")]
+    population: Result<u64, String>,
+    city: String,
+    state: String,
+}
+
+fn run() -> Result<(), Box<dyn Error>> {
+    let mut rdr = csv::Reader::from_reader(io::stdin());
+    for result in rdr.deserialize() {
+        let record: Record = result?;
+        println!("{:?}", record);
+    }
+    Ok(())
+}
+#
+# fn main() {
+#     if let Err(err) = run() {
+#         println!("{}", err);
+#         process::exit(1);
+#     }
+# }
+```
+
+If you compile and run this last example, then it should run to completion just
+like the previous one but with the following output:
+
+```text
+$ cargo build
+$ ./target/debug/csvtutor < uspop-null.csv
+Record { latitude: 65.2419444, longitude: -165.2716667, population: Err(""), city: "Davidsons Landing", state: "AK" }
+Record { latitude: 60.5544444, longitude: -151.2583333, population: Ok(7610), city: "Kenai", state: "AK" }
+Record { latitude: 33.7133333, longitude: -87.3886111, population: Err(""), city: "Oakman", state: "AL" }
+# ... and more
+```
+
 # Writing CSV
 
 In this section we'll show a few examples that write CSV data. Writing CSV data

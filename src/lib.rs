@@ -265,6 +265,9 @@ impl Trim {
 /// `Option<T>` is deserialized with non-empty but invalid data, then the value
 /// will be `None` and the error will be ignored.
 ///
+/// Use the [`invalid_result`](./fn.invalid_result.html) function if you want to
+/// return the invalid values as `Err<String>` instead of discarding them.
+///
 /// # Example
 ///
 /// This example shows how to parse CSV records with numerical data, even if
@@ -307,4 +310,99 @@ where
     Option<T>: Deserialize<'de>,
 {
     Option::<T>::deserialize(de).or_else(|_| Ok(None))
+}
+
+/// A custom Serde deserializer for possibly invalid `Result<T, String>` fields.
+///
+/// When deserializing CSV data, it is sometimes desirable to return separately
+/// fields with invalid data. For example, there might be a field that is
+/// usually a number, but will occasionally contain garbage data that causes
+/// number parsing to fail.
+///
+/// You might be inclined to use, say, `Result<i32, String>` for fields such at
+/// this. However this will not compile out of the box, because Serde does not
+/// know when to return `Ok<i32>` and when to return `Err<String>`.
+///
+/// This function allows you to define the following behavior: if `Result<T,
+/// String>` is deserialized with valid data, then the valid value will be
+/// returned as `Ok<T>`, while if it is deserialized with empty or invalid data,
+/// then the invalid value will be converted to `String` and returned as
+/// `Err<String>`. Note that any invalid UTF-8 bytes are lossily converted to
+/// `String`, therefore this function will never fail.
+///
+/// Use the [`invalid_option`](./fn.invalid_option.html) function if you want to
+/// discard the invalid values instead of returning them as `Err<String>`.
+///
+/// # Example
+///
+/// This example shows how to parse CSV records with numerical data, even if
+/// some numerical data is absent or invalid. Without the
+/// `serde(deserialize_with = "...")` annotations, this example would not
+/// compile.
+///
+/// ```
+/// use std::error::Error;
+///
+/// #[derive(Debug, serde::Deserialize, Eq, PartialEq)]
+/// struct Row {
+///     #[serde(deserialize_with = "csv::invalid_result")]
+///     a: Result<i32, String>,
+///     #[serde(deserialize_with = "csv::invalid_result")]
+///     b: Result<i32, String>,
+///     #[serde(deserialize_with = "csv::invalid_result")]
+///     c: Result<i32, String>,
+/// }
+///
+/// # fn main() { example().unwrap(); }
+/// fn example() -> Result<(), Box<dyn Error>> {
+///     let data = "\
+/// a,b,c
+/// 5,\"\",xyz
+/// ";
+///     let mut rdr = csv::Reader::from_reader(data.as_bytes());
+///     if let Some(result) = rdr.deserialize().next() {
+///         let record: Row = result?;
+///         assert_eq!(record, Row { a: Ok(5), b: Err(String::new()), c: Err(String::from("xyz")) });
+///         Ok(())
+///     } else {
+///         Err(From::from("expected at least one record but got none"))
+///     }
+/// }
+/// ```
+pub fn invalid_result<'de, D, T>(
+    de: D,
+) -> result::Result<result::Result<T, String>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let value = serde_value::Value::deserialize(de)?;
+    let result = T::deserialize(value.clone()).map_err(|_| match value {
+        serde_value::Value::Bool(b) => b.to_string(),
+        serde_value::Value::U8(u) => u.to_string(),
+        serde_value::Value::U16(u) => u.to_string(),
+        serde_value::Value::U32(u) => u.to_string(),
+        serde_value::Value::U64(u) => u.to_string(),
+        serde_value::Value::I8(i) => i.to_string(),
+        serde_value::Value::I16(i) => i.to_string(),
+        serde_value::Value::I32(i) => i.to_string(),
+        serde_value::Value::I64(i) => i.to_string(),
+        serde_value::Value::F32(f) => f.to_string(),
+        serde_value::Value::F64(f) => f.to_string(),
+        serde_value::Value::Char(c) => c.to_string(),
+        serde_value::Value::String(s) => s,
+        serde_value::Value::Unit => String::new(),
+        serde_value::Value::Option(option) => {
+            format!("{:?}", option)
+        }
+        serde_value::Value::Newtype(newtype) => {
+            format!("{:?}", newtype)
+        }
+        serde_value::Value::Seq(seq) => format!("{:?}", seq),
+        serde_value::Value::Map(map) => format!("{:?}", map),
+        serde_value::Value::Bytes(bytes) => {
+            String::from_utf8_lossy(&bytes).into_owned()
+        }
+    });
+    Ok(result)
 }
