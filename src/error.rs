@@ -124,24 +124,35 @@ impl From<Error> for io::Error {
     }
 }
 
-impl StdError for Error {}
+impl StdError for Error {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match self.kind() {
+            ErrorKind::Io(err) => err.source(),
+            ErrorKind::Utf8 { err, .. } => Some(err),
+            ErrorKind::UnequalLengths { .. } => None,
+            ErrorKind::Seek => None,
+            ErrorKind::Serialize(_) => None,
+            ErrorKind::Deserialize { err, .. } => Some(err),
+            _ => unreachable!(),
+        }
+    }
+}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self.0 {
             ErrorKind::Io(ref err) => err.fmt(f),
             ErrorKind::Utf8 { pos: None, ref err } => {
-                write!(f, "CSV parse error: field {}: {}", err.field(), err)
+                write!(f, "CSV parse error: field {}.", err.field())
             }
             ErrorKind::Utf8 { pos: Some(ref pos), ref err } => write!(
                 f,
                 "CSV parse error: record {} \
-                 (line {}, field: {}, byte: {}): {}",
+                 (line {}, field: {}, byte: {}).",
                 pos.record(),
                 pos.line(),
                 err.field(),
                 pos.byte(),
-                err
             ),
             ErrorKind::UnequalLengths { pos: None, expected_len, len } => {
                 write!(
@@ -176,17 +187,16 @@ impl fmt::Display for Error {
             ErrorKind::Serialize(ref err) => {
                 write!(f, "CSV write error: {}", err)
             }
-            ErrorKind::Deserialize { pos: None, ref err } => {
-                write!(f, "CSV deserialize error: {}", err)
+            ErrorKind::Deserialize { pos: None, .. } => {
+                write!(f, "CSV deserialize error")
             }
-            ErrorKind::Deserialize { pos: Some(ref pos), ref err } => write!(
+            ErrorKind::Deserialize { pos: Some(ref pos), .. } => write!(
                 f,
                 "CSV deserialize error: record {} \
-                 (line: {}, byte: {}): {}",
+                 (line: {}, byte: {}).",
                 pos.record(),
                 pos.line(),
                 pos.byte(),
-                err
             ),
         }
     }
