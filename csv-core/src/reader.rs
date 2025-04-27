@@ -752,7 +752,10 @@ impl Reader {
         // parsing a new record, then we should sink into the final state
         // and never move from there. (pro-tip: the start state doubles as
         // the final state!)
-        if state >= self.dfa.final_record || state.is_start() || state == self.dfa.in_comment {
+        if state >= self.dfa.final_record
+            || state.is_start()
+            || state == self.dfa.in_comment
+        {
             self.dfa.new_state_final_end()
         } else {
             self.dfa.new_state_final_record()
@@ -1722,6 +1725,15 @@ mod tests {
         comment_5,
         "foo,#bar,baz",
         csv![["foo", "#bar", "baz"]],
+        |b: &mut ReaderBuilder| {
+            b.comment(Some(b'#'));
+        }
+    );
+    // ref: https://github.com/BurntSushi/rust-csv/issues/363
+    parses_to!(
+        comment_at_end_of_file_should_be_ignored,
+        "foo,bar,baz\n# this is a comment in last line",
+        csv![["foo", "bar", "baz"]],
         |b: &mut ReaderBuilder| {
             b.comment(Some(b'#'));
         }
