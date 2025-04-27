@@ -664,7 +664,9 @@ impl Reader {
         let mut state = self.dfa_state;
         while nin < input.len() && nout < output.len() && nend < ends.len() {
             let (s, has_out) = self.dfa.get_output(state, input[nin]);
-            self.line += (input[nin] == b'\n') as u64;
+            if input[nin] == b'\n'{
+                self.line += 1;
+            }
             state = s;
             if has_out {
                 output[nout] = input[nin];
