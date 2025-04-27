@@ -1,0 +1,27 @@
+
+[package]
+name = "csv-fuzz"
+version = "0.0.0"
+authors = ["Muhammad Aldo Firmansyah <m.aldofirmansyah@gmail.com>"]
+publish = false
+edition = "2020"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.3"
+csv = "1.1"
+
+[dependencies.csv]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fuzz_csv"
+path = "fuzz_targets/fuzz_csv.rs"
+test = false
+doc = false
