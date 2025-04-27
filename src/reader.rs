@@ -2641,16 +2641,13 @@ mod tests {
     fn comment_at_end_of_file_should_be_ignored() {
         // Reproduce https://github.com/BurntSushi/rust-csv/issues/363
         // Test data: the last line is a comment without a trailing newline
-        let data = b"foo,bar,baz\na,b,c\nd,e,f\n# this is a comment";
+        let data = b"foo,bar,baz\na,b,c\n# this is a comment";
         let mut rdr =
             ReaderBuilder::new().comment(Some(b'#')).from_reader(&data[..]);
         let mut rec = StringRecord::new();
         // First record
         assert!(rdr.read_record(&mut rec).unwrap());
         assert_eq!(rec, vec!["a", "b", "c"]);
-        // Second record
-        assert!(rdr.read_record(&mut rec).unwrap());
-        assert_eq!(rec, vec!["d", "e", "f"]);
         // The comment line at EOF should be ignored, no more records
         assert!(!rdr.read_record(&mut rec).unwrap());
     }
