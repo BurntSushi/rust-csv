@@ -752,7 +752,7 @@ impl Reader {
         // parsing a new record, then we should sink into the final state
         // and never move from there. (pro-tip: the start state doubles as
         // the final state!)
-        if state >= self.dfa.final_record || state.is_start() {
+        if state >= self.dfa.final_record || state.is_start() || state == self.dfa.in_comment {
             self.dfa.new_state_final_end()
         } else {
             self.dfa.new_state_final_record()
@@ -1116,6 +1116,8 @@ struct Dfa {
     in_field: DfaState,
     /// The DFA state corresponding to being inside an quoted field.
     in_quoted: DfaState,
+    /// The DFA state corresponding to being inside a comment.
+    in_comment: DfaState,
     /// The minimum DFA state that indicates a field has been parsed. All DFA
     /// states greater than this are also final-field states.
     final_field: DfaState,
@@ -1132,6 +1134,7 @@ impl Dfa {
             classes: DfaClasses::new(),
             in_field: DfaState(0),
             in_quoted: DfaState(0),
+            in_comment: DfaState(0),
             final_field: DfaState(0),
             final_record: DfaState(0),
         }
@@ -1167,6 +1170,7 @@ impl Dfa {
     fn finish(&mut self) {
         self.in_field = self.new_state(NfaState::InField);
         self.in_quoted = self.new_state(NfaState::InQuotedField);
+        self.in_comment = self.new_state(NfaState::InComment);
         self.final_field = self.new_state(NfaState::EndFieldDelim);
         self.final_record = self.new_state(NfaState::EndRecord);
     }
