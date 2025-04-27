@@ -1731,8 +1731,16 @@ mod tests {
     );
     // ref: https://github.com/BurntSushi/rust-csv/issues/363
     parses_to!(
-        comment_at_end_of_file_should_be_ignored,
+        comment_at_end_of_file_should_be_ignored1,
         "foo,bar,baz\n# this is a comment in last line",
+        csv![["foo", "bar", "baz"]],
+        |b: &mut ReaderBuilder| {
+            b.comment(Some(b'#'));
+        }
+    );
+    parses_to!(
+        comment_at_end_of_file_should_be_ignored2,
+        "foo,bar,baz\n# this is a comment in last line\n",
         csv![["foo", "bar", "baz"]],
         |b: &mut ReaderBuilder| {
             b.comment(Some(b'#'));
