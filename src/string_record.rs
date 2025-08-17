@@ -49,7 +49,7 @@ impl<T: AsRef<[u8]>> PartialEq<Vec<T>> for StringRecord {
     }
 }
 
-impl<'a, T: AsRef<[u8]>> PartialEq<Vec<T>> for &'a StringRecord {
+impl<T: AsRef<[u8]>> PartialEq<Vec<T>> for &StringRecord {
     fn eq(&self, other: &Vec<T>) -> bool {
         self.0.iter_eq(other)
     }
@@ -61,7 +61,7 @@ impl<T: AsRef<[u8]>> PartialEq<[T]> for StringRecord {
     }
 }
 
-impl<'a, T: AsRef<[u8]>> PartialEq<[T]> for &'a StringRecord {
+impl<T: AsRef<[u8]>> PartialEq<[T]> for &StringRecord {
     fn eq(&self, other: &[T]) -> bool {
         self.0.iter_eq(other)
     }
