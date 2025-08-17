@@ -86,7 +86,8 @@ quux,baz,foobar
 ";
     let mut cmd = cmd_for_example("tutorial-error-01");
     let out = cmd_output_with(&mut cmd, data.as_bytes());
-    assert!(out.stderr().contains("thread 'main' panicked"));
+    assert!(out.stderr().contains("thread 'main' "));
+    assert!(out.stderr().contains(" panicked"));
 }
 
 #[test]
