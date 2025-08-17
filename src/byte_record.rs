@@ -251,7 +251,7 @@ impl ByteRecord {
     /// }
     /// ```
     #[inline]
-    pub fn iter(&self) -> ByteRecordIter {
+    pub fn iter(&self) -> ByteRecordIter<'_> {
         self.into_iter()
     }
 

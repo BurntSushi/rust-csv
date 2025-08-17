@@ -1045,7 +1045,7 @@ impl<R: io::Read> Reader<R> {
     ///     }
     /// }
     /// ```
-    pub fn deserialize<D>(&mut self) -> DeserializeRecordsIter<R, D>
+    pub fn deserialize<D>(&mut self) -> DeserializeRecordsIter<'_, R, D>
     where
         D: DeserializeOwned,
     {
@@ -1145,7 +1145,7 @@ impl<R: io::Read> Reader<R> {
     ///     }
     /// }
     /// ```
-    pub fn records(&mut self) -> StringRecordsIter<R> {
+    pub fn records(&mut self) -> StringRecordsIter<'_, R> {
         StringRecordsIter::new(self)
     }
 
@@ -1222,7 +1222,7 @@ impl<R: io::Read> Reader<R> {
     ///     }
     /// }
     /// ```
-    pub fn byte_records(&mut self) -> ByteRecordsIter<R> {
+    pub fn byte_records(&mut self) -> ByteRecordsIter<'_, R> {
         ByteRecordsIter::new(self)
     }
 

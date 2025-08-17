@@ -311,7 +311,7 @@ impl StringRecord {
     /// }
     /// ```
     #[inline]
-    pub fn iter(&self) -> StringRecordIter {
+    pub fn iter(&self) -> StringRecordIter<'_> {
         self.into_iter()
     }
 
