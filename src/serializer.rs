@@ -68,7 +68,8 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
 
     serde_if_integer128! {
         fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
-            self.collect_str(&v)
+            let mut buffer = itoa::Buffer::new();
+            self.wtr.write_field(buffer.format(v))
         }
     }
 
@@ -94,7 +95,8 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
 
     serde_if_integer128! {
         fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
-            self.collect_str(&v)
+            let mut buffer = itoa::Buffer::new();
+            self.wtr.write_field(buffer.format(v))
         }
     }
 
