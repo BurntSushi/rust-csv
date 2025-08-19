@@ -875,6 +875,77 @@ impl<W: io::Write> Writer<W> {
     /// | `(5, Foo { x: 6, y: 7 }` | *error: restriction 2* | `5,6,7` |
     /// | `(Foo { x: 5, y: 6 }, true)` | *error: restriction 2* | `5,6,true` |
     pub fn serialize<S: Serialize>(&mut self, record: S) -> Result<()> {
+        self.serialize_header(&record)?;
+        serialize(self, &record)?;
+        self.write_terminator()?;
+        Ok(())
+    }
+
+    /// Serialize a header row out of a single record using Serde.
+    ///
+    /// The data values in the record will not be written.
+    ///
+    /// This may by used to generate a CSV with only headers present.
+    ///
+    /// Usage of `serialize` after `serialize_header` will serialize records.
+    ///
+    /// Multiple usages of `serialize_header` will still only generate one
+    /// header.
+    ///
+    /// # Warning
+    ///
+    /// If `has_headers` is `false`, no header row will be serialized.
+    ///
+    /// # Example
+    ///
+    /// This shows how to serialize normal Rust structs as only the header.
+    /// Fields of the struct are used to write a header row. The values are
+    /// not written.
+    ///
+    /// Later `serialize` calls add values.
+    ///
+    /// ```
+    /// use std::error::Error;
+    ///
+    /// use csv::Writer;
+    /// use serde::Serialize;
+    ///
+    /// #[derive(Serialize)]
+    /// struct Row<'a> {
+    ///     city: &'a str,
+    ///     country: &'a str,
+    ///     // Serde allows us to name our headers exactly,
+    ///     // even if they don't match our struct field names.
+    ///     #[serde(rename = "popcount")]
+    ///     population: u64,
+    /// }
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<dyn Error>> {
+    ///     let mut wtr = Writer::from_writer(vec![]);
+    ///     // This record is only used for the header row. The values are
+    ///     // unused.
+    ///     wtr.serialize_header(Row {
+    ///         city: "Atlantis",
+    ///         country: "Oceania",
+    ///         population: 6942,
+    ///     })?;
+    ///     wtr.serialize(Row {
+    ///         city: "Boston",
+    ///         country: "United States",
+    ///         population: 4628910,
+    ///     })?;
+    ///
+    ///     let data = String::from_utf8(wtr.into_inner()?)?;
+    ///     assert_eq!(data, "\
+    /// city,country,popcount
+    /// Boston,United States,4628910
+    /// ");
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    pub fn serialize_header<S: Serialize>(&mut self, record: S) -> Result<()> {
         if let HeaderState::Write = self.state.header {
             let wrote_header = serialize_header(self, &record)?;
             if wrote_header {
@@ -884,8 +955,6 @@ impl<W: io::Write> Writer<W> {
                 self.state.header = HeaderState::DidNotWrite;
             };
         }
-        serialize(self, &record)?;
-        self.write_terminator()?;
         Ok(())
     }
 
@@ -1413,6 +1482,65 @@ mod tests {
             WriterBuilder::new().has_headers(false).from_writer(vec![]);
         wtr.serialize(Row { foo: 42, bar: 42.5, baz: true }).unwrap();
         assert_eq!(wtr_as_string(wtr), "42,42.5,true\n");
+    }
+
+    #[test]
+    fn serialize_just_headers() {
+        #[derive(Serialize)]
+        struct Row {
+            foo: i32,
+            bar: f64,
+            baz: bool,
+        }
+
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.serialize_header(Row { foo: 42, bar: 42.5, baz: true }).unwrap();
+        assert_eq!(wtr_as_string(wtr), "foo,bar,baz\n");
+    }
+
+    #[test]
+    fn serialize_just_headers_multiple() {
+        #[derive(Serialize)]
+        struct Row {
+            foo: i32,
+            bar: f64,
+            baz: bool,
+        }
+
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.serialize_header(Row { foo: 42, bar: 42.5, baz: true }).unwrap();
+        wtr.serialize_header(Row { foo: 42, bar: 42.5, baz: true }).unwrap();
+        assert_eq!(wtr_as_string(wtr), "foo,bar,baz\n");
+    }
+
+    #[test]
+    fn serialize_just_headers_and_then_serialize() {
+        #[derive(Serialize)]
+        struct Row {
+            foo: i32,
+            bar: f64,
+            baz: bool,
+        }
+
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.serialize_header(Row { foo: 42, bar: 42.5, baz: true }).unwrap();
+        wtr.serialize(Row { foo: 42, bar: 42.5, baz: true }).unwrap();
+        assert_eq!(wtr_as_string(wtr), "foo,bar,baz\n42,42.5,true\n");
+    }
+
+    #[test]
+    fn serialize_just_headers_but_with_headers_disabled() {
+        #[derive(Serialize)]
+        struct Row {
+            foo: i32,
+            bar: f64,
+            baz: bool,
+        }
+
+        let mut wtr =
+            WriterBuilder::new().has_headers(false).from_writer(vec![]);
+        wtr.serialize_header(Row { foo: 42, bar: 42.5, baz: true }).unwrap();
+        assert_eq!(wtr_as_string(wtr), "");
     }
 
     serde_if_integer128! {
