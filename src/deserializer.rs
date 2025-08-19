@@ -205,7 +205,9 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
         visitor: V,
     ) -> Result<V::Value, DeserializeError> {
         let x = self.next_field()?;
-        if x == "true" {
+        if x.is_empty() {
+            return visitor.visit_none();
+        } else if x == "true" {
             return visitor.visit_bool(true);
         } else if x == "false" {
             return visitor.visit_bool(false);
