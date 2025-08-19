@@ -1,7 +1,7 @@
 use core::fmt;
 use core::str;
 
-use memchr::memchr;
+use memchr::{memchr, memchr2};
 
 use crate::{QuoteStyle, Terminator};
 
@@ -315,7 +315,7 @@ impl Writer {
         let (res, i, o) = if self.state.quoting {
             quote(input, output, self.quote, self.escape, self.double_quote)
         } else {
-            write_optimistic(input, output)
+            escape(input, output, self.escape, self.delimiter)
         };
         nin += i;
         nout += o;
@@ -579,6 +579,44 @@ pub fn quote(
                     nout += o;
                     output = &mut moving(output)[o..];
                 }
+                nin += 1;
+                input = &input[1..];
+            }
+        }
+    }
+}
+
+pub fn escape(
+    mut input: &[u8],
+    mut output: &mut [u8],
+    escape: u8,
+    delimiter: u8,
+) -> (WriteResult, usize, usize) {
+    let (mut nin, mut nout) = (0, 0);
+    loop {
+        match memchr2(delimiter, escape, input) {
+            None => {
+                let (res, i, o) = write_optimistic(input, output);
+                nin += i;
+                nout += o;
+                return (res, nin, nout);
+            }
+            Some(next) => {
+                let char = input[next];
+                let (res, i, o) = write_optimistic(&input[..next], output);
+                input = &input[i..];
+                output = &mut moving(output)[o..];
+                nin += i;
+                nout += o;
+                if let WriteResult::OutputFull = res {
+                    return (res, nin, nout);
+                }
+                let (res, o) = write_pessimistic(&[escape, char], output);
+                if let WriteResult::OutputFull = res {
+                    return (res, nin, nout);
+                }
+                nout += o;
+                output = &mut moving(output)[o..];
                 nin += 1;
                 input = &input[1..];
             }
