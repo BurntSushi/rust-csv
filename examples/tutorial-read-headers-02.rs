@@ -1,6 +1,7 @@
-use std::{error::Error, io, process};
+use eyre::Result;
+use std::{io, process};
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     {
         // We nest this call in its own scope because of lifetimes.
@@ -20,7 +21,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }

@@ -1,4 +1,5 @@
-use std::{error::Error, io, process};
+use eyre::Result;
+use std::{io, process};
 
 use serde::Serialize;
 
@@ -13,7 +14,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<()> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
     wtr.serialize(Record {
@@ -44,7 +45,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
 fn main() {
     if let Err(err) = run() {
-        println!("{}", err);
+        println!("{:?}", err);
         process::exit(1);
     }
 }
