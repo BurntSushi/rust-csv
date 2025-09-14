@@ -137,7 +137,7 @@ $ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
 
 use std::result;
 
-use serde::{Deserialize, Deserializer};
+use serde_core::{Deserialize, Deserializer};
 
 pub use crate::{
     byte_record::{ByteRecord, ByteRecordIter, Position},

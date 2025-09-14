@@ -5,7 +5,7 @@ use std::{
     result,
 };
 
-use serde::de::Deserialize;
+use serde_core::de::Deserialize;
 
 use crate::{
     deserializer::deserialize_byte_record,

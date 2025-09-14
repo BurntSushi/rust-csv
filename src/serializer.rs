@@ -1,6 +1,6 @@
 use std::{fmt, io, mem};
 
-use serde::ser::{
+use serde_core::ser::{
     Error as SerdeError, Serialize, SerializeMap, SerializeSeq,
     SerializeStruct, SerializeStructVariant, SerializeTuple,
     SerializeTupleStruct, SerializeTupleVariant, Serializer,

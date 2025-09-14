@@ -5,7 +5,7 @@ use {
         self, WriteResult, Writer as CoreWriter,
         WriterBuilder as CoreWriterBuilder,
     },
-    serde::Serialize,
+    serde_core::Serialize,
 };
 
 use crate::{

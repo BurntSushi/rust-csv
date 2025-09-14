@@ -1,6 +1,6 @@
 use std::{error::Error as StdError, fmt, iter, num, str};
 
-use serde::{
+use serde_core::{
     de::value::BorrowedBytesDeserializer,
     de::{
         Deserialize, DeserializeSeed, Deserializer, EnumAccess,
