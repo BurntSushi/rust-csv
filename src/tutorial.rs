@@ -555,7 +555,7 @@ StringRecord(["Oakman", "AL", "", "33.7133333", "-87.3886111"])
 ```
 
 If you ever need to access the header record directly, then you can use the
-[`Reader::header`](../struct.Reader.html#method.headers)
+[`Reader::headers`](../struct.Reader.html#method.headers)
 method like so:
 
 ```no_run
@@ -564,17 +564,13 @@ method like so:
 #
 fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
-    {
-        // We nest this call in its own scope because of lifetimes.
-        let headers = rdr.headers()?;
-        println!("{:?}", headers);
-    }
+    let headers = rdr.headers()?;
+    println!("{:?}", headers);
     for result in rdr.records() {
         let record = result?;
         println!("{:?}", record);
     }
-    // We can ask for the headers at any time. There's no need to nest this
-    // call in its own scope because we never try to borrow the reader again.
+    // We can ask for the headers at any time.
     let headers = rdr.headers()?;
     println!("{:?}", headers);
     Ok(())
@@ -587,24 +583,6 @@ fn run() -> Result<(), Box<dyn Error>> {
 #     }
 # }
 ```
-
-One interesting thing to note in this example is that we put the call to
-`rdr.headers()` in its own scope. We do this because `rdr.headers()` returns
-a *borrow* of the reader's internal header state. The nested scope in this
-code allows the borrow to end before we try to iterate over the records. If
-we didn't nest the call to `rdr.headers()` in its own scope, then the code
-wouldn't compile because we cannot borrow the reader's headers at the same time
-that we try to borrow the reader to iterate over its records.
-
-Another way of solving this problem is to *clone* the header record:
-
-```ignore
-let headers = rdr.headers()?.clone();
-```
-
-This converts it from a borrow of the CSV reader to a new owned value. This
-makes the code a bit easier to read, but at the cost of copying the header
-record into a new allocation.
 
 ## Delimiters, quotes and variable length records
 
