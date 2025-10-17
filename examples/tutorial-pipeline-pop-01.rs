@@ -35,13 +35,11 @@ fn run() -> Result<(), Box<dyn Error>> {
         // indicate which type we want to deserialize our record into.
         let record: Record = result?;
 
-        // `map_or` is a combinator on `Option`. It take two parameters:
-        // a value to use when the `Option` is `None` (i.e., the record has
-        // no population count) and a closure that returns another value of
-        // the same type when the `Option` is `Some`. In this case, we test it
-        // against our minimum population count that we got from the command
-        // line.
-        if record.population.map_or(false, |pop| pop >= minimum_pop) {
+        // `is_some_and` is a combinator on `Option`. It takes a closure that
+        // returns `bool` when the `Option` is `Some`. When the `Option` is
+        // `None`, `false` is always returned. In this case, we test it against
+        // our minimum population count that we got from the command line.
+        if record.population.is_some_and(|pop| pop >= minimum_pop) {
             wtr.serialize(record)?;
         }
     }

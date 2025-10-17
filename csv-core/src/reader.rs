@@ -608,16 +608,14 @@ impl Reader {
     /// this method will fail to strip off the BOM if only part of the BOM is
     /// buffered. Hopefully that won't happen very often.
     fn strip_utf8_bom<'a>(&self, input: &'a [u8]) -> (&'a [u8], usize) {
-        let (input, nin) = if {
-            !self.has_read
-                && input.len() >= 3
-                && &input[0..3] == b"\xef\xbb\xbf"
-        } {
+        if !self.has_read
+            && input.len() >= 3
+            && &input[0..3] == b"\xef\xbb\xbf"
+        {
             (&input[3..], 3)
         } else {
             (input, 0)
-        };
-        (input, nin)
+        }
     }
 
     #[inline(always)]
