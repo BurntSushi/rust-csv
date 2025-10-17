@@ -7,18 +7,17 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{self, Command};
 
-static STRANGE: &'static str = include_str!("../examples/data/strange.csv");
-static USPOP: &'static str = include_str!("../examples/data/uspop.csv");
-static USPOP_NULL: &'static str =
-    include_str!("../examples/data/uspop-null.csv");
-static USPOP_LATIN1: &'static [u8] =
+static STRANGE: &str = include_str!("../examples/data/strange.csv");
+static USPOP: &str = include_str!("../examples/data/uspop.csv");
+static USPOP_NULL: &str = include_str!("../examples/data/uspop-null.csv");
+static USPOP_LATIN1: &[u8] =
     include_bytes!("../examples/data/uspop-latin1.csv");
-static WORLDPOP: &'static str =
+static WORLDPOP: &str =
     include_str!("../examples/data/bench/worldcitiespop.csv");
-static SMALLPOP: &'static str = include_str!("../examples/data/smallpop.csv");
-static SMALLPOP_COLON: &'static str =
+static SMALLPOP: &str = include_str!("../examples/data/smallpop.csv");
+static SMALLPOP_COLON: &str =
     include_str!("../examples/data/smallpop-colon.csv");
-static SMALLPOP_NO_HEADERS: &'static str =
+static SMALLPOP_NO_HEADERS: &str =
     include_str!("../examples/data/smallpop-no-headers.csv");
 
 #[test]
@@ -436,8 +435,8 @@ impl Output {
         let stderr =
             String::from_utf8(out.stderr).expect("valid utf-8 (stderr)");
         Output {
-            stdout: stdout,
-            stderr: stderr,
+            stdout,
+            stderr,
             command: format!("{:?}", cmd),
             status: out.status,
         }

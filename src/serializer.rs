@@ -882,7 +882,7 @@ mod tests {
     serde_if_integer128! {
         #[test]
         fn integer_u128() {
-            let got = serialize(i128::max_value() as u128 + 1);
+            let got = serialize(i128::MAX as u128 + 1);
             assert_eq!(got, "170141183460469231731687303715884105728\n");
             let (wrote, got) = serialize_header(12345);
             assert!(!wrote);
@@ -891,7 +891,7 @@ mod tests {
 
         #[test]
         fn integer_i128() {
-            let got = serialize(i128::max_value());
+            let got = serialize(i128::MAX);
             assert_eq!(got, "170141183460469231731687303715884105727\n");
             let (wrote, got) = serialize_header(12345);
             assert!(!wrote);
@@ -910,9 +910,9 @@ mod tests {
 
     #[test]
     fn float_nan() {
-        let got = serialize(::std::f64::NAN);
+        let got = serialize(f64::NAN);
         assert_eq!(got, "NaN\n");
-        let (wrote, got) = serialize_header(::std::f64::NAN);
+        let (wrote, got) = serialize_header(f64::NAN);
         assert!(!wrote);
         assert_eq!(got, "");
     }
@@ -1066,9 +1066,9 @@ mod tests {
     #[test]
     fn tuple() {
         let row = (true, 1.5, "hi");
-        let got = serialize(row.clone());
+        let got = serialize(row);
         assert_eq!(got, "true,1.5,hi\n");
-        let (wrote, got) = serialize_header(row.clone());
+        let (wrote, got) = serialize_header(row);
         assert!(!wrote);
         assert_eq!(got, "");
 
@@ -1156,7 +1156,7 @@ mod tests {
             }
 
             let got =
-                serialize(Foo { x: i128::max_value(), y: u128::max_value() });
+                serialize(Foo { x: i128::MAX, y: u128::MAX });
             assert_eq!(
                 got,
                 "170141183460469231731687303715884105727,\

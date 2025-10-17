@@ -201,9 +201,9 @@ fn example() -> Result<(), Box<dyn Error>> {
 
     // When writing records without Serde, the header record is written just
     // like any other record.
-    wtr.write_record(&["city", "region", "country", "population"])?;
-    wtr.write_record(&["Southborough", "MA", "United States", "9686"])?;
-    wtr.write_record(&["Northbridge", "MA", "United States", "14061"])?;
+    wtr.write_record(["city", "region", "country", "population"])?;
+    wtr.write_record(["Southborough", "MA", "United States", "9686"])?;
+    wtr.write_record(["Northbridge", "MA", "United States", "14061"])?;
     wtr.flush()?;
     Ok(())
 }

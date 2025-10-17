@@ -820,7 +820,7 @@ mod tests {
         deserialize_string_record(&record, Some(&headers))
     }
 
-    fn b<'a, T: AsRef<[u8]> + ?Sized>(bytes: &'a T) -> &'a [u8] {
+    fn b<T: AsRef<[u8]> + ?Sized>(bytes: &T) -> &[u8] {
         bytes.as_ref()
     }
 
