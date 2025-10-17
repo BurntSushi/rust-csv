@@ -1,12 +1,9 @@
 use std::{fmt, io, mem};
 
-use serde::{
-    ser::{
-        Error as SerdeError, Serialize, SerializeMap, SerializeSeq,
-        SerializeStruct, SerializeStructVariant, SerializeTuple,
-        SerializeTupleStruct, SerializeTupleVariant, Serializer,
-    },
-    serde_if_integer128,
+use serde_core::ser::{
+    Error as SerdeError, Serialize, SerializeMap, SerializeSeq,
+    SerializeStruct, SerializeStructVariant, SerializeTuple,
+    SerializeTupleStruct, SerializeTupleVariant, Serializer,
 };
 
 use crate::{
@@ -66,11 +63,9 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         self.wtr.write_field(buffer.format(v))
     }
 
-    serde_if_integer128! {
-        fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
-            let mut buffer = itoa::Buffer::new();
-            self.wtr.write_field(buffer.format(v))
-        }
+    fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
+        let mut buffer = itoa::Buffer::new();
+        self.wtr.write_field(buffer.format(v))
     }
 
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
@@ -93,11 +88,9 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         self.wtr.write_field(buffer.format(v))
     }
 
-    serde_if_integer128! {
-        fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
-            let mut buffer = itoa::Buffer::new();
-            self.wtr.write_field(buffer.format(v))
-        }
+    fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
+        let mut buffer = itoa::Buffer::new();
+        self.wtr.write_field(buffer.format(v))
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
@@ -524,10 +517,8 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
         self.handle_scalar(v)
     }
 
-    serde_if_integer128! {
-        fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
-            self.handle_scalar(v)
-        }
+    fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
+        self.handle_scalar(v)
     }
 
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
@@ -546,10 +537,8 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
         self.handle_scalar(v)
     }
 
-    serde_if_integer128! {
-        fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
-            self.handle_scalar(v)
-        }
+    fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
+        self.handle_scalar(v)
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
@@ -820,10 +809,7 @@ impl<'a, 'w, W: io::Write> SerializeStructVariant for &'a mut SeHeader<'w, W> {
 
 #[cfg(test)]
 mod tests {
-    use {
-        bstr::ByteSlice,
-        serde::{serde_if_integer128, Serialize},
-    };
+    use {bstr::ByteSlice, serde::Serialize};
 
     use crate::{
         error::{Error, ErrorKind},
@@ -879,24 +865,22 @@ mod tests {
         assert_eq!(got, "");
     }
 
-    serde_if_integer128! {
-        #[test]
-        fn integer_u128() {
-            let got = serialize(i128::MAX as u128 + 1);
-            assert_eq!(got, "170141183460469231731687303715884105728\n");
-            let (wrote, got) = serialize_header(12345);
-            assert!(!wrote);
-            assert_eq!(got, "");
-        }
+    #[test]
+    fn integer_u128() {
+        let got = serialize(i128::MAX as u128 + 1);
+        assert_eq!(got, "170141183460469231731687303715884105728\n");
+        let (wrote, got) = serialize_header(12345);
+        assert!(!wrote);
+        assert_eq!(got, "");
+    }
 
-        #[test]
-        fn integer_i128() {
-            let got = serialize(i128::MAX);
-            assert_eq!(got, "170141183460469231731687303715884105727\n");
-            let (wrote, got) = serialize_header(12345);
-            assert!(!wrote);
-            assert_eq!(got, "");
-        }
+    #[test]
+    fn integer_i128() {
+        let got = serialize(i128::MAX);
+        assert_eq!(got, "170141183460469231731687303715884105727\n");
+        let (wrote, got) = serialize_header(12345);
+        assert!(!wrote);
+        assert_eq!(got, "");
     }
 
     #[test]
@@ -1146,23 +1130,20 @@ mod tests {
         assert_eq!(got, "true,5,hi\n");
     }
 
-    serde_if_integer128! {
-        #[test]
-        fn struct_no_headers_128() {
-            #[derive(Serialize)]
-            struct Foo {
-                x: i128,
-                y: u128,
-            }
-
-            let got =
-                serialize(Foo { x: i128::MAX, y: u128::MAX });
-            assert_eq!(
-                got,
-                "170141183460469231731687303715884105727,\
-                 340282366920938463463374607431768211455\n"
-            );
+    #[test]
+    fn struct_no_headers_128() {
+        #[derive(Serialize)]
+        struct Foo {
+            x: i128,
+            y: u128,
         }
+
+        let got = serialize(Foo { x: i128::MAX, y: u128::MAX });
+        assert_eq!(
+            got,
+            "170141183460469231731687303715884105727,\
+                 340282366920938463463374607431768211455\n"
+        );
     }
 
     #[test]

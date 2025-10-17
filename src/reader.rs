@@ -8,7 +8,7 @@ use std::{
 
 use {
     csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder},
-    serde::de::DeserializeOwned,
+    serde_core::de::DeserializeOwned,
 };
 
 use crate::{
