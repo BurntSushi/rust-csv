@@ -636,7 +636,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> MapAccess<'de>
     }
 }
 
-/// An Serde deserialization error.
+/// A Serde deserialization error.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeserializeError {
     field: Option<u64>,
