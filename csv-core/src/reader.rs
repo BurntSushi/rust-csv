@@ -339,7 +339,7 @@ pub enum ReadRecordResult {
     /// The caller provided output buffer was filled before an entire field
     /// could be written to it.
     OutputFull,
-    /// The caller provided output buffer of field end poisitions was filled
+    /// The caller provided output buffer of field end positions was filled
     /// before the next field could be parsed.
     OutputEndsFull,
     /// The end of a record was found.
@@ -1072,7 +1072,7 @@ impl Reader {
 /// The number of transition classes is determined by an equivalence class of
 /// bytes, where every byte in the same equivalence classes is
 /// indistinguishable from any other byte with respect to the DFA. For example,
-/// if neither `a` nor `b` are specifed as a delimiter/quote/terminator/escape,
+/// if neither `a` nor `b` are specified as a delimiter/quote/terminator/escape,
 /// then the DFA will never discriminate between `a` or `b`, so they can
 /// effectively be treated as identical. This reduces storage space
 /// substantially.
@@ -1897,7 +1897,7 @@ mod tests {
         assert_read!(rdr, b("\"foo"), out, 4, 3, InputEmpty);
         assert_eq!(&out[..3], b("foo"));
 
-        // Without reseting the parser state, the reader will remember that
+        // Without resetting the parser state, the reader will remember that
         // we're in a quoted field, and therefore interpret the leading double
         // quotes below as a single quote and the trailing quote as a matching
         // terminator. With the reset, however, the parser forgets the quoted

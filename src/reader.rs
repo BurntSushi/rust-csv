@@ -1497,7 +1497,7 @@ impl<R: io::Read> Reader<R> {
     /// default), then this will never read the first record.
     ///
     /// This method is useful when you want to read records as fast as
-    /// as possible. It's less ergonomic than an iterator, but it permits the
+    /// possible. It's less ergonomic than an iterator, but it permits the
     /// caller to reuse the `StringRecord` allocation, which usually results
     /// in higher throughput.
     ///
@@ -2254,7 +2254,7 @@ mod tests {
     }
 
     #[test]
-    fn read_trimed_header_invalid_utf8() {
+    fn read_trimmed_header_invalid_utf8() {
         let data = &b"foo,  b\xFFar,\tbaz\na,b,c\nd,e,f"[..];
         let mut rdr = ReaderBuilder::new()
             .has_headers(true)
