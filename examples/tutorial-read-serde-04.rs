@@ -1,6 +1,5 @@
-use std::error::Error;
-use std::io;
-use std::process;
+#![allow(dead_code)]
+use std::{error::Error, io, process};
 
 // This lets us write `#[derive(Deserialize)]`.
 use serde::Deserialize;

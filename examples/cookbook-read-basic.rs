@@ -1,6 +1,4 @@
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn example() -> Result<(), Box<dyn Error>> {
     // Build the CSV reader and iterate over each record.

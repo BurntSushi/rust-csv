@@ -1,20 +1,19 @@
-use std::error::Error as StdError;
-use std::fmt;
-use std::iter;
-use std::num;
-use std::str;
+use std::{error::Error as StdError, fmt, iter, num, str};
 
-use serde::de::value::BorrowedBytesDeserializer;
-use serde::de::{
-    Deserialize, DeserializeSeed, Deserializer, EnumAccess,
-    Error as SerdeError, IntoDeserializer, MapAccess, SeqAccess, Unexpected,
-    VariantAccess, Visitor,
+use serde_core::{
+    de::value::BorrowedBytesDeserializer,
+    de::{
+        Deserialize, DeserializeSeed, Deserializer, EnumAccess,
+        Error as SerdeError, IntoDeserializer, MapAccess, SeqAccess,
+        Unexpected, VariantAccess, Visitor,
+    },
 };
-use serde::serde_if_integer128;
 
-use crate::byte_record::{ByteRecord, ByteRecordIter};
-use crate::error::{Error, ErrorKind};
-use crate::string_record::{StringRecord, StringRecordIter};
+use crate::{
+    byte_record::{ByteRecord, ByteRecordIter},
+    error::{Error, ErrorKind},
+    string_record::{StringRecord, StringRecordIter},
+};
 
 use self::DeserializeErrorKind as DEK;
 
@@ -29,8 +28,8 @@ pub fn deserialize_string_record<'de, D: Deserialize<'de>>(
     });
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
-            pos: record.position().map(Clone::clone),
-            err: err,
+            pos: record.position().cloned(),
+            err,
         })
     })
 }
@@ -46,8 +45,8 @@ pub fn deserialize_byte_record<'de, D: Deserialize<'de>>(
     });
     D::deserialize(&mut deser).map_err(|err| {
         Error::new(ErrorKind::Deserialize {
-            pos: record.position().map(Clone::clone),
-            err: err,
+            pos: record.position().cloned(),
+            err,
         })
     })
 }
@@ -197,10 +196,7 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
     }
 
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
-        DeserializeError {
-            field: Some(self.field.saturating_sub(1)),
-            kind: kind,
-        }
+        DeserializeError { field: Some(self.field.saturating_sub(1)), kind }
     }
 
     fn infer_deserialize<'de, V: Visitor<'de>>(
@@ -209,22 +205,18 @@ impl<'r> DeRecord<'r> for DeStringRecord<'r> {
     ) -> Result<V::Value, DeserializeError> {
         let x = self.next_field()?;
         if x == "true" {
-            return visitor.visit_bool(true);
+            visitor.visit_bool(true)
         } else if x == "false" {
-            return visitor.visit_bool(false);
+            visitor.visit_bool(false)
         } else if let Some(n) = try_positive_integer64(x) {
-            return visitor.visit_u64(n);
+            visitor.visit_u64(n)
         } else if let Some(n) = try_negative_integer64(x) {
-            return visitor.visit_i64(n);
-        }
-        serde_if_integer128! {
-            if let Some(n) = try_positive_integer128(x) {
-                return visitor.visit_u128(n);
-            } else if let Some(n) = try_negative_integer128(x) {
-                return visitor.visit_i128(n);
-            }
-        }
-        if let Some(n) = try_float(x) {
+            visitor.visit_i64(n)
+        } else if let Some(n) = try_positive_integer128(x) {
+            visitor.visit_u128(n)
+        } else if let Some(n) = try_negative_integer128(x) {
+            visitor.visit_i128(n)
+        } else if let Some(n) = try_float(x) {
             visitor.visit_f64(n)
         } else {
             visitor.visit_str(x)
@@ -287,14 +279,11 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
 
     #[inline]
     fn peek_field(&mut self) -> Option<&'r [u8]> {
-        self.it.peek().map(|s| *s)
+        self.it.peek().copied()
     }
 
     fn error(&self, kind: DeserializeErrorKind) -> DeserializeError {
-        DeserializeError {
-            field: Some(self.field.saturating_sub(1)),
-            kind: kind,
-        }
+        DeserializeError { field: Some(self.field.saturating_sub(1)), kind }
     }
 
     fn infer_deserialize<'de, V: Visitor<'de>>(
@@ -303,22 +292,18 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
     ) -> Result<V::Value, DeserializeError> {
         let x = self.next_field_bytes()?;
         if x == b"true" {
-            return visitor.visit_bool(true);
+            visitor.visit_bool(true)
         } else if x == b"false" {
-            return visitor.visit_bool(false);
+            visitor.visit_bool(false)
         } else if let Some(n) = try_positive_integer64_bytes(x) {
-            return visitor.visit_u64(n);
+            visitor.visit_u64(n)
         } else if let Some(n) = try_negative_integer64_bytes(x) {
-            return visitor.visit_i64(n);
-        }
-        serde_if_integer128! {
-            if let Some(n) = try_positive_integer128_bytes(x) {
-                return visitor.visit_u128(n);
-            } else if let Some(n) = try_negative_integer128_bytes(x) {
-                return visitor.visit_i128(n);
-            }
-        }
-        if let Some(n) = try_float_bytes(x) {
+            visitor.visit_i64(n)
+        } else if let Some(n) = try_positive_integer128_bytes(x) {
+            visitor.visit_u128(n)
+        } else if let Some(n) = try_negative_integer128_bytes(x) {
+            visitor.visit_i128(n)
+        } else if let Some(n) = try_float_bytes(x) {
             visitor.visit_f64(n)
         } else if let Ok(s) = str::from_utf8(x) {
             visitor.visit_str(s)
@@ -335,8 +320,8 @@ macro_rules! deserialize_int {
             visitor: V,
         ) -> Result<V::Value, Self::Error> {
             let field = self.next_field()?;
-            let num = if field.starts_with("0x") {
-                <$inttype>::from_str_radix(&field[2..], 16)
+            let num = if let Some(digits) = field.strip_prefix("0x") {
+                <$inttype>::from_str_radix(digits, 16)
             } else {
                 field.parse()
             };
@@ -372,16 +357,12 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
     deserialize_int!(deserialize_u16, visit_u16, u16);
     deserialize_int!(deserialize_u32, visit_u32, u32);
     deserialize_int!(deserialize_u64, visit_u64, u64);
-    serde_if_integer128! {
-        deserialize_int!(deserialize_u128, visit_u128, u128);
-    }
+    deserialize_int!(deserialize_u128, visit_u128, u128);
     deserialize_int!(deserialize_i8, visit_i8, i8);
     deserialize_int!(deserialize_i16, visit_i16, i16);
     deserialize_int!(deserialize_i32, visit_i32, i32);
     deserialize_int!(deserialize_i64, visit_i64, i64);
-    serde_if_integer128! {
-        deserialize_int!(deserialize_i128, visit_i128, i128);
-    }
+    deserialize_int!(deserialize_i128, visit_i128, i128);
 
     fn deserialize_f32<V: Visitor<'de>>(
         self,
@@ -431,7 +412,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        self.next_field().and_then(|f| visitor.visit_str(f.into()))
+        self.next_field().and_then(|f| visitor.visit_str(f))
     }
 
     fn deserialize_bytes<V: Visitor<'de>>(
@@ -455,7 +436,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
     ) -> Result<V::Value, Self::Error> {
         match self.peek_field() {
             None => visitor.visit_none(),
-            Some(f) if f.is_empty() => {
+            Some([]) => {
                 self.next_field().expect("empty field");
                 visitor.visit_none()
             }
@@ -753,14 +734,12 @@ impl DeserializeErrorKind {
     }
 }
 
-serde_if_integer128! {
-    fn try_positive_integer128(s: &str) -> Option<u128> {
-        s.parse().ok()
-    }
+fn try_positive_integer128(s: &str) -> Option<u128> {
+    s.parse().ok()
+}
 
-    fn try_negative_integer128(s: &str) -> Option<i128> {
-        s.parse().ok()
-    }
+fn try_negative_integer128(s: &str) -> Option<i128> {
+    s.parse().ok()
 }
 
 fn try_positive_integer64(s: &str) -> Option<u64> {
@@ -783,14 +762,12 @@ fn try_negative_integer64_bytes(s: &[u8]) -> Option<i64> {
     str::from_utf8(s).ok().and_then(|s| s.parse().ok())
 }
 
-serde_if_integer128! {
-    fn try_positive_integer128_bytes(s: &[u8]) -> Option<u128> {
-        str::from_utf8(s).ok().and_then(|s| s.parse().ok())
-    }
+fn try_positive_integer128_bytes(s: &[u8]) -> Option<u128> {
+    str::from_utf8(s).ok().and_then(|s| s.parse().ok())
+}
 
-    fn try_negative_integer128_bytes(s: &[u8]) -> Option<i128> {
-        str::from_utf8(s).ok().and_then(|s| s.parse().ok())
-    }
+fn try_negative_integer128_bytes(s: &[u8]) -> Option<i128> {
+    str::from_utf8(s).ok().and_then(|s| s.parse().ok())
 }
 
 fn try_float_bytes(s: &[u8]) -> Option<f64> {
@@ -801,13 +778,16 @@ fn try_float_bytes(s: &[u8]) -> Option<f64> {
 mod tests {
     use std::collections::HashMap;
 
-    use bstr::BString;
-    use serde::{de::DeserializeOwned, serde_if_integer128, Deserialize};
+    use {
+        bstr::BString,
+        serde::{de::DeserializeOwned, Deserialize},
+    };
+
+    use crate::{
+        byte_record::ByteRecord, error::Error, string_record::StringRecord,
+    };
 
     use super::{deserialize_byte_record, deserialize_string_record};
-    use crate::byte_record::ByteRecord;
-    use crate::error::Error;
-    use crate::string_record::StringRecord;
 
     fn de<D: DeserializeOwned>(fields: &[&str]) -> Result<D, Error> {
         let record = StringRecord::from(fields);
@@ -823,7 +803,7 @@ mod tests {
         deserialize_string_record(&record, Some(&headers))
     }
 
-    fn b<'a, T: AsRef<[u8]> + ?Sized>(bytes: &'a T) -> &'a [u8] {
+    fn b<T: AsRef<[u8]> + ?Sized>(bytes: &T) -> &[u8] {
         bytes.as_ref()
     }
 
@@ -913,7 +893,7 @@ mod tests {
         struct Foo;
 
         #[derive(Deserialize, Debug, PartialEq)]
-        struct Bar {};
+        struct Bar {}
 
         let got = de_headers::<Foo>(&[], &[]);
         assert_eq!(got.unwrap(), Foo);
@@ -949,12 +929,10 @@ mod tests {
         assert_eq!(got, 42);
     }
 
-    serde_if_integer128! {
-        #[test]
-        fn one_field_128() {
-            let got: i128 = de(&["2010223372036854775808"]).unwrap();
-            assert_eq!(got, 2010223372036854775808);
-        }
+    #[test]
+    fn one_field_128() {
+        let got: i128 = de(&["2010223372036854775808"]).unwrap();
+        assert_eq!(got, 2010223372036854775808);
     }
 
     #[test]

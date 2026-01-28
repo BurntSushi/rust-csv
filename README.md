@@ -2,9 +2,8 @@ csv
 ===
 A fast and flexible CSV reader and writer for Rust, with support for Serde.
 
-[![Linux build status](https://api.travis-ci.org/BurntSushi/rust-csv.svg)](https://travis-ci.org/BurntSushi/rust-csv)
-[![Windows build status](https://ci.appveyor.com/api/projects/status/github/BurntSushi/rust-csv?svg=true)](https://ci.appveyor.com/project/BurntSushi/rust-csv)
-[![](http://meritbadge.herokuapp.com/csv)](https://crates.io/crates/csv)
+[![Build status](https://github.com/BurntSushi/rust-csv/workflows/ci/badge.svg)](https://github.com/BurntSushi/rust-csv/actions)
+[![crates.io](https://img.shields.io/crates/v/csv.svg)](https://crates.io/crates/csv)
 
 Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
 
@@ -14,18 +13,15 @@ Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
 https://docs.rs/csv
 
 If you're new to Rust, the
-[tutorial](https://docs.rs/csv/1.0.0/csv/tutorial/index.html)
+[tutorial](https://docs.rs/csv/1.*/csv/tutorial/index.html)
 is a good place to start.
 
 
 ### Usage
 
-Add this to your `Cargo.toml`:
+To bring this crate into your repository, either add `csv` to your
+`Cargo.toml`, or run `cargo add csv`.
 
-```toml
-[dependencies]
-csv = "1.1"
-```
 
 ### Example
 
@@ -33,12 +29,10 @@ This example shows how to read CSV data from stdin and print each record to
 stdout.
 
 There are more examples in the
-[cookbook](https://docs.rs/csv/1.0.0/csv/cookbook/index.html).
+[cookbook](https://docs.rs/csv/1.*/csv/cookbook/index.html).
 
 ```rust
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn example() -> Result<(), Box<dyn Error>> {
     // Build the CSV reader and iterate over each record.
@@ -75,13 +69,9 @@ By default, the member names of the struct are matched with the values in the
 header record of your CSV data.
 
 ```rust
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 struct Record {
     city: String,
     region: String,
@@ -110,7 +100,7 @@ fn main() {
 
 The above example can be run like so:
 
-```text
+```
 $ git clone git://github.com/BurntSushi/rust-csv
 $ cd rust-csv
 $ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
