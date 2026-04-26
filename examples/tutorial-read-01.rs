@@ -1,8 +1,4 @@
-use std::env;
-use std::error::Error;
-use std::ffi::OsString;
-use std::fs::File;
-use std::process;
+use std::{env, error::Error, ffi::OsString, fs::File, process};
 
 fn run() -> Result<(), Box<dyn Error>> {
     let file_path = get_first_arg()?;

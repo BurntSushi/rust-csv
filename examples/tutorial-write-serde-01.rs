@@ -1,12 +1,10 @@
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
     // We still need to write headers manually.
-    wtr.write_record(&[
+    wtr.write_record([
         "City",
         "State",
         "Population",

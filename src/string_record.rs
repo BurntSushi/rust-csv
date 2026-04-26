@@ -1,16 +1,18 @@
-use std::fmt;
-use std::io;
-use std::iter::FromIterator;
-use std::ops::{self, Range};
-use std::result;
-use std::str;
+use std::{
+    fmt, io,
+    iter::FromIterator,
+    ops::{self, Range},
+    result, str,
+};
 
-use serde::de::Deserialize;
+use serde_core::de::Deserialize;
 
-use crate::byte_record::{ByteRecord, ByteRecordIter, Position};
-use crate::deserializer::deserialize_string_record;
-use crate::error::{Error, ErrorKind, FromUtf8Error, Result};
-use crate::reader::Reader;
+use crate::{
+    byte_record::{ByteRecord, ByteRecordIter, Position},
+    deserializer::deserialize_string_record,
+    error::{Error, ErrorKind, FromUtf8Error, Result},
+    reader::Reader,
+};
 
 /// A single CSV record stored as valid UTF-8 bytes.
 ///
@@ -47,7 +49,7 @@ impl<T: AsRef<[u8]>> PartialEq<Vec<T>> for StringRecord {
     }
 }
 
-impl<'a, T: AsRef<[u8]>> PartialEq<Vec<T>> for &'a StringRecord {
+impl<T: AsRef<[u8]>> PartialEq<Vec<T>> for &StringRecord {
     fn eq(&self, other: &Vec<T>) -> bool {
         self.0.iter_eq(other)
     }
@@ -59,7 +61,7 @@ impl<T: AsRef<[u8]>> PartialEq<[T]> for StringRecord {
     }
 }
 
-impl<'a, T: AsRef<[u8]>> PartialEq<[T]> for &'a StringRecord {
+impl<T: AsRef<[u8]>> PartialEq<[T]> for &StringRecord {
     fn eq(&self, other: &[T]) -> bool {
         self.0.iter_eq(other)
     }
@@ -226,9 +228,8 @@ impl StringRecord {
     /// use std::error::Error;
     ///
     /// use csv::StringRecord;
-    /// use serde::Deserialize;
     ///
-    /// #[derive(Deserialize)]
+    /// #[derive(serde::Deserialize)]
     /// struct Row<'a> {
     ///     city: &'a str,
     ///     country: &'a str,
@@ -262,9 +263,8 @@ impl StringRecord {
     /// use std::error::Error;
     ///
     /// use csv::StringRecord;
-    /// use serde::Deserialize;
     ///
-    /// #[derive(Deserialize)]
+    /// #[derive(serde::Deserialize)]
     /// struct Row {
     ///     city: String,
     ///     country: String,
@@ -311,7 +311,7 @@ impl StringRecord {
     /// }
     /// ```
     #[inline]
-    pub fn iter(&self) -> StringRecordIter {
+    pub fn iter(&self) -> StringRecordIter<'_> {
         self.into_iter()
     }
 
@@ -646,7 +646,7 @@ impl StringRecord {
         match (read_res, utf8_res) {
             (Err(err), _) => Err(err),
             (Ok(_), Err(err)) => {
-                Err(Error::new(ErrorKind::Utf8 { pos: Some(pos), err: err }))
+                Err(Error::new(ErrorKind::Utf8 { pos: Some(pos), err }))
             }
             (Ok(eof), Ok(())) => Ok(eof),
         }
@@ -664,7 +664,7 @@ impl ops::Index<usize> for StringRecord {
 impl<T: AsRef<str>> From<Vec<T>> for StringRecord {
     #[inline]
     fn from(xs: Vec<T>) -> StringRecord {
-        StringRecord::from_iter(xs.into_iter())
+        StringRecord::from_iter(xs)
     }
 }
 

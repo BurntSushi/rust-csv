@@ -42,20 +42,12 @@ position information, configuration knobs or iterator types.
 
 # Setup
 
-Add this to your `Cargo.toml`:
-
-```toml
-[dependencies]
-csv = "1.1"
-```
+Run `cargo add csv` to add the latest version of the `csv` crate to your
+Cargo.toml.
 
 If you want to use Serde's custom derive functionality on your custom structs,
-then add this to your `[dependencies]` section of `Cargo.toml`:
-
-```toml
-[dependencies]
-serde = { version = "1", features = ["derive"] }
-```
+then run `cargo add serde --features derive` to add the `serde` crate with its
+`derive` feature enabled to your `Cargo.toml`.
 
 # Example
 
@@ -65,9 +57,7 @@ stdout.
 There are more examples in the [cookbook](cookbook/index.html).
 
 ```no_run
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn example() -> Result<(), Box<dyn Error>> {
     // Build the CSV reader and iterate over each record.
@@ -104,13 +94,9 @@ By default, the member names of the struct are matched with the values in the
 header record of your CSV data.
 
 ```no_run
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 struct Record {
     city: String,
     region: String,
@@ -157,23 +143,26 @@ It should be noted that Serde's [internally-tagged enums] [can not] be deseriali
 
 use std::result;
 
-use serde::{Deserialize, Deserializer};
+use serde_core::{Deserialize, Deserializer};
 
-pub use crate::byte_record::{ByteRecord, ByteRecordIter, Position};
-pub use crate::deserializer::{DeserializeError, DeserializeErrorKind};
-pub use crate::error::{
-    Error, ErrorKind, FromUtf8Error, IntoInnerError, Result, Utf8Error,
+pub use crate::{
+    byte_record::{ByteRecord, ByteRecordIter, Position},
+    deserializer::{DeserializeError, DeserializeErrorKind},
+    error::{
+        Error, ErrorKind, FromUtf8Error, IntoInnerError, Result, Utf8Error,
+    },
+    reader::{
+        ByteRecordsIntoIter, ByteRecordsIter, DeserializeRecordsIntoIter,
+        DeserializeRecordsIter, Reader, ReaderBuilder, StringRecordsIntoIter,
+        StringRecordsIter,
+    },
+    string_record::{StringRecord, StringRecordIter},
+    writer::{Writer, WriterBuilder},
 };
-pub use crate::reader::{
-    ByteRecordsIntoIter, ByteRecordsIter, DeserializeRecordsIntoIter,
-    DeserializeRecordsIter, Reader, ReaderBuilder, StringRecordsIntoIter,
-    StringRecordsIter,
-};
-pub use crate::string_record::{StringRecord, StringRecordIter};
-pub use crate::writer::{Writer, WriterBuilder};
 
 mod byte_record;
 pub mod cookbook;
+mod debug;
 mod deserializer;
 mod error;
 mod reader;
@@ -183,7 +172,8 @@ pub mod tutorial;
 mod writer;
 
 /// The quoting style to use when writing CSV data.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
 pub enum QuoteStyle {
     /// This puts quotes around every field. Always.
     Always,
@@ -194,6 +184,7 @@ pub enum QuoteStyle {
     /// (which is indistinguishable from a record with one empty field).
     ///
     /// This is the default.
+    #[default]
     Necessary,
     /// This puts quotes around all fields that are non-numeric. Namely, when
     /// writing a field that does not parse as a valid float or integer, then
@@ -201,13 +192,6 @@ pub enum QuoteStyle {
     NonNumeric,
     /// This *never* writes quotes, even if it would produce invalid CSV data.
     Never,
-    /// Hints that destructuring should not be exhaustive.
-    ///
-    /// This enum may grow additional variants, so this makes sure clients
-    /// don't count on exhaustive matching. (Otherwise, adding a new variant
-    /// could break existing code.)
-    #[doc(hidden)]
-    __Nonexhaustive,
 }
 
 impl QuoteStyle {
@@ -217,14 +201,7 @@ impl QuoteStyle {
             QuoteStyle::Necessary => csv_core::QuoteStyle::Necessary,
             QuoteStyle::NonNumeric => csv_core::QuoteStyle::NonNumeric,
             QuoteStyle::Never => csv_core::QuoteStyle::Never,
-            _ => unreachable!(),
         }
-    }
-}
-
-impl Default for QuoteStyle {
-    fn default() -> QuoteStyle {
-        QuoteStyle::Necessary
     }
 }
 
@@ -232,19 +209,14 @@ impl Default for QuoteStyle {
 ///
 /// Use this to specify the record terminator while parsing CSV. The default is
 /// CRLF, which treats `\r`, `\n` or `\r\n` as a single record terminator.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
 pub enum Terminator {
     /// Parses `\r`, `\n` or `\r\n` as a single record terminator.
+    #[default]
     CRLF,
     /// Parses the byte given as a record terminator.
     Any(u8),
-    /// Hints that destructuring should not be exhaustive.
-    ///
-    /// This enum may grow additional variants, so this makes sure clients
-    /// don't count on exhaustive matching. (Otherwise, adding a new variant
-    /// could break existing code.)
-    #[doc(hidden)]
-    __Nonexhaustive,
 }
 
 impl Terminator {
@@ -253,21 +225,16 @@ impl Terminator {
         match self {
             Terminator::CRLF => csv_core::Terminator::CRLF,
             Terminator::Any(b) => csv_core::Terminator::Any(b),
-            _ => unreachable!(),
         }
     }
 }
 
-impl Default for Terminator {
-    fn default() -> Terminator {
-        Terminator::CRLF
-    }
-}
-
 /// The whitespace preservation behaviour when reading CSV data.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[non_exhaustive]
 pub enum Trim {
     /// Preserves fields and headers. This is the default.
+    #[default]
     None,
     /// Trim whitespace from headers.
     Headers,
@@ -275,13 +242,6 @@ pub enum Trim {
     Fields,
     /// Trim whitespace from fields and headers.
     All,
-    /// Hints that destructuring should not be exhaustive.
-    ///
-    /// This enum may grow additional variants, so this makes sure clients
-    /// don't count on exhaustive matching. (Otherwise, adding a new variant
-    /// could break existing code.)
-    #[doc(hidden)]
-    __Nonexhaustive,
 }
 
 impl Trim {
@@ -291,12 +251,6 @@ impl Trim {
 
     fn should_trim_headers(&self) -> bool {
         self == &Trim::Headers || self == &Trim::All
-    }
-}
-
-impl Default for Trim {
-    fn default() -> Trim {
-        Trim::None
     }
 }
 
@@ -327,10 +281,7 @@ impl Default for Trim {
 /// ```
 /// use std::error::Error;
 ///
-/// use csv::Reader;
-/// use serde::Deserialize;
-///
-/// #[derive(Debug, Deserialize, Eq, PartialEq)]
+/// #[derive(Debug, serde::Deserialize, Eq, PartialEq)]
 /// struct Row {
 ///     #[serde(deserialize_with = "csv::invalid_option")]
 ///     a: Option<i32>,
@@ -346,7 +297,7 @@ impl Default for Trim {
 /// a,b,c
 /// 5,\"\",xyz
 /// ";
-///     let mut rdr = Reader::from_reader(data.as_bytes());
+///     let mut rdr = csv::Reader::from_reader(data.as_bytes());
 ///     if let Some(result) = rdr.deserialize().next() {
 ///         let record: Row = result?;
 ///         assert_eq!(record, Row { a: Some(5), b: None, c: None });

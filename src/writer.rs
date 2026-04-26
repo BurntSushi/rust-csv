@@ -1,18 +1,19 @@
-use std::fs::File;
-use std::io;
-use std::path::Path;
-use std::result;
+use std::{fs::File, io, path::Path, result};
 
-use csv_core::{
-    self, WriteResult, Writer as CoreWriter,
-    WriterBuilder as CoreWriterBuilder,
+use {
+    csv_core::{
+        self, WriteResult, Writer as CoreWriter,
+        WriterBuilder as CoreWriterBuilder,
+    },
+    serde_core::Serialize,
 };
-use serde::Serialize;
 
-use crate::byte_record::ByteRecord;
-use crate::error::{Error, ErrorKind, IntoInnerError, Result};
-use crate::serializer::{serialize, serialize_header};
-use crate::{QuoteStyle, Terminator};
+use crate::{
+    byte_record::ByteRecord,
+    error::{Error, ErrorKind, IntoInnerError, Result},
+    serializer::{serialize, serialize_header},
+    {QuoteStyle, Terminator},
+};
 
 /// Builds a CSV writer with various configuration knobs.
 ///
@@ -166,9 +167,8 @@ impl WriterBuilder {
     /// use std::error::Error;
     ///
     /// use csv::WriterBuilder;
-    /// use serde::Serialize;
     ///
-    /// #[derive(Serialize)]
+    /// #[derive(serde::Serialize)]
     /// struct Row<'a> {
     ///     city: &'a str,
     ///     country: &'a str,
@@ -470,6 +470,34 @@ impl WriterBuilder {
         self
     }
 
+    /// The comment character that will be used when later reading the file.
+    ///
+    /// If `quote_style` is set to `QuoteStyle::Necessary`, a field will
+    /// be quoted if the comment character is detected anywhere in the field.
+    ///
+    /// The default value is None.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::error::Error;
+    /// use csv::WriterBuilder;
+    ///
+    /// # fn main() { example().unwrap(); }
+    /// fn example() -> Result<(), Box<dyn Error>> {
+    ///     let mut wtr =
+    ///         WriterBuilder::new().comment(Some(b'#')).from_writer(Vec::new());
+    ///     wtr.write_record(&["# comment", "another"]).unwrap();
+    ///     let buf = wtr.into_inner().unwrap();
+    ///     assert_eq!(String::from_utf8(buf).unwrap(), "\"# comment\",another\n");
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn comment(&mut self, comment: Option<u8>) -> &mut WriterBuilder {
+        self.builder.comment(comment);
+        self
+    }
+
     /// Set the capacity (in bytes) of the internal buffer used in the CSV
     /// writer. This defaults to a reasonable setting.
     pub fn buffer_capacity(&mut self, capacity: usize) -> &mut WriterBuilder {
@@ -655,9 +683,8 @@ impl<W: io::Write> Writer<W> {
     /// use std::error::Error;
     ///
     /// use csv::Writer;
-    /// use serde::Serialize;
     ///
-    /// #[derive(Serialize)]
+    /// #[derive(serde::Serialize)]
     /// struct Row<'a> {
     ///     city: &'a str,
     ///     country: &'a str,
@@ -738,15 +765,14 @@ impl<W: io::Write> Writer<W> {
     /// use std::error::Error;
     ///
     /// use csv::Writer;
-    /// use serde::Serialize;
     ///
-    /// #[derive(Serialize)]
+    /// #[derive(serde::Serialize)]
     /// struct Row {
     ///     label: String,
     ///     value: Value,
     /// }
     ///
-    /// #[derive(Serialize)]
+    /// #[derive(serde::Serialize)]
     /// enum Value {
     ///     Integer(i64),
     ///     Float(f64),
@@ -804,9 +830,8 @@ impl<W: io::Write> Writer<W> {
     /// use std::error::Error;
     ///
     /// use csv::WriterBuilder;
-    /// use serde::Serialize;
     ///
-    /// #[derive(Serialize)]
+    /// #[derive(serde::Serialize)]
     /// struct Row {
     ///     label: String,
     ///     values: Vec<f64>,
@@ -1071,6 +1096,11 @@ impl<W: io::Write> Writer<W> {
         Ok(())
     }
 
+    /// Return a reference to the underlying writer.
+    pub fn get_ref(&self) -> &W {
+        self.wtr.as_ref().unwrap()
+    }
+
     /// Flush the contents of the internal buffer and return the underlying
     /// writer.
     pub fn into_inner(
@@ -1184,13 +1214,13 @@ impl Buffer {
 
 #[cfg(test)]
 mod tests {
-    use serde::{serde_if_integer128, Serialize};
-
     use std::io::{self, Write};
 
-    use crate::byte_record::ByteRecord;
-    use crate::error::ErrorKind;
-    use crate::string_record::StringRecord;
+    use serde::Serialize;
+
+    use crate::{
+        byte_record::ByteRecord, error::ErrorKind, string_record::StringRecord,
+    };
 
     use super::{Writer, WriterBuilder};
 
@@ -1201,7 +1231,7 @@ mod tests {
     #[test]
     fn one_record() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
-        wtr.write_record(&["a", "b", "c"]).unwrap();
+        wtr.write_record(["a", "b", "c"]).unwrap();
 
         assert_eq!(wtr_as_string(wtr), "a,b,c\n");
     }
@@ -1233,7 +1263,7 @@ mod tests {
     #[test]
     fn one_empty_record() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
-        wtr.write_record(&[""]).unwrap();
+        wtr.write_record([""]).unwrap();
 
         assert_eq!(wtr_as_string(wtr), "\"\"\n");
     }
@@ -1249,8 +1279,8 @@ mod tests {
     #[test]
     fn two_empty_records() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
-        wtr.write_record(&[""]).unwrap();
-        wtr.write_record(&[""]).unwrap();
+        wtr.write_record([""]).unwrap();
+        wtr.write_record([""]).unwrap();
 
         assert_eq!(wtr_as_string(wtr), "\"\"\n\"\"\n");
     }
@@ -1320,7 +1350,7 @@ mod tests {
         struct MarkWriteAndFlush(Vec<u8>);
 
         impl MarkWriteAndFlush {
-            fn to_str(self) -> String {
+            fn into_string(self) -> String {
                 String::from_utf8(self.0).unwrap()
             }
         }
@@ -1349,7 +1379,7 @@ mod tests {
         wtr.flush().unwrap();
         wtr.write_byte_record(&ByteRecord::from(vec!["e", "f"])).unwrap();
 
-        let got = wtr.into_inner().unwrap().to_str();
+        let got = wtr.into_inner().unwrap().into_string();
 
         // As the buffer size is 4 we should write each record separately, and
         // flush when explicitly called and implictly in into_inner.
@@ -1385,25 +1415,24 @@ mod tests {
         assert_eq!(wtr_as_string(wtr), "42,42.5,true\n");
     }
 
-    serde_if_integer128! {
-        #[test]
-        fn serialize_no_headers_128() {
-            #[derive(Serialize)]
-            struct Row {
-                foo: i128,
-                bar: f64,
-                baz: bool,
-            }
-
-            let mut wtr =
-                WriterBuilder::new().has_headers(false).from_writer(vec![]);
-            wtr.serialize(Row {
-                foo: 9_223_372_036_854_775_808,
-                bar: 42.5,
-                baz: true,
-            }).unwrap();
-            assert_eq!(wtr_as_string(wtr), "9223372036854775808,42.5,true\n");
+    #[test]
+    fn serialize_no_headers_128() {
+        #[derive(Serialize)]
+        struct Row {
+            foo: i128,
+            bar: f64,
+            baz: bool,
         }
+
+        let mut wtr =
+            WriterBuilder::new().has_headers(false).from_writer(vec![]);
+        wtr.serialize(Row {
+            foo: 9_223_372_036_854_775_808,
+            bar: 42.5,
+            baz: true,
+        })
+        .unwrap();
+        assert_eq!(wtr_as_string(wtr), "9223372036854775808,42.5,true\n");
     }
 
     #[test]
@@ -1411,5 +1440,14 @@ mod tests {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.serialize((true, 1.3, "hi")).unwrap();
         assert_eq!(wtr_as_string(wtr), "true,1.3,hi\n");
+    }
+
+    #[test]
+    fn comment_char_is_automatically_quoted() {
+        let mut wtr =
+            WriterBuilder::new().comment(Some(b'#')).from_writer(Vec::new());
+        wtr.write_record(["# comment", "another"]).unwrap();
+        let buf = wtr.into_inner().unwrap();
+        assert_eq!(String::from_utf8(buf).unwrap(), "\"# comment\",another\n");
     }
 }

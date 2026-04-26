@@ -1,6 +1,4 @@
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{error::Error, io, process};
 
 fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());

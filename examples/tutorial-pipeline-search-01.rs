@@ -1,7 +1,4 @@
-use std::env;
-use std::error::Error;
-use std::io;
-use std::process;
+use std::{env, error::Error, io, process};
 
 fn run() -> Result<(), Box<dyn Error>> {
     // Get the query from the positional arguments.
@@ -22,7 +19,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     // `query` to `wtr`.
     for result in rdr.records() {
         let record = result?;
-        if record.iter().any(|field| field == &query) {
+        if record.iter().any(|field| field == query) {
             wtr.write_record(&record)?;
         }
     }

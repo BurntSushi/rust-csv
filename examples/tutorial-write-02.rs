@@ -1,28 +1,25 @@
-use std::env;
-use std::error::Error;
-use std::ffi::OsString;
-use std::process;
+use std::{env, error::Error, ffi::OsString, process};
 
 fn run() -> Result<(), Box<dyn Error>> {
     let file_path = get_first_arg()?;
     let mut wtr = csv::Writer::from_path(file_path)?;
 
-    wtr.write_record(&[
+    wtr.write_record([
         "City",
         "State",
         "Population",
         "Latitude",
         "Longitude",
     ])?;
-    wtr.write_record(&[
+    wtr.write_record([
         "Davidsons Landing",
         "AK",
         "",
         "65.2419444",
         "-165.2716667",
     ])?;
-    wtr.write_record(&["Kenai", "AK", "7610", "60.5544444", "-151.2583333"])?;
-    wtr.write_record(&["Oakman", "AL", "", "33.7133333", "-87.3886111"])?;
+    wtr.write_record(["Kenai", "AK", "7610", "60.5544444", "-151.2583333"])?;
+    wtr.write_record(["Oakman", "AL", "", "33.7133333", "-87.3886111"])?;
 
     wtr.flush()?;
     Ok(())
