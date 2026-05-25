@@ -142,7 +142,7 @@ impl Terminator {
 }
 
 /// The quoting style to use when writing CSV data.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[non_exhaustive]
 pub enum QuoteStyle {
     /// This puts quotes around every field. Always.
