@@ -877,7 +877,7 @@ impl Reader {
         if ends.is_empty() {
             return (ReadRecordResult::OutputEndsFull, 0, 0, 0);
         }
-        let (mut nin, mut nout, mut nend) = (0, self.output_pos, 0);
+        let (mut nin, mut nout, mut nend) = (0, 0, 0);
         let mut state = self.nfa_state;
         while nin < input.len() && nout < output.len() && nend < ends.len() {
             let (s, io) = self.transition_nfa(state, input[nin]);
@@ -894,7 +894,7 @@ impl Reader {
             }
             state = s;
             if state.is_field_final() {
-                ends[nend] = nout;
+                ends[nend] = self.output_pos + nout;
                 nend += 1;
                 if state != NfaState::EndFieldDelim {
                     break;
@@ -908,7 +908,7 @@ impl Reader {
             nend >= ends.len(),
         );
         self.nfa_state = state;
-        self.output_pos = if res.is_record() { 0 } else { nout };
+        self.output_pos = if res.is_record() { 0 } else { self.output_pos + nout };
         (res, nin, nout, nend)
     }
 
@@ -2019,5 +2019,51 @@ mod tests {
         let (result, _, _, _) = rdr.read_record(inp, out, ends);
         assert_eq!(result, Record);
         assert_eq!(ends[0], 3);
+    }
+
+    // Test that the NFA correctly handles resuming after OutputFull.
+    //
+    // Previously, read_record_nfa initialised `nout` to `self.output_pos`
+    // instead of 0, which caused two bugs when a record spanned multiple
+    // read_record calls (i.e. when OutputFull is returned):
+    //   1. Bytes were written at the wrong offset within the output buffer
+    //      (`output[output_pos]` instead of `output[0]`).
+    //   2. The returned `nout` was inflated by `output_pos`, making the
+    //      caller advance its accumulation pointer too far.
+    #[test]
+    fn nfa_output_full_resume() {
+        use crate::ReadRecordResult::*;
+
+        // Use a record "hello,world\n" whose first field ("hello") is 5
+        // bytes.  We give the NFA only 3 bytes of output on the first call
+        // so it must return OutputFull and then be resumed.
+        let input = b("hello,world\n");
+        let ends = &mut [0usize; 10];
+
+        let mut rdr = ReaderBuilder::new().nfa(true).build();
+
+        // First call: 3-byte output buffer → OutputFull after writing "hel".
+        let mut out1 = [0u8; 3];
+        let (res1, nin1, nout1, nend1) =
+            rdr.read_record(input, &mut out1, ends);
+        assert_eq!(res1, OutputFull, "expected OutputFull on first call");
+        assert_eq!(nout1, 3, "expected 3 bytes written");
+        assert_eq!(&out1[..nout1], b"hel", "wrong bytes in first chunk");
+        assert_eq!(nend1, 0, "no fields complete yet");
+
+        // Second call: resume with the remaining input and a fresh output
+        // buffer.  The NFA must write "lo" then "world" (field data only,
+        // delimiters/terminators are discarded) and return Record.
+        let mut out2 = [0u8; 64];
+        let (res2, _nin2, nout2, nend2) =
+            rdr.read_record(&input[nin1..], &mut out2, ends);
+        assert_eq!(res2, Record, "expected Record on second call");
+        // out2 should contain "lo" + "world" = "loworld" (7 bytes, no delimiter)
+        assert_eq!(&out2[..nout2], b"loworld", "wrong bytes in second chunk");
+        assert_eq!(nend2, 2, "expected 2 fields");
+        // Field 0 ("hello") spans bytes 0..5 of the accumulated output.
+        assert_eq!(ends[0], 5, "field 0 should end at accumulated byte 5");
+        // Field 1 ("world") spans bytes 5..10 of the accumulated output.
+        assert_eq!(ends[1], 10, "field 1 should end at accumulated byte 10");
     }
 }
