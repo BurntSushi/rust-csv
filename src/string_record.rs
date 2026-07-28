@@ -69,8 +69,14 @@ impl<T: AsRef<[u8]>> PartialEq<[T]> for &StringRecord {
 
 impl fmt::Debug for StringRecord {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let fields: Vec<&str> = self.iter().collect();
-        write!(f, "StringRecord({:?})", fields)
+        f.write_str("StringRecord([")?;
+        for (i, field) in self.iter().enumerate() {
+            if i > 0 {
+                f.write_str(", ")?;
+            }
+            write!(f, "{field:?}")?;
+        }
+        f.write_str("])")
     }
 }
 
@@ -426,18 +432,14 @@ impl StringRecord {
     /// assert_eq!(record, vec!["", "foo", "bar", "b a z"]);
     /// ```
     pub fn trim(&mut self) {
-        let length = self.len();
-        if length == 0 {
-            return;
-        }
-        // TODO: We could likely do this in place, but for now, we allocate.
-        let mut trimmed =
-            StringRecord::with_capacity(self.as_slice().len(), self.len());
-        trimmed.set_position(self.position().cloned());
-        for field in &*self {
-            trimmed.push_field(field.trim());
-        }
-        *self = trimmed;
+        self.0.trim_fields(|field| {
+            // SAFETY: Safe construction and mutation accept UTF-8, and reader
+            // input is validated before the record is exposed.
+            let value = unsafe { str::from_utf8_unchecked(field) };
+            let trimmed = value.trim();
+            let start = trimmed.as_ptr() as usize - value.as_ptr() as usize;
+            start..start + trimmed.len()
+        });
     }
 
     /// Add a new field to this record.
@@ -634,10 +636,17 @@ impl StringRecord {
         // because other accessor methods, like `get`, assume that every field
         // is valid UTF-8.)
         let pos = rdr.position().clone();
-        let read_res = rdr.read_byte_record(&mut self.0);
+        let read_res = rdr.read_byte_record_no_field_trim(&mut self.0);
         let utf8_res = match self.0.validate() {
             Ok(()) => Ok(()),
-            Err(err) => {
+            Err(mut err) => {
+                if rdr.should_trim_fields() {
+                    // UTF-8 offsets are reported after configured trimming.
+                    self.0.trim();
+                    err = self.0.validate().expect_err(
+                        "ASCII trimming cannot repair invalid UTF-8",
+                    );
+                }
                 // If this record isn't valid UTF-8, then completely wipe it.
                 self.0.clear();
                 Err(err)
@@ -678,7 +687,8 @@ impl<'a, T: AsRef<str>> From<&'a [T]> for StringRecord {
 impl<T: AsRef<str>> FromIterator<T> for StringRecord {
     #[inline]
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> StringRecord {
-        let mut record = StringRecord::new();
+        let iter = iter.into_iter();
+        let mut record = StringRecord::with_capacity(0, iter.size_hint().0);
         record.extend(iter);
         record
     }
@@ -813,6 +823,50 @@ mod tests {
         ]);
         rec.trim();
         assert_eq!(rec.get(0), Some(""));
+    }
+
+    #[test]
+    fn trim_matches_allocating_reference() {
+        const FIELDS: &[&str] = &[
+            "",
+            " ",
+            "\talpha\r",
+            " beta gamma ",
+            "\u{3000}delta\u{2009}",
+            "\u{00A0}",
+            "é",
+            " ζ ",
+        ];
+        let field_count = if cfg!(miri) { 2 } else { 4 };
+
+        for mut encoded in 0..FIELDS.len().pow(field_count as u32) {
+            let mut fields = Vec::with_capacity(field_count);
+            for _ in 0..field_count {
+                fields.push(FIELDS[encoded % FIELDS.len()]);
+                encoded /= FIELDS.len();
+            }
+            let mut expected: Vec<String> =
+                fields.iter().map(|field| field.trim().to_owned()).collect();
+            let mut rec = StringRecord::from(fields);
+
+            rec.trim();
+            assert_eq!(rec, expected);
+            rec.trim();
+            assert_eq!(rec, expected);
+
+            rec.push_field(" tail ");
+            expected.push(" tail ".to_owned());
+            assert_eq!(rec, expected);
+            assert!(
+                std::str::from_utf8(rec.as_byte_record().as_slice()).is_ok()
+            );
+        }
+    }
+
+    #[test]
+    fn alternate_debug_format_is_stable() {
+        let rec = StringRecord::from(vec!["a", "b"]);
+        assert_eq!(format!("{rec:#?}"), "StringRecord([\"a\", \"b\"])");
     }
 
     // Check that record equality respects field boundaries.

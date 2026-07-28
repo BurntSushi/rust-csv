@@ -295,20 +295,24 @@ impl<'r> DeRecord<'r> for DeByteRecord<'r> {
             visitor.visit_bool(true)
         } else if x == b"false" {
             visitor.visit_bool(false)
-        } else if let Some(n) = try_positive_integer64_bytes(x) {
-            visitor.visit_u64(n)
-        } else if let Some(n) = try_negative_integer64_bytes(x) {
-            visitor.visit_i64(n)
-        } else if let Some(n) = try_positive_integer128_bytes(x) {
-            visitor.visit_u128(n)
-        } else if let Some(n) = try_negative_integer128_bytes(x) {
-            visitor.visit_i128(n)
-        } else if let Some(n) = try_float_bytes(x) {
-            visitor.visit_f64(n)
-        } else if let Ok(s) = str::from_utf8(x) {
-            visitor.visit_str(s)
         } else {
-            visitor.visit_bytes(x)
+            let s = match str::from_utf8(x) {
+                Ok(s) => s,
+                Err(_) => return visitor.visit_bytes(x),
+            };
+            if let Some(n) = try_positive_integer64(s) {
+                visitor.visit_u64(n)
+            } else if let Some(n) = try_negative_integer64(s) {
+                visitor.visit_i64(n)
+            } else if let Some(n) = try_positive_integer128(s) {
+                visitor.visit_u128(n)
+            } else if let Some(n) = try_negative_integer128(s) {
+                visitor.visit_i128(n)
+            } else if let Some(n) = try_float(s) {
+                visitor.visit_f64(n)
+            } else {
+                visitor.visit_str(s)
+            }
         }
     }
 }
@@ -391,14 +395,15 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         let field = self.next_field()?;
-        let len = field.chars().count();
-        if len != 1 {
-            return Err(self.error(DEK::Message(format!(
-                "expected single character but got {} characters in '{}'",
-                len, field
-            ))));
+        let mut chars = field.chars();
+        if let (Some(c), None) = (chars.next(), chars.next()) {
+            return visitor.visit_char(c);
         }
-        visitor.visit_char(field.chars().next().unwrap())
+        let len = field.chars().count();
+        Err(self.error(DEK::Message(format!(
+            "expected single character but got {} characters in '{}'",
+            len, field
+        ))))
     }
 
     fn deserialize_str<V: Visitor<'de>>(
@@ -437,7 +442,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
         match self.peek_field() {
             None => visitor.visit_none(),
             Some([]) => {
-                self.next_field().expect("empty field");
+                self.next_field_bytes().expect("empty field");
                 visitor.visit_none()
             }
             Some(_) => visitor.visit_some(self),
@@ -620,7 +625,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> MapAccess<'de>
         &mut self,
         seed: K,
     ) -> Result<Option<K::Value>, Self::Error> {
-        assert!(self.has_headers());
+        debug_assert!(self.has_headers());
         let field = match self.next_header_bytes()? {
             None => return Ok(None),
             Some(field) => field,
@@ -754,33 +759,16 @@ fn try_float(s: &str) -> Option<f64> {
     s.parse().ok()
 }
 
-fn try_positive_integer64_bytes(s: &[u8]) -> Option<u64> {
-    str::from_utf8(s).ok().and_then(|s| s.parse().ok())
-}
-
-fn try_negative_integer64_bytes(s: &[u8]) -> Option<i64> {
-    str::from_utf8(s).ok().and_then(|s| s.parse().ok())
-}
-
-fn try_positive_integer128_bytes(s: &[u8]) -> Option<u128> {
-    str::from_utf8(s).ok().and_then(|s| s.parse().ok())
-}
-
-fn try_negative_integer128_bytes(s: &[u8]) -> Option<i128> {
-    str::from_utf8(s).ok().and_then(|s| s.parse().ok())
-}
-
-fn try_float_bytes(s: &[u8]) -> Option<f64> {
-    str::from_utf8(s).ok().and_then(|s| s.parse().ok())
-}
-
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, fmt};
 
     use {
         bstr::BString,
-        serde::{de::DeserializeOwned, Deserialize},
+        serde::{
+            de::{DeserializeOwned, Deserializer, Visitor},
+            Deserialize,
+        },
     };
 
     use crate::{
@@ -805,6 +793,98 @@ mod tests {
 
     fn b<T: AsRef<[u8]> + ?Sized>(bytes: &T) -> &[u8] {
         bytes.as_ref()
+    }
+
+    #[derive(Debug, PartialEq)]
+    enum Inferred {
+        Bool(bool),
+        U64(u64),
+        I64(i64),
+        U128(u128),
+        I128(i128),
+        F64(f64),
+        String(String),
+        Bytes(Vec<u8>),
+    }
+
+    impl<'de> Deserialize<'de> for Inferred {
+        fn deserialize<D: Deserializer<'de>>(
+            deserializer: D,
+        ) -> Result<Self, D::Error> {
+            deserializer.deserialize_any(InferredVisitor)
+        }
+    }
+
+    struct InferredVisitor;
+
+    impl Visitor<'_> for InferredVisitor {
+        type Value = Inferred;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("an inferred CSV value")
+        }
+
+        fn visit_bool<E>(self, value: bool) -> Result<Inferred, E> {
+            Ok(Inferred::Bool(value))
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Inferred, E> {
+            Ok(Inferred::U64(value))
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Inferred, E> {
+            Ok(Inferred::I64(value))
+        }
+
+        fn visit_u128<E>(self, value: u128) -> Result<Inferred, E> {
+            Ok(Inferred::U128(value))
+        }
+
+        fn visit_i128<E>(self, value: i128) -> Result<Inferred, E> {
+            Ok(Inferred::I128(value))
+        }
+
+        fn visit_f64<E>(self, value: f64) -> Result<Inferred, E> {
+            Ok(Inferred::F64(value))
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Inferred, E> {
+            Ok(Inferred::String(value.to_owned()))
+        }
+
+        fn visit_bytes<E>(self, value: &[u8]) -> Result<Inferred, E> {
+            Ok(Inferred::Bytes(value.to_owned()))
+        }
+    }
+
+    #[test]
+    fn byte_record_infers_all_deserialize_any_types() {
+        let record = ByteRecord::from(vec![
+            &b"true"[..],
+            &b"18446744073709551615"[..],
+            &b"-1"[..],
+            &b"18446744073709551616"[..],
+            &b"-9223372036854775809"[..],
+            &b"3.5"[..],
+            &b"plain"[..],
+            &b"\xFF"[..],
+        ]);
+
+        let got: [Inferred; 8] =
+            deserialize_byte_record(&record, None).unwrap();
+        assert_eq!(
+            got,
+            [
+                Inferred::Bool(true),
+                Inferred::U64(u64::MAX),
+                Inferred::I64(-1),
+                Inferred::U128(u64::MAX as u128 + 1),
+                Inferred::I128(i64::MIN as i128 - 1),
+                Inferred::F64(3.5),
+                Inferred::String("plain".to_owned()),
+                Inferred::Bytes(vec![0xFF]),
+            ],
+        );
     }
 
     #[test]
@@ -966,12 +1046,22 @@ mod tests {
 
     #[test]
     fn no_chars() {
-        assert!(de::<char>(&[""]).is_err());
+        let err = de::<char>(&[""]).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "CSV deserialize error: field 0: expected single character but \
+             got 0 characters in ''",
+        );
     }
 
     #[test]
     fn too_many_chars() {
-        assert!(de::<char>(&["ab"]).is_err());
+        let err = de::<char>(&["ab"]).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "CSV deserialize error: field 0: expected single character but \
+             got 2 characters in 'ab'",
+        );
     }
 
     #[test]

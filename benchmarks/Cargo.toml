@@ -1,0 +1,23 @@
+[package]
+name = "csv-benchmarks"
+version = "0.0.0"
+publish = false
+edition = "2021"
+rust-version = "1.85.1"
+autobenches = false
+
+[workspace]
+
+[dependencies]
+csv = { path = ".." }
+csv-core = { path = "../csv-core" }
+gungraun = "0.19.4"
+serde = { version = "1.0.221", features = ["derive"] }
+
+[[bench]]
+name = "csv"
+harness = false
+
+[[bench]]
+name = "csv_core"
+harness = false

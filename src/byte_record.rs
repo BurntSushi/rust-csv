@@ -365,18 +365,11 @@ impl ByteRecord {
     /// assert_eq!(record, vec!["", "foo", "bar", "b a z"]);
     /// ```
     pub fn trim(&mut self) {
-        let length = self.len();
-        if length == 0 {
-            return;
-        }
-        // TODO: We could likely do this in place, but for now, we allocate.
-        let mut trimmed =
-            ByteRecord::with_capacity(self.as_slice().len(), self.len());
-        trimmed.set_position(self.position().cloned());
-        for field in self.iter() {
-            trimmed.push_field(trim_ascii(field));
-        }
-        *self = trimmed;
+        self.trim_fields(|field| {
+            let trimmed = trim_ascii(field);
+            let start = trimmed.as_ptr() as usize - field.as_ptr() as usize;
+            start..start + trimmed.len()
+        });
     }
 
     /// Add a new field to this record.
@@ -497,7 +490,9 @@ impl ByteRecord {
     /// ```
     #[inline]
     pub fn as_slice(&self) -> &[u8] {
-        &self.0.fields[..self.0.bounds.end()]
+        // SAFETY: Bounds come from successful writes, and trimming or
+        // truncation only reduces them, so the final bound is in `fields`.
+        unsafe { self.0.fields.get_unchecked(..self.0.bounds.end()) }
     }
 
     /// Clone this record, but only copy `fields` up to the end of bounds. This
@@ -505,11 +500,14 @@ impl ByteRecord {
     /// excess capacity in that record.
     #[inline]
     pub(crate) fn clone_truncated(&self) -> ByteRecord {
-        let mut br = ByteRecord::new();
-        br.0.pos = self.0.pos.clone();
-        br.0.bounds = self.0.bounds.clone();
-        br.0.fields = self.0.fields[..self.0.bounds.end()].to_vec();
-        br
+        ByteRecord(Box::new(ByteRecordInner {
+            pos: self.0.pos.clone(),
+            fields: self.as_slice().to_vec(),
+            bounds: Bounds {
+                ends: self.0.bounds.ends().to_vec(),
+                len: self.0.bounds.len,
+            },
+        }))
     }
 
     /// Retrieve the underlying parts of a byte record.
@@ -523,6 +521,28 @@ impl ByteRecord {
     #[inline]
     pub(crate) fn set_len(&mut self, len: usize) {
         self.0.bounds.len = len;
+    }
+
+    pub(crate) fn trim_fields<F>(&mut self, mut trim: F)
+    where
+        F: FnMut(&[u8]) -> Range<usize>,
+    {
+        let inner = &mut *self.0;
+        let mut read_start = 0;
+        let mut write_start = 0;
+        for i in 0..inner.bounds.len {
+            let read_end = inner.bounds.ends[i];
+            let range = trim(&inner.fields[read_start..read_end]);
+            debug_assert!(range.start <= range.end);
+            debug_assert!(range.end <= read_end - read_start);
+
+            let copy_start = read_start + range.start;
+            let copy_end = read_start + range.end;
+            inner.fields.copy_within(copy_start..copy_end, write_start);
+            write_start += range.len();
+            inner.bounds.ends[i] = write_start;
+            read_start = read_end;
+        }
     }
 
     /// Expand the capacity for storing fields.
@@ -690,7 +710,9 @@ impl Bounds {
     /// Returns a slice of ending positions of all fields.
     #[inline]
     fn ends(&self) -> &[usize] {
-        &self.ends[..self.len]
+        // SAFETY: `add` reserves a slot before increasing `len`, and the
+        // reader sets `len` only to the number of written ends.
+        unsafe { self.ends.get_unchecked(..self.len) }
     }
 
     /// Return the last position of the last field.
@@ -757,7 +779,8 @@ impl<'a, T: AsRef<[u8]>> From<&'a [T]> for ByteRecord {
 impl<T: AsRef<[u8]>> FromIterator<T> for ByteRecord {
     #[inline]
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> ByteRecord {
-        let mut record = ByteRecord::new();
+        let iter = iter.into_iter();
+        let mut record = ByteRecord::with_capacity(0, iter.size_hint().0);
         record.extend(iter);
         record
     }
@@ -817,10 +840,16 @@ impl<'r> Iterator for ByteRecordIter<'r> {
             None
         } else {
             let start = self.last_end;
-            let end = self.r.0.bounds.ends()[self.i_forward];
+            // SAFETY: This branch ensures
+            // `i_forward < i_reverse <= bounds.len()`.
+            let end = unsafe {
+                *self.r.0.bounds.ends().get_unchecked(self.i_forward)
+            };
             self.i_forward += 1;
             self.last_end = end;
-            Some(&self.r.0.fields[start..end])
+            // SAFETY: Field ends are monotonic written offsets, so
+            // `start <= end <= fields.len()`.
+            Some(unsafe { self.r.0.fields.get_unchecked(start..end) })
         }
     }
 
@@ -965,6 +994,72 @@ mod tests {
         rec.trim();
         assert_eq!(rec.get(0), Some(b("abc")));
         assert_eq!(rec.get(1), Some(b("xyz")));
+    }
+
+    #[test]
+    fn trim_reuses_storage() {
+        let mut rec = ByteRecord::from(vec![b(" abc "), b("  xyz  ")]);
+        let fields = rec.0.fields.as_ptr();
+        let ends = rec.0.bounds.ends.as_ptr();
+
+        rec.trim();
+
+        assert_eq!(rec, vec!["abc", "xyz"]);
+        assert_eq!(fields, rec.0.fields.as_ptr());
+        assert_eq!(ends, rec.0.bounds.ends.as_ptr());
+    }
+
+    #[test]
+    fn trim_matches_allocating_reference() {
+        const FIELDS: &[&[u8]] = &[
+            b"",
+            b" ",
+            b"\talpha\r",
+            b" beta gamma ",
+            b"\x0B\x0C",
+            b"\xFF ",
+            b"\xC2\xA0",
+            b" z",
+        ];
+        let field_count = if cfg!(miri) { 2 } else { 4 };
+
+        for mut encoded in 0..FIELDS.len().pow(field_count as u32) {
+            let mut fields = Vec::with_capacity(field_count);
+            for _ in 0..field_count {
+                fields.push(FIELDS[encoded % FIELDS.len()]);
+                encoded /= FIELDS.len();
+            }
+            let mut expected: Vec<Vec<u8>> = fields
+                .iter()
+                .map(|field| super::trim_ascii(field).to_vec())
+                .collect();
+            let mut rec = ByteRecord::from(fields);
+
+            rec.trim();
+            assert_eq!(rec, expected);
+            rec.trim();
+            assert_eq!(rec, expected);
+
+            rec.push_field(b" tail ");
+            expected.push(b" tail ".to_vec());
+            assert_eq!(rec, expected);
+        }
+    }
+
+    #[test]
+    fn truncated_clone_drops_unused_storage() {
+        let mut rec = ByteRecord::new();
+        rec.push_field(b"a");
+        rec.push_field(b"b");
+        rec.push_field(b"c");
+        assert!(rec.0.fields.len() > rec.as_slice().len());
+        assert!(rec.0.bounds.ends.len() > rec.len());
+
+        let cloned = rec.clone_truncated();
+
+        assert_eq!(cloned, rec);
+        assert_eq!(cloned.0.fields.len(), cloned.as_slice().len());
+        assert_eq!(cloned.0.bounds.ends.len(), cloned.len());
     }
 
     #[test]
@@ -1166,6 +1261,23 @@ mod tests {
         assert_eq!(it.next(), Some(b("baz")));
         assert_eq!(it.next_back(), None);
         assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn iter_after_trim_truncate_and_push() {
+        let mut rec =
+            ByteRecord::from(vec![" foo ", " bar ", " baz ", " quux "]);
+        rec.trim();
+        rec.truncate(3);
+        rec.push_field(b"wat");
+        let mut it = rec.iter();
+
+        assert_eq!(it.next(), Some(b("foo")));
+        assert_eq!(it.next_back(), Some(b("wat")));
+        assert_eq!(it.next(), Some(b("bar")));
+        assert_eq!(it.next_back(), Some(b("baz")));
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next_back(), None);
     }
 
     // Check that record equality respects field boundaries.

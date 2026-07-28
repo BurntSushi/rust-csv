@@ -167,7 +167,17 @@ impl ReaderBuilder {
 
     /// Build a CSV parser from this configuration.
     pub fn build(&self) -> Reader {
-        let mut rdr = self.rdr.clone();
+        let mut rdr = Reader {
+            delimiter: self.rdr.delimiter,
+            term: self.rdr.term,
+            quote: self.rdr.quote,
+            escape: self.rdr.escape,
+            double_quote: self.rdr.double_quote,
+            comment: self.rdr.comment,
+            quoting: self.rdr.quoting,
+            use_nfa: self.rdr.use_nfa,
+            ..Reader::default()
+        };
         rdr.build_dfa();
         rdr
     }
@@ -732,6 +742,11 @@ impl Reader {
             if state >= self.dfa.final_field {
                 break;
             }
+            if state == self.dfa.in_field || state == self.dfa.in_quoted {
+                self.dfa
+                    .classes
+                    .scan_and_copy(input, &mut nin, output, &mut nout);
+            }
         }
         let res = self.dfa.new_read_field_result(
             state,
@@ -809,7 +824,13 @@ impl Reader {
             self.dfa.classes.add(comment);
         }
         match self.term {
-            Terminator::Any(b) => self.dfa.classes.add(b),
+            Terminator::Any(b) => {
+                self.dfa.classes.add(b);
+                if b != b'\n' {
+                    // Keep newlines visible to the scan loop for line counts.
+                    self.dfa.classes.add(b'\n');
+                }
+            }
             Terminator::CRLF => {
                 self.dfa.classes.add(b'\r');
                 self.dfa.classes.add(b'\n');
@@ -1308,6 +1329,12 @@ impl Clone for Dfa {
     fn clone(&self) -> Dfa {
         let mut dfa = Dfa::new();
         dfa.trans.copy_from_slice(&self.trans);
+        dfa.has_output.copy_from_slice(&self.has_output);
+        dfa.classes = self.classes.clone();
+        dfa.in_field = self.in_field;
+        dfa.in_quoted = self.in_quoted;
+        dfa.final_field = self.final_field;
+        dfa.final_record = self.final_record;
         dfa
     }
 }
@@ -1316,6 +1343,7 @@ impl Clone for DfaClasses {
     fn clone(&self) -> DfaClasses {
         let mut x = DfaClasses::new();
         x.classes.copy_from_slice(&self.classes);
+        x.next_class = self.next_class;
         x
     }
 }
@@ -1325,6 +1353,8 @@ mod tests {
     use core::str;
 
     use arrayvec::{ArrayString, ArrayVec};
+    extern crate std;
+    use self::std::vec::Vec;
 
     use super::{ReadFieldResult, Reader, ReaderBuilder, Terminator};
 
@@ -1720,6 +1750,18 @@ mod tests {
             b.comment(Some(b'#'));
         }
     );
+    parses_to!(
+        comment_with_custom_terminator,
+        "# ignored\na;bz1;2z",
+        csv![["a", "b"], ["1", "2"]],
+        |b: &mut ReaderBuilder| {
+            b.delimiter(b';')
+                .terminator(Terminator::Any(b'z'))
+                .quote(b'\'')
+                .escape(Some(b'\\'))
+                .comment(Some(b'#'));
+        }
+    );
 
     macro_rules! assert_read {
         (
@@ -1931,6 +1973,214 @@ mod tests {
 
         assert_read!(rdr, &[], &mut [0], 0, 0, End);
         assert_eq!(6, rdr.line());
+    }
+
+    #[test]
+    fn line_numbers_with_custom_terminator() {
+        let mut builder = ReaderBuilder::new();
+        builder.terminator(Terminator::Any(b'z'));
+
+        let mut field_reader = builder.build();
+        let mut field = [0; 16];
+        let (_, nin, nout) = field_reader.read_field(b"a\nb,z", &mut field);
+        assert_eq!(nin, 4);
+        assert_eq!(nout, 3);
+        assert_eq!(field_reader.line(), 2);
+
+        let mut record_reader = builder.build();
+        let mut record = [0; 16];
+        let mut ends = [0; 4];
+        let (_, nin, nout, nend) =
+            record_reader.read_record(b"a\nb,z", &mut record, &mut ends);
+        assert_eq!(nin, 5);
+        assert_eq!(nout, 3);
+        assert_eq!(nend, 2);
+        assert_eq!(record_reader.line(), 2);
+
+        let mut quoted_field_reader = builder.build();
+        let (_, nin, nout) =
+            quoted_field_reader.read_field(b"\"a\nb\",z", &mut field);
+        assert_eq!(nin, 6);
+        assert_eq!(nout, 3);
+        assert_eq!(&field[..nout], b"a\nb");
+        assert_eq!(quoted_field_reader.line(), 2);
+
+        let mut quoted_record_reader = builder.build();
+        let (_, nin, nout, nend) = quoted_record_reader.read_record(
+            b"\"a\nb\",cz",
+            &mut record,
+            &mut ends,
+        );
+        assert_eq!(nin, 8);
+        assert_eq!(nout, 4);
+        assert_eq!(nend, 2);
+        assert_eq!(quoted_record_reader.line(), 2);
+    }
+
+    #[test]
+    fn clone_preserves_dfa() {
+        let mut reader = Reader::new().clone();
+        let mut field = [0; 16];
+
+        let (result, nin, nout) = reader.read_field(b"foo,", &mut field);
+
+        assert_eq!(result, ReadFieldResult::Field { record_end: false });
+        assert_eq!(nin, 4);
+        assert_eq!(nout, 3);
+        assert_eq!(&field[..nout], b"foo");
+    }
+
+    #[test]
+    fn clone_preserves_partial_parse_state() {
+        let mut reader = Reader::new();
+        let mut output = [0; 16];
+        let (result, nin, nout) = reader.read_field(b"ab", &mut output);
+        assert_eq!(result, ReadFieldResult::InputEmpty);
+        assert_eq!((nin, nout), (2, 2));
+
+        let mut cloned = reader.clone();
+        let original = reader.read_field(b"c,d\n", &mut output);
+        let cloned_result = cloned.read_field(b"c,d\n", &mut output);
+        assert_eq!(cloned_result, original);
+        assert_eq!(cloned.line(), reader.line());
+    }
+
+    fn configured_reader(config: usize, nfa: bool) -> Reader {
+        let mut builder = ReaderBuilder::new();
+        builder.nfa(nfa);
+        match config {
+            0 => {}
+            1 => {
+                builder
+                    .delimiter(b';')
+                    .terminator(Terminator::Any(b'|'))
+                    .quote(b'\'')
+                    .escape(Some(b'\\'))
+                    .double_quote(false);
+            }
+            2 => {
+                builder
+                    .delimiter(b'"')
+                    .terminator(Terminator::Any(b';'))
+                    .quoting(false);
+            }
+            3 => {
+                builder.terminator(Terminator::Any(b'\n'));
+            }
+            _ => unreachable!(),
+        }
+        builder.build()
+    }
+
+    fn read_field_trace(
+        rdr: &mut Reader,
+        data: &[u8],
+        input_chunk: usize,
+        output_chunk: usize,
+    ) -> (Vec<(ReadFieldResult, usize, Vec<u8>)>, u64) {
+        let mut trace = Vec::new();
+        let mut input_pos = 0;
+        for _ in 0..100 {
+            let input_end =
+                core::cmp::min(data.len(), input_pos + input_chunk);
+            let mut output = [0; 4];
+            let (result, nin, nout) = rdr.read_field(
+                &data[input_pos..input_end],
+                &mut output[..output_chunk],
+            );
+            assert!(nin <= input_end - input_pos);
+            assert!(nout <= output_chunk);
+            input_pos += nin;
+            let done = result == ReadFieldResult::End;
+            trace.push((result, nin, output[..nout].to_vec()));
+            if done {
+                return (trace, rdr.line());
+            }
+        }
+        panic!("reader failed to terminate for input {:?}", data);
+    }
+
+    #[test]
+    fn dfa_matches_nfa_with_small_buffers() {
+        const ALPHABET: &[u8] = b"a,\"'\r\n;|#\\";
+        const LONG_CASES: &[&[u8]] = &[
+            b"ordinary bytes copied in one run,tail\n",
+            b"\"quoted ordinary bytes\",\"a\"\"b\"\r\n",
+            b"# comment\nfield;next|",
+            b"'escaped \\' quote';tail|",
+        ];
+
+        for config in 0..4 {
+            for &input_chunk in &[1, 2, 4] {
+                for &output_chunk in &[1, 2, 4] {
+                    let mut dfa = configured_reader(config, false);
+                    let mut nfa = configured_reader(config, true);
+                    let max_len = if cfg!(miri) { 1 } else { 3 };
+                    for len in 0..=max_len {
+                        for mut encoded in 0..ALPHABET.len().pow(len as u32) {
+                            let mut data = Vec::with_capacity(len);
+                            for _ in 0..len {
+                                data.push(ALPHABET[encoded % ALPHABET.len()]);
+                                encoded /= ALPHABET.len();
+                            }
+                            dfa.reset();
+                            nfa.reset();
+                            let dfa_result = read_field_trace(
+                                &mut dfa,
+                                &data,
+                                input_chunk,
+                                output_chunk,
+                            );
+                            let nfa_result = read_field_trace(
+                                &mut nfa,
+                                &data,
+                                input_chunk,
+                                output_chunk,
+                            );
+                            assert_eq!(
+                                dfa_result.0, nfa_result.0,
+                                "config {config}, input {data:?}, input chunk \
+                                 {input_chunk}, output chunk {output_chunk}",
+                            );
+                            assert_eq!(
+                                dfa_result.1,
+                                1 + data
+                                    .iter()
+                                    .filter(|&&b| b == b'\n')
+                                    .count()
+                                    as u64,
+                            );
+                        }
+                    }
+                    for &data in LONG_CASES {
+                        dfa.reset();
+                        nfa.reset();
+                        let dfa_result = read_field_trace(
+                            &mut dfa,
+                            data,
+                            input_chunk,
+                            output_chunk,
+                        );
+                        let nfa_result = read_field_trace(
+                            &mut nfa,
+                            data,
+                            input_chunk,
+                            output_chunk,
+                        );
+                        assert_eq!(
+                            dfa_result.0, nfa_result.0,
+                            "config {config}, input {data:?}, input chunk \
+                             {input_chunk}, output chunk {output_chunk}",
+                        );
+                        assert_eq!(
+                            dfa_result.1,
+                            1 + data.iter().filter(|&&b| b == b'\n').count()
+                                as u64,
+                        );
+                    }
+                }
+            }
+        }
     }
 
     macro_rules! assert_read_record {

@@ -1575,9 +1575,32 @@ impl<R: io::Read> Reader<R> {
     ///     }
     /// }
     /// ```
+    #[inline(always)]
     pub fn read_byte_record(
         &mut self,
         record: &mut ByteRecord,
+    ) -> Result<bool> {
+        self.read_byte_record_with(record, true)
+    }
+
+    #[inline(always)]
+    pub(crate) fn read_byte_record_no_field_trim(
+        &mut self,
+        record: &mut ByteRecord,
+    ) -> Result<bool> {
+        self.read_byte_record_with(record, false)
+    }
+
+    #[inline]
+    pub(crate) fn should_trim_fields(&self) -> bool {
+        self.state.trim.should_trim_fields()
+    }
+
+    #[inline(always)]
+    fn read_byte_record_with(
+        &mut self,
+        record: &mut ByteRecord,
+        trim_fields: bool,
     ) -> Result<bool> {
         if !self.state.seeked && !self.state.has_headers && !self.state.first {
             // If the caller indicated "no headers" and we haven't yielded the
@@ -1586,7 +1609,7 @@ impl<R: io::Read> Reader<R> {
             if let Some(ref headers) = self.state.headers {
                 self.state.first = true;
                 record.clone_from(&headers.byte_record);
-                if self.state.trim.should_trim_fields() {
+                if trim_fields && self.state.trim.should_trim_fields() {
                     record.trim();
                 }
                 return Ok(!record.is_empty());
@@ -1595,19 +1618,19 @@ impl<R: io::Read> Reader<R> {
         let ok = self.read_byte_record_impl(record)?;
         self.state.first = true;
         if !self.state.seeked && self.state.headers.is_none() {
-            self.set_headers_impl(Err(record.clone()));
+            self.set_headers_impl(Err(record.clone_truncated()));
             // If the end user indicated that we have headers, then we should
             // never return the first row. Instead, we should attempt to
             // read and return the next one.
             if self.state.has_headers {
                 let result = self.read_byte_record_impl(record);
-                if self.state.trim.should_trim_fields() {
+                if trim_fields && self.state.trim.should_trim_fields() {
                     record.trim();
                 }
                 return result;
             }
         }
-        if self.state.trim.should_trim_fields() {
+        if trim_fields && self.state.trim.should_trim_fields() {
             record.trim();
         }
         Ok(ok)
@@ -2315,6 +2338,59 @@ mod tests {
         assert_eq!("a1", s(&rec[0]));
         assert_eq!("b1", s(&rec[1]));
         assert_eq!("c1", s(&rec[2]));
+    }
+
+    #[test]
+    fn read_string_record_trims_unicode_fields_only() {
+        let data =
+            "\u{3000}header\u{3000}, ascii \n\u{3000}value\u{3000}, text \n";
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(true)
+            .trim(Trim::Fields)
+            .from_reader(data.as_bytes());
+        let mut rec = StringRecord::new();
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+        assert_eq!(rec, vec!["value", "text"]);
+        assert_eq!(
+            rdr.headers().unwrap(),
+            &vec!["\u{3000}header\u{3000}", " ascii "],
+        );
+    }
+
+    #[test]
+    fn trimmed_string_record_preserves_utf8_error_offset() {
+        let data = &b"  \xFF  ,ok\n"[..];
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .trim(Trim::Fields)
+            .from_reader(data);
+        let mut rec = StringRecord::new();
+
+        let err = rdr.read_record(&mut rec).unwrap_err();
+        match *err.kind() {
+            ErrorKind::Utf8 { ref err, .. } => {
+                assert_eq!(err.field(), 0);
+                assert_eq!(err.valid_up_to(), 0);
+            }
+            ref err => panic!("match failed, got {:?}", err),
+        }
+        assert!(rec.is_empty());
+    }
+
+    #[test]
+    fn trimmed_string_record_is_consistent_after_unequal_length_error() {
+        let data = b("a,b\n  c  \n");
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .trim(Trim::Fields)
+            .from_reader(data);
+        let mut rec = StringRecord::new();
+
+        assert!(rdr.read_record(&mut rec).unwrap());
+        let err = rdr.read_record(&mut rec).unwrap_err();
+        assert!(matches!(err.kind(), ErrorKind::UnequalLengths { .. }));
+        assert_eq!(rec, vec!["c"]);
     }
 
     #[test]
