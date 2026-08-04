@@ -1,5 +1,5 @@
 use std::{error::Error, io, process};
-
+#[cfg(feature = "serde")]
 fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
@@ -31,10 +31,14 @@ fn run() -> Result<(), Box<dyn Error>> {
     wtr.flush()?;
     Ok(())
 }
-
+#[cfg(feature = "serde")]
 fn main() {
     if let Err(err) = run() {
         println!("{}", err);
         process::exit(1);
     }
+}
+#[cfg(not(feature = "serde"))]
+fn main() {
+    println!("this example requires the 'serde' feature");
 }

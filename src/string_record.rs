@@ -5,11 +5,8 @@ use std::{
     result, str,
 };
 
-use serde_core::de::Deserialize;
-
 use crate::{
     byte_record::{ByteRecord, ByteRecordIter, Position},
-    deserializer::deserialize_string_record,
     error::{Error, ErrorKind, FromUtf8Error, Result},
     reader::Reader,
 };
@@ -206,6 +203,7 @@ impl StringRecord {
         str_record
     }
 
+    #[cfg(feature = "serde")]
     /// Deserialize this record.
     ///
     /// The `D` type parameter refers to the type that this record should be
@@ -289,11 +287,11 @@ impl StringRecord {
     ///     Ok(())
     /// }
     /// ```
-    pub fn deserialize<'de, D: Deserialize<'de>>(
+    pub fn deserialize<'de, D: serde_core::de::Deserialize<'de>>(
         &'de self,
         headers: Option<&'de StringRecord>,
     ) -> Result<D> {
-        deserialize_string_record(self, headers)
+        crate::deserializer::deserialize_string_record(self, headers)
     }
 
     /// Returns an iterator over all fields in this record.

@@ -31,7 +31,7 @@ impl<'a> core::fmt::Debug for Bytes<'a> {
                 | '\x7f' => {
                     write!(f, "\\x{:02x}", u32::from(ch))?;
                 }
-                '\n' | '\r' | '\t' | _ => {
+                _ => {
                     write!(f, "{}", ch.escape_debug())?;
                 }
             }

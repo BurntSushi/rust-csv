@@ -19,15 +19,15 @@ if __name__ == '__main__':
 
     with codecs.open(args.rust_file, encoding='utf-8') as f:
         rustcode = f.read()
-    for m in RE_EACH_CODE_BLOCK.finditer(rustcode):
-        lines = m.group(1).splitlines()
+    for match in RE_EACH_CODE_BLOCK.finditer(rustcode):
+        lines = match.group(1).splitlines()
         marker, codelines = lines[0], lines[1:]
-        m = RE_MARKER.search(marker)
-        if m is None:
+        maybe_match = RE_MARKER.search(marker)
+        if maybe_match is None:
             continue
 
         code = '\n'.join(RE_STRIP_COMMENT.sub('', line) for line in codelines)
-        fpath = os.path.join(args.example_dir, m.group(1))
+        fpath = os.path.join(args.example_dir, maybe_match.group(1))
         with codecs.open(fpath, mode='w+', encoding='utf-8') as f:
             print(code, file=f)
         subprocess.check_output(['rustfmt', fpath])

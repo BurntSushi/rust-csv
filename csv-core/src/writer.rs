@@ -217,7 +217,7 @@ impl fmt::Debug for Writer {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct WriterState {
     /// This is set whenever we've begun writing the contents of a field, even
     /// if the contents are empty. We use it to avoid re-computing whether
@@ -493,12 +493,6 @@ impl Writer {
 impl Default for Writer {
     fn default() -> Writer {
         WriterBuilder::new().build()
-    }
-}
-
-impl Default for WriterState {
-    fn default() -> WriterState {
-        WriterState { in_field: false, quoting: false, record_bytes: 0 }
     }
 }
 

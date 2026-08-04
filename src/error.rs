@@ -1,9 +1,6 @@
 use std::{error::Error as StdError, fmt, io, result};
 
-use crate::{
-    byte_record::{ByteRecord, Position},
-    deserializer::DeserializeError,
-};
+use crate::byte_record::{ByteRecord, Position};
 
 /// A type alias for `Result<T, csv::Error>`.
 pub type Result<T> = result::Result<T, Error>;
@@ -85,15 +82,17 @@ pub enum ErrorKind {
     /// are called on a CSV reader that was asked to `seek` before it parsed
     /// the first record.
     Seek,
+    #[cfg(feature = "serde")]
     /// An error of this kind occurs only when using the Serde serializer.
     Serialize(String),
+    #[cfg(feature = "serde")]
     /// An error of this kind occurs only when performing automatic
     /// deserialization with serde.
     Deserialize {
         /// The position of this error, if available.
         pos: Option<Position>,
         /// The deserialization error.
-        err: DeserializeError,
+        err: crate::deserializer::DeserializeError,
     },
 }
 
@@ -106,6 +105,7 @@ impl ErrorKind {
         match *self {
             ErrorKind::Utf8 { ref pos, .. } => pos.as_ref(),
             ErrorKind::UnequalLengths { ref pos, .. } => pos.as_ref(),
+            #[cfg(feature = "serde")]
             ErrorKind::Deserialize { ref pos, .. } => pos.as_ref(),
             _ => None,
         }
@@ -173,12 +173,15 @@ impl fmt::Display for Error {
                  when the parser was seeked before the first record \
                  could be read"
             ),
+            #[cfg(feature = "serde")]
             ErrorKind::Serialize(ref err) => {
                 write!(f, "CSV write error: {}", err)
             }
+            #[cfg(feature = "serde")]
             ErrorKind::Deserialize { pos: None, ref err } => {
                 write!(f, "CSV deserialize error: {}", err)
             }
+            #[cfg(feature = "serde")]
             ErrorKind::Deserialize { pos: Some(ref pos), ref err } => write!(
                 f,
                 "CSV deserialize error: record {} \

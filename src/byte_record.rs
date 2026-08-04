@@ -5,11 +5,8 @@ use std::{
     result,
 };
 
-use serde_core::de::Deserialize;
-
 use crate::{
-    deserializer::deserialize_byte_record,
-    error::{new_utf8_error, Result, Utf8Error},
+    error::{new_utf8_error, Utf8Error},
     string_record::StringRecord,
 };
 
@@ -144,6 +141,7 @@ impl ByteRecord {
         }))
     }
 
+    #[cfg(feature = "serde")]
     /// Deserialize this record.
     ///
     /// The `D` type parameter refers to the type that this record should be
@@ -229,11 +227,11 @@ impl ByteRecord {
     ///     Ok(())
     /// }
     /// ```
-    pub fn deserialize<'de, D: Deserialize<'de>>(
+    pub fn deserialize<'de, D: serde_core::de::Deserialize<'de>>(
         &'de self,
         headers: Option<&'de ByteRecord>,
-    ) -> Result<D> {
-        deserialize_byte_record(self, headers)
+    ) -> crate::error::Result<D> {
+        crate::deserializer::deserialize_byte_record(self, headers)
     }
 
     /// Returns an iterator over all fields in this record.
@@ -592,6 +590,13 @@ pub struct Position {
     byte: u64,
     line: u64,
     record: u64,
+}
+
+impl Default for Position {
+    #[inline]
+    fn default() -> Position {
+        Position::new()
+    }
 }
 
 impl Position {

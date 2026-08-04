@@ -96,6 +96,7 @@ header record of your CSV data.
 ```no_run
 use std::{error::Error, io, process};
 
+# #[cfg(feature = "serde")]
 #[derive(Debug, serde::Deserialize)]
 struct Record {
     city: String,
@@ -104,6 +105,7 @@ struct Record {
     population: Option<u64>,
 }
 
+# #[cfg(feature = "serde")]
 fn example() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
@@ -115,12 +117,17 @@ fn example() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+# #[cfg(feature = "serde")]
 fn main() {
     if let Err(err) = example() {
         println!("error running example: {}", err);
         process::exit(1);
     }
 }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
+# }
 ```
 
 The above example can be run like so:
@@ -135,20 +142,19 @@ $ cargo run --example cookbook-read-serde < examples/data/smallpop.csv
 
 #![deny(missing_docs)]
 
-use std::result;
-
-use serde_core::{Deserialize, Deserializer};
+#[cfg(feature = "serde")]
+pub use crate::deserializer::{DeserializeError, DeserializeErrorKind};
+#[cfg(feature = "serde")]
+pub use crate::reader::{DeserializeRecordsIntoIter, DeserializeRecordsIter};
 
 pub use crate::{
     byte_record::{ByteRecord, ByteRecordIter, Position},
-    deserializer::{DeserializeError, DeserializeErrorKind},
     error::{
         Error, ErrorKind, FromUtf8Error, IntoInnerError, Result, Utf8Error,
     },
     reader::{
-        ByteRecordsIntoIter, ByteRecordsIter, DeserializeRecordsIntoIter,
-        DeserializeRecordsIter, Reader, ReaderBuilder, StringRecordsIntoIter,
-        StringRecordsIter,
+        ByteRecordsIntoIter, ByteRecordsIter, Reader, ReaderBuilder,
+        StringRecordsIntoIter, StringRecordsIter,
     },
     string_record::{StringRecord, StringRecordIter},
     writer::{Writer, WriterBuilder},
@@ -248,6 +254,7 @@ impl Trim {
     }
 }
 
+#[cfg(feature = "serde")]
 /// A custom Serde deserializer for possibly invalid `Option<T>` fields.
 ///
 /// When deserializing CSV data, it is sometimes desirable to simply ignore
@@ -301,10 +308,13 @@ impl Trim {
 ///     }
 /// }
 /// ```
-pub fn invalid_option<'de, D, T>(de: D) -> result::Result<Option<T>, D::Error>
+pub fn invalid_option<'de, D, T>(
+    de: D,
+) -> std::result::Result<Option<T>, D::Error>
 where
-    D: Deserializer<'de>,
-    Option<T>: Deserialize<'de>,
+    D: serde_core::de::Deserializer<'de>,
+    Option<T>: serde_core::de::Deserialize<'de>,
 {
+    use serde_core::Deserialize;
     Option::<T>::deserialize(de).or_else(|_| Ok(None))
 }

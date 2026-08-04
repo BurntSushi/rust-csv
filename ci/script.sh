@@ -12,6 +12,7 @@ if [ "$TRAVIS_RUST_VERSION" = "1.33.0" ]; then
 fi
 
 cargo test --verbose
+cargo test --verbose --no-default-features
 cargo test --verbose --manifest-path csv-core/Cargo.toml
 cargo test --verbose --manifest-path csv-index/Cargo.toml
 if [ "$TRAVIS_RUST_VERSION" = "stable" ]; then

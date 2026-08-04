@@ -1,3 +1,4 @@
+#![cfg(feature = "serde")]
 use std::{error::Error as StdError, fmt, iter, num, str};
 
 use serde_core::{

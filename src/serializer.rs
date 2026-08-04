@@ -1,3 +1,4 @@
+#![cfg(feature = "serde")]
 use std::{fmt, io, mem};
 
 use serde_core::ser::{

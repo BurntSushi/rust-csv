@@ -1,8 +1,7 @@
 #![allow(dead_code)]
-use serde::Deserialize;
 use std::{error::Error, io, process};
-
-#[derive(Debug, Deserialize)]
+#[cfg(feature = "serde")]
+#[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record<'a> {
     country: &'a str,
@@ -14,6 +13,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
+#[cfg(feature = "serde")]
 fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     let mut raw_record = csv::StringRecord::new();
@@ -29,6 +29,7 @@ fn run() -> Result<u64, Box<dyn Error>> {
     Ok(count)
 }
 
+#[cfg(feature = "serde")]
 fn main() {
     match run() {
         Ok(count) => {
@@ -39,4 +40,8 @@ fn main() {
             process::exit(1);
         }
     }
+}
+#[cfg(not(feature = "serde"))]
+fn main() {
+    println!("this example requires the 'serde' feature");
 }

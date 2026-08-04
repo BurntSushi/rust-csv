@@ -1,17 +1,13 @@
 use std::{fs::File, io, path::Path, result};
 
-use {
-    csv_core::{
-        self, WriteResult, Writer as CoreWriter,
-        WriterBuilder as CoreWriterBuilder,
-    },
-    serde_core::Serialize,
+use csv_core::{
+    self, WriteResult, Writer as CoreWriter,
+    WriterBuilder as CoreWriterBuilder,
 };
 
 use crate::{
     byte_record::ByteRecord,
     error::{Error, ErrorKind, IntoInnerError, Result},
-    serializer::{serialize, serialize_header},
     {QuoteStyle, Terminator},
 };
 
@@ -164,10 +160,12 @@ impl WriterBuilder {
     /// names of a struct.
     ///
     /// ```
+    /// # #[allow(dead_code)]
     /// use std::error::Error;
     ///
     /// use csv::WriterBuilder;
     ///
+    /// # #[cfg(feature = "serde")]
     /// #[derive(serde::Serialize)]
     /// struct Row<'a> {
     ///     city: &'a str,
@@ -178,7 +176,9 @@ impl WriterBuilder {
     ///     population: u64,
     /// }
     ///
+    /// # #[cfg(feature = "serde")]
     /// # fn main() { example().unwrap(); }
+    /// # #[cfg(feature = "serde")]
     /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new().from_writer(vec![]);
     ///     wtr.serialize(Row {
@@ -200,6 +200,8 @@ impl WriterBuilder {
     /// ");
     ///     Ok(())
     /// }
+    /// # #[cfg(not(feature = "serde"))]
+    /// # fn main() {}
     /// ```
     ///
     /// # Example: without headers
@@ -213,7 +215,9 @@ impl WriterBuilder {
     /// use std::error::Error;
     /// use csv::WriterBuilder;
     ///
+    /// # #[cfg(feature = "serde")]
     /// # fn main() { example().unwrap(); }
+    /// # #[cfg(feature = "serde")]
     /// fn example() -> Result<(), Box<dyn Error>> {
     ///     let mut wtr = WriterBuilder::new().from_writer(vec![]);
     ///     wtr.serialize(("Boston", "United States", 4628910))?;
@@ -226,6 +230,8 @@ impl WriterBuilder {
     /// ");
     ///     Ok(())
     /// }
+    /// # #[cfg(not(feature = "serde"))]
+    /// # fn main() {}
     /// ```
     pub fn has_headers(&mut self, yes: bool) -> &mut WriterBuilder {
         self.has_headers = yes;
@@ -542,6 +548,7 @@ pub struct Writer<W: io::Write> {
 
 #[derive(Debug)]
 struct WriterState {
+    #[cfg(feature = "serde")]
     /// Whether the Serde serializer should attempt to write a header row.
     header: HeaderState,
     /// Whether inconsistent record lengths are allowed.
@@ -561,6 +568,7 @@ struct WriterState {
 
 /// HeaderState encodes a small state machine for handling header writes.
 #[derive(Debug)]
+#[cfg(feature = "serde")]
 enum HeaderState {
     /// Indicates that we should attempt to write a header.
     Write,
@@ -623,17 +631,17 @@ impl Writer<File> {
 
 impl<W: io::Write> Writer<W> {
     fn new(builder: &WriterBuilder, wtr: W) -> Writer<W> {
-        let header_state = if builder.has_headers {
-            HeaderState::Write
-        } else {
-            HeaderState::None
-        };
         Writer {
             core: builder.builder.build(),
             wtr: Some(wtr),
             buf: Buffer { buf: vec![0; builder.capacity], len: 0 },
             state: WriterState {
-                header: header_state,
+                #[cfg(feature = "serde")]
+                header: if builder.has_headers {
+                    HeaderState::Write
+                } else {
+                    HeaderState::None
+                },
                 flexible: builder.flexible,
                 first_field_count: None,
                 fields_written: 0,
@@ -669,6 +677,7 @@ impl<W: io::Write> Writer<W> {
         WriterBuilder::new().from_writer(wtr)
     }
 
+    #[cfg(feature = "serde")]
     /// Serialize a single record using Serde.
     ///
     /// # Example
@@ -874,9 +883,13 @@ impl<W: io::Write> Writer<W> {
     /// | `Foo { x: 5, y: (6, 7) }` | *error: restriction 1* | `5,6,7` |
     /// | `(5, Foo { x: 6, y: 7 }` | *error: restriction 2* | `5,6,7` |
     /// | `(Foo { x: 5, y: 6 }, true)` | *error: restriction 2* | `5,6,true` |
-    pub fn serialize<S: Serialize>(&mut self, record: S) -> Result<()> {
+    pub fn serialize<S: serde_core::Serialize>(
+        &mut self,
+        record: S,
+    ) -> Result<()> {
         if let HeaderState::Write = self.state.header {
-            let wrote_header = serialize_header(self, &record)?;
+            let wrote_header =
+                crate::serializer::serialize_header(self, &record)?;
             if wrote_header {
                 self.write_terminator()?;
                 self.state.header = HeaderState::DidWrite;
@@ -884,7 +897,7 @@ impl<W: io::Write> Writer<W> {
                 self.state.header = HeaderState::DidNotWrite;
             };
         }
-        serialize(self, &record)?;
+        crate::serializer::serialize(self, &record)?;
         self.write_terminator()?;
         Ok(())
     }
@@ -1216,8 +1229,6 @@ impl Buffer {
 mod tests {
     use std::io::{self, Write};
 
-    use serde::Serialize;
-
     use crate::{
         byte_record::ByteRecord, error::ErrorKind, string_record::StringRecord,
     };
@@ -1387,7 +1398,9 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn serialize_with_headers() {
+        use serde::Serialize;
         #[derive(Serialize)]
         struct Row {
             foo: i32,
@@ -1401,7 +1414,9 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn serialize_no_headers() {
+        use serde::Serialize;
         #[derive(Serialize)]
         struct Row {
             foo: i32,
@@ -1416,7 +1431,9 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn serialize_no_headers_128() {
+        use serde::Serialize;
         #[derive(Serialize)]
         struct Row {
             foo: i128,
@@ -1436,6 +1453,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn serialize_tuple() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
         wtr.serialize((true, 1.3, "hi")).unwrap();

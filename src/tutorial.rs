@@ -744,12 +744,14 @@ type: `(String, String, Option<u64>, f64, f64)`.
 
 ```no_run
 //tutorial-read-serde-02.rs
+# #[allow(dead_code)]
 # use std::{error::Error, io, process};
 #
 // This introduces a type alias so that we can conveniently reference our
 // record type.
 type Record = (String, String, Option<u64>, f64, f64);
 
+# #[cfg(feature = "serde")]
 fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     // Instead of creating an iterator with the `records` method, we create
@@ -761,12 +763,17 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
-#
+
+# #[cfg(feature = "serde")]
 # fn main() {
 #     if let Err(err) = run() {
 #         println!("{}", err);
 #         process::exit(1);
 #     }
+# }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
 # }
 ```
 
@@ -795,6 +802,7 @@ a new `use` statement that imports `HashMap` from the standard library:
 
 ```no_run
 //tutorial-read-serde-03.rs
+# #[allow(dead_code)]
 use std::collections::HashMap;
 # use std::{error::Error, io, process};
 
@@ -802,6 +810,7 @@ use std::collections::HashMap;
 // record type.
 type Record = HashMap<String, String>;
 
+# #[cfg(feature = "serde")]
 fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
@@ -810,12 +819,17 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
-#
+
+# #[cfg(feature = "serde")]
 # fn main() {
 #     if let Err(err) = run() {
 #         println!("{}", err);
 #         process::exit(1);
 #     }
+# }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
 # }
 ```
 
@@ -853,9 +867,11 @@ how. Don't miss the new Serde imports!
 ```no_run
 //tutorial-read-serde-04.rs
 # #![allow(dead_code)]
+# #[cfg(feature = "serde")]
 # use std::{error::Error, io, process};
 
 // This lets us write `#[derive(Deserialize)]`.
+# #[cfg(feature = "serde")]
 use serde::Deserialize;
 
 // We don't need to derive `Debug` (which doesn't require Serde), but it's a
@@ -863,6 +879,7 @@ use serde::Deserialize;
 //
 // Notice that the field names in this struct are NOT in the same order as
 // the fields in the CSV data!
+# #[cfg(feature = "serde")]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record {
@@ -873,6 +890,7 @@ struct Record {
     state: String,
 }
 
+# #[cfg(feature = "serde")]
 fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
@@ -884,12 +902,17 @@ fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+# #[cfg(feature = "serde")]
 fn main() {
     if let Err(err) = run() {
         println!("{}", err);
         process::exit(1);
     }
 }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
+# }
 ```
 
 Compile and run this program to see similar output as before:
@@ -991,10 +1014,8 @@ Let's start by running our program from the previous section:
 //tutorial-read-serde-invalid-01.rs
 # #![allow(dead_code)]
 # use std::{error::Error, io, process};
-#
-# use serde::Deserialize;
-#
-#[derive(Debug, Deserialize)]
+# #[cfg(feature = "serde")]
+#[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record {
     latitude: f64,
@@ -1004,6 +1025,7 @@ struct Record {
     state: String,
 }
 
+# #[cfg(feature = "serde")]
 fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
@@ -1012,12 +1034,16 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
-#
+# #[cfg(feature = "serde")]
 # fn main() {
 #     if let Err(err) = run() {
 #         println!("{}", err);
 #         process::exit(1);
 #     }
+# }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
 # }
 ```
 
@@ -1059,9 +1085,8 @@ to a `None` value, as shown in this next example:
 //tutorial-read-serde-invalid-02.rs
 # #![allow(dead_code)]
 # use std::{error::Error, io, process};
-#
-# use serde::Deserialize;
-#[derive(Debug, Deserialize)]
+# #[cfg(feature = "serde")]
+#[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record {
     latitude: f64,
@@ -1071,7 +1096,7 @@ struct Record {
     city: String,
     state: String,
 }
-
+# #[cfg(feature = "serde")]
 fn run() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
@@ -1080,12 +1105,16 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
-#
+# #[cfg(feature = "serde")]
 # fn main() {
 #     if let Err(err) = run() {
 #         println!("{}", err);
 #         process::exit(1);
 #     }
+# }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
 # }
 ```
 
@@ -1351,7 +1380,7 @@ As with reading, let's start by seeing how we can serialize a Rust tuple.
 ```no_run
 //tutorial-write-serde-01.rs
 # use std::{error::Error, io, process};
-#
+# #[cfg(feature = "serde")]
 fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
@@ -1371,12 +1400,16 @@ fn run() -> Result<(), Box<dyn Error>> {
     wtr.flush()?;
     Ok(())
 }
-#
+# #[cfg(feature = "serde")]
 # fn main() {
 #     if let Err(err) = run() {
 #         println!("{}", err);
 #         process::exit(1);
 #     }
+# }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
 # }
 ```
 
@@ -1420,10 +1453,9 @@ shown in the example:
 //tutorial-write-serde-02.rs
 use std::{error::Error, io, process};
 
-use serde::Serialize;
-
+# #[cfg(feature = "serde")]
 // Note that structs can derive both Serialize and Deserialize!
-#[derive(Debug, Serialize)]
+#[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record<'a> {
     city: &'a str,
@@ -1433,6 +1465,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
+# #[cfg(feature = "serde")]
 fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
@@ -1462,12 +1495,17 @@ fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+# #[cfg(feature = "serde")]
 fn main() {
     if let Err(err) = run() {
         println!("{}", err);
         process::exit(1);
     }
 }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
+# }
 ```
 
 Compiling and running this example has the same output as last time, even
@@ -1733,11 +1771,10 @@ Now here's the code:
 //tutorial-pipeline-pop-01.rs
 # use std::{env, error::Error, io, process};
 
-use serde::{Deserialize, Serialize};
-
+# #[cfg(feature = "serde")]
 // Unlike previous examples, we derive both Deserialize and Serialize. This
 // means we'll be able to automatically deserialize and serialize this type.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record {
     city: String,
@@ -1747,6 +1784,7 @@ struct Record {
     longitude: f64,
 }
 
+# #[cfg(feature = "serde")]
 fn run() -> Result<(), Box<dyn Error>> {
     // Get the query from the positional arguments.
     // If one doesn't exist or isn't an integer, return an error.
@@ -1782,12 +1820,17 @@ fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+# #[cfg(feature = "serde")]
 fn main() {
     if let Err(err) = run() {
         println!("{}", err);
         process::exit(1);
     }
 }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
+# }
 ```
 
 If we compile and run our program with a minimum threshold of `100000`, we
@@ -2078,9 +2121,8 @@ example using Serde in a previous section:
 # #![allow(dead_code)]
 use std::{error::Error, io, process};
 
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
+# #[cfg(feature = "serde")]
+#[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record {
     country: String,
@@ -2092,6 +2134,7 @@ struct Record {
     longitude: f64,
 }
 
+# #[cfg(feature = "serde")]
 fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
 
@@ -2105,6 +2148,7 @@ fn run() -> Result<u64, Box<dyn Error>> {
     Ok(count)
 }
 
+# #[cfg(feature = "serde")]
 fn main() {
     match run() {
         Ok(count) => {
@@ -2116,6 +2160,10 @@ fn main() {
         }
     }
 }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
+# }
 ```
 
 Now compile and run this program:
@@ -2145,9 +2193,8 @@ like:
 //tutorial-perf-serde-02.rs
 # #![allow(dead_code)]
 # use std::{error::Error, io, process};
-# use serde::Deserialize;
-#
-#[derive(Debug, Deserialize)]
+# #[cfg(feature = "serde")]
+#[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record<'a> {
     country: &'a str,
@@ -2159,6 +2206,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
+# #[cfg(feature = "serde")]
 fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     let mut raw_record = csv::StringRecord::new();
@@ -2173,7 +2221,8 @@ fn run() -> Result<u64, Box<dyn Error>> {
     }
     Ok(count)
 }
-#
+
+# #[cfg(feature = "serde")]
 # fn main() {
 #     match run() {
 #         Ok(count) => {
@@ -2184,6 +2233,10 @@ fn run() -> Result<u64, Box<dyn Error>> {
 #             process::exit(1);
 #         }
 #     }
+# }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
 # }
 ```
 
@@ -2231,9 +2284,8 @@ of `StringRecord`:
 # #![allow(dead_code)]
 # use std::{error::Error, io, process};
 #
-# use serde::Deserialize;
-#
-#[derive(Debug, Deserialize)]
+# #[cfg(feature = "serde")]
+#[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record<'a> {
     country: &'a [u8],
@@ -2245,6 +2297,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
+# #[cfg(feature = "serde")]
 fn run() -> Result<u64, Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     let mut raw_record = csv::ByteRecord::new();
@@ -2259,7 +2312,8 @@ fn run() -> Result<u64, Box<dyn Error>> {
     }
     Ok(count)
 }
-#
+
+# #[cfg(feature = "serde")]
 # fn main() {
 #     match run() {
 #         Ok(count) => {
@@ -2270,6 +2324,10 @@ fn run() -> Result<u64, Box<dyn Error>> {
 #             process::exit(1);
 #         }
 #     }
+# }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
 # }
 ```
 

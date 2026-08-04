@@ -1,9 +1,8 @@
 use std::{error::Error, io, process};
 
-use serde::Serialize;
-
+#[cfg(feature = "serde")]
 // Note that structs can derive both Serialize and Deserialize!
-#[derive(Debug, Serialize)]
+#[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record<'a> {
     city: &'a str,
@@ -13,6 +12,7 @@ struct Record<'a> {
     longitude: f64,
 }
 
+#[cfg(feature = "serde")]
 fn run() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
@@ -42,9 +42,14 @@ fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(feature = "serde")]
 fn main() {
     if let Err(err) = run() {
         println!("{}", err);
         process::exit(1);
     }
+}
+#[cfg(not(feature = "serde"))]
+fn main() {
+    println!("this example requires the 'serde' feature");
 }

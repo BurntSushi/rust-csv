@@ -1,15 +1,11 @@
 use std::{
     fs::File,
     io::{self, BufRead, Seek},
-    marker::PhantomData,
     path::Path,
     result,
 };
 
-use {
-    csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder},
-    serde_core::de::DeserializeOwned,
-};
+use csv_core::{Reader as CoreReader, ReaderBuilder as CoreReaderBuilder};
 
 use crate::{
     byte_record::{ByteRecord, Position},
@@ -870,6 +866,7 @@ impl<R: io::Read> Reader<R> {
         ReaderBuilder::new().from_reader(rdr)
     }
 
+    #[cfg(feature = "serde")]
     /// Returns a borrowed iterator over deserialized records.
     ///
     /// Each item yielded by this iterator is a `Result<D, Error>`.
@@ -1047,11 +1044,12 @@ impl<R: io::Read> Reader<R> {
     /// ```
     pub fn deserialize<D>(&mut self) -> DeserializeRecordsIter<'_, R, D>
     where
-        D: DeserializeOwned,
+        D: serde_core::de::DeserializeOwned,
     {
         DeserializeRecordsIter::new(self)
     }
 
+    #[cfg(feature = "serde")]
     /// Returns an owned iterator over deserialized records.
     ///
     /// Each item yielded by this iterator is a `Result<D, Error>`.
@@ -1107,7 +1105,7 @@ impl<R: io::Read> Reader<R> {
     /// ```
     pub fn into_deserialize<D>(self) -> DeserializeRecordsIntoIter<R, D>
     where
-        D: DeserializeOwned,
+        D: serde_core::de::DeserializeOwned,
     {
         DeserializeRecordsIntoIter::new(self)
     }
@@ -1900,6 +1898,7 @@ impl ReaderState {
     }
 }
 
+#[cfg(feature = "serde")]
 /// An owned iterator over deserialized records.
 ///
 /// The type parameter `R` refers to the underlying `io::Read` type, and `D`
@@ -1908,10 +1907,11 @@ pub struct DeserializeRecordsIntoIter<R, D> {
     rdr: Reader<R>,
     rec: StringRecord,
     headers: Option<StringRecord>,
-    _priv: PhantomData<D>,
+    _priv: std::marker::PhantomData<D>,
 }
 
-impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
+#[cfg(feature = "serde")]
+impl<R: io::Read, D> DeserializeRecordsIntoIter<R, D> {
     fn new(mut rdr: Reader<R>) -> DeserializeRecordsIntoIter<R, D> {
         let headers = if !rdr.state.has_headers {
             None
@@ -1922,7 +1922,7 @@ impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
             rdr,
             rec: StringRecord::new(),
             headers,
-            _priv: PhantomData,
+            _priv: std::marker::PhantomData,
         }
     }
 
@@ -1942,7 +1942,8 @@ impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
     }
 }
 
-impl<R: io::Read, D: DeserializeOwned> Iterator
+#[cfg(feature = "serde")]
+impl<R: io::Read, D: serde_core::de::DeserializeOwned> Iterator
     for DeserializeRecordsIntoIter<R, D>
 {
     type Item = Result<D>;
@@ -1956,6 +1957,7 @@ impl<R: io::Read, D: DeserializeOwned> Iterator
     }
 }
 
+#[cfg(feature = "serde")]
 /// A borrowed iterator over deserialized records.
 ///
 /// The lifetime parameter `'r` refers to the lifetime of the underlying
@@ -1966,10 +1968,11 @@ pub struct DeserializeRecordsIter<'r, R: 'r, D> {
     rdr: &'r mut Reader<R>,
     rec: StringRecord,
     headers: Option<StringRecord>,
-    _priv: PhantomData<D>,
+    _priv: std::marker::PhantomData<D>,
 }
 
-impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
+#[cfg(feature = "serde")]
+impl<'r, R: io::Read, D> DeserializeRecordsIter<'r, R, D> {
     fn new(rdr: &'r mut Reader<R>) -> DeserializeRecordsIter<'r, R, D> {
         let headers = if !rdr.state.has_headers {
             None
@@ -1980,7 +1983,7 @@ impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
             rdr,
             rec: StringRecord::new(),
             headers,
-            _priv: PhantomData,
+            _priv: std::marker::PhantomData,
         }
     }
 
@@ -1995,7 +1998,8 @@ impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
     }
 }
 
-impl<'r, R: io::Read, D: DeserializeOwned> Iterator
+#[cfg(feature = "serde")]
+impl<'r, R: io::Read, D: serde_core::de::DeserializeOwned> Iterator
     for DeserializeRecordsIter<'r, R, D>
 {
     type Item = Result<D>;

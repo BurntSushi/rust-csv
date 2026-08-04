@@ -75,11 +75,10 @@ method.
 # #![allow(dead_code)]
 use std::{error::Error, io, process};
 
-use serde::Deserialize;
-
+# #[cfg(feature = "serde")]
 // By default, struct field names are deserialized based on the position of
 // a corresponding field in the CSV data's header record.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 struct Record {
     city: String,
     region: String,
@@ -87,6 +86,7 @@ struct Record {
     population: Option<u64>,
 }
 
+# #[cfg(feature = "serde")]
 fn example() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.deserialize() {
@@ -98,12 +98,17 @@ fn example() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+# #[cfg(feature = "serde")]
 fn main() {
     if let Err(err) = example() {
         println!("error running example: {}", err);
         process::exit(1);
     }
 }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
+# }
 ```
 
 The above example can be run like so:
@@ -234,9 +239,8 @@ headers are written automatically.
 # //cookbook-write-serde.rs
 use std::{error::Error, io, process};
 
-use serde::Serialize;
-
-#[derive(Debug, Serialize)]
+# #[cfg(feature = "serde")]
+#[derive(Debug, serde::Serialize)]
 struct Record {
     city: String,
     region: String,
@@ -244,6 +248,7 @@ struct Record {
     population: Option<u64>,
 }
 
+# #[cfg(feature = "serde")]
 fn example() -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(io::stdout());
 
@@ -265,12 +270,17 @@ fn example() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+# #[cfg(feature = "serde")]
 fn main() {
     if let Err(err) = example() {
         println!("error running example: {}", err);
         process::exit(1);
     }
 }
+# #[cfg(not(feature = "serde"))]
+# fn main() {
+#     println!("this example requires the 'serde' feature");
+# }
 ```
 
 The above example can be run like so:

@@ -1,10 +1,9 @@
 use std::{env, error::Error, io, process};
 
-use serde::{Deserialize, Serialize};
-
+#[cfg(feature = "serde")]
 // Unlike previous examples, we derive both Deserialize and Serialize. This
 // means we'll be able to automatically deserialize and serialize this type.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "PascalCase")]
 struct Record {
     city: String,
@@ -14,6 +13,7 @@ struct Record {
     longitude: f64,
 }
 
+#[cfg(feature = "serde")]
 fn run() -> Result<(), Box<dyn Error>> {
     // Get the query from the positional arguments.
     // If one doesn't exist or isn't an integer, return an error.
@@ -49,9 +49,14 @@ fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(feature = "serde")]
 fn main() {
     if let Err(err) = run() {
         println!("{}", err);
         process::exit(1);
     }
+}
+#[cfg(not(feature = "serde"))]
+fn main() {
+    println!("this example requires the 'serde' feature");
 }

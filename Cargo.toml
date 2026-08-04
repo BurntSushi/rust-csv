@@ -20,18 +20,185 @@ members = ["csv-core", "csv-index"]
 [lib]
 bench = false
 
+# Allow for needless main in doctest, as some examples are tutorials.
+[lints.clippy]
+needless_doctest_main = "allow"
+upper_case_acronyms = "allow"
+
 [dependencies]
 csv-core = { path = "csv-core", version = "0.1.11" }
 itoa = "1"
 ryu = "1"
-serde_core = "1.0.221"
+serde_core = {version = "1.0.221", optional = true }
 
 [dev-dependencies]
 bstr = { version = "1.7.0", default-features = false, features = ["alloc", "serde"] }
 serde = { version = "1.0.221", features = ["derive"] }
+
+[features]
+default = ["serde"]
+serde = ["dep:serde_core"]
 
 [profile.release]
 debug = true
 
 [profile.bench]
 debug = true
+
+[[example]]
+name = "cookbook-read-basic"
+path = "examples/cookbook-read-basic.rs"
+
+[[example]]
+name = "cookbook-read-colon"
+path = "examples/cookbook-read-colon.rs"
+
+[[example]]
+name = "cookbook-read-no-headers"
+path = "examples/cookbook-read-no-headers.rs"
+
+[[example]]
+name = "cookbook-read-serde"
+path = "examples/cookbook-read-serde.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "cookbook-write-basic"
+path = "examples/cookbook-write-basic.rs"
+
+[[example]]
+name = "cookbook-write-serde"
+path = "examples/cookbook-write-serde.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-error-01"
+path = "examples/tutorial-error-01.rs"
+
+[[example]]
+name = "tutorial-error-02"
+path = "examples/tutorial-error-02.rs"
+
+[[example]]
+name = "tutorial-error-03"
+path = "examples/tutorial-error-03.rs"
+
+[[example]]
+name = "tutorial-error-04"
+path = "examples/tutorial-error-04.rs"
+
+[[example]]
+name = "tutorial-perf-alloc-01"
+path = "examples/tutorial-perf-alloc-01.rs"
+
+[[example]]
+name = "tutorial-perf-alloc-02"
+path = "examples/tutorial-perf-alloc-02.rs"
+
+[[example]]
+name = "tutorial-perf-alloc-03"
+path = "examples/tutorial-perf-alloc-03.rs"
+
+[[example]]
+name = "tutorial-perf-core-01"
+path = "examples/tutorial-perf-core-01.rs"
+
+[[example]]
+name = "tutorial-perf-serde-01"
+path = "examples/tutorial-perf-serde-01.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-perf-serde-02"
+path = "examples/tutorial-perf-serde-02.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-perf-serde-03"
+path = "examples/tutorial-perf-serde-03.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-pipeline-pop-01"
+path = "examples/tutorial-pipeline-pop-01.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-pipeline-search-01"
+path = "examples/tutorial-pipeline-search-01.rs"
+
+[[example]]
+name = "tutorial-pipeline-search-02"
+path = "examples/tutorial-pipeline-search-02.rs"
+
+[[example]]
+name = "tutorial-read-01"
+path = "examples/tutorial-read-01.rs"
+
+[[example]]
+name = "tutorial-read-delimiter-01"
+path = "examples/tutorial-read-delimiter-01.rs"
+
+[[example]]
+name = "tutorial-read-headers-01"
+path = "examples/tutorial-read-headers-01.rs"
+
+[[example]]
+name = "tutorial-read-headers-02"
+path = "examples/tutorial-read-headers-02.rs"
+
+[[example]]
+name = "tutorial-read-serde-01"
+path = "examples/tutorial-read-serde-01.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-read-serde-02"
+path = "examples/tutorial-read-serde-02.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-read-serde-03"
+path = "examples/tutorial-read-serde-03.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-read-serde-04"
+path = "examples/tutorial-read-serde-04.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-read-serde-invalid-01"
+path = "examples/tutorial-read-serde-invalid-01.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-read-serde-invalid-02"
+path = "examples/tutorial-read-serde-invalid-02.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-setup-01"
+path = "examples/tutorial-setup-01.rs"
+
+[[example]]
+name = "tutorial-write-01"
+path = "examples/tutorial-write-01.rs"
+
+[[example]]
+name = "tutorial-write-02"
+path = "examples/tutorial-write-02.rs"
+
+[[example]]
+name = "tutorial-write-delimiter-01"
+path = "examples/tutorial-write-delimiter-01.rs"
+
+[[example]]
+name = "tutorial-write-serde-01"
+path = "examples/tutorial-write-serde-01.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tutorial-write-serde-02"
+path = "examples/tutorial-write-serde-02.rs"
+required-features = ["serde"]
