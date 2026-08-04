@@ -1382,7 +1382,7 @@ mod tests {
         let got = wtr.into_inner().unwrap().into_string();
 
         // As the buffer size is 4 we should write each record separately, and
-        // flush when explicitly called and implictly in into_inner.
+        // flush when explicitly called and implicitly in into_inner.
         assert_eq!(got, ">a,b\n<>c,d\n<!>e,f\n<!");
     }
 
