@@ -230,7 +230,8 @@ struct WriterState {
     /// The number of total bytes written for the current record.
     ///
     /// If the writer is finished or a terminator is written when this is `0`,
-    /// then an empty field is added as a pair of adjacent quotes.
+    /// and quote style is not QuoteStyle::Never, then an empty field is added
+    /// as a pair of adjacent quotes.
     record_bytes: u64,
 }
 
@@ -248,13 +249,15 @@ impl Writer {
         let mut nout = 0;
         if self.state.record_bytes == 0 && self.state.in_field {
             assert!(!self.state.quoting);
-            let (res, o) = self.write(&[self.quote, self.quote], output);
-            if o == 0 {
-                return (res, 0);
+            if !matches!(self.style, QuoteStyle::Never) {
+                let (res, o) = self.write(&[self.quote, self.quote], output);
+                if o == 0 {
+                    return (res, 0);
+                }
+                output = &mut moving(output)[o..];
+                nout += o;
+                self.state.record_bytes += o as u64;
             }
-            output = &mut moving(output)[o..];
-            nout += o;
-            self.state.record_bytes += o as u64;
         }
         if !self.state.quoting {
             return (WriteResult::InputEmpty, nout);
@@ -370,13 +373,15 @@ impl Writer {
         let mut nout = 0;
         if self.state.record_bytes == 0 {
             assert!(!self.state.quoting);
-            let (res, o) = self.write(&[self.quote, self.quote], output);
-            if o == 0 {
-                return (res, 0);
+            if !matches!(self.style, QuoteStyle::Never) {
+                let (res, o) = self.write(&[self.quote, self.quote], output);
+                if o == 0 {
+                    return (res, 0);
+                }
+                output = &mut moving(output)[o..];
+                nout += o;
+                self.state.record_bytes += o as u64;
             }
-            output = &mut moving(output)[o..];
-            nout += o;
-            self.state.record_bytes += o as u64;
         }
         if self.state.quoting {
             let (res, o) = self.write(&[self.quote], output);
@@ -693,12 +698,33 @@ mod tests {
     }
 
     #[test]
+    fn writer_one_empty_field_terminator_quote_style_never() {
+        let mut wtr = Writer::new();
+        wtr.style = QuoteStyle::Never;
+        let out = &mut [0; 1024];
+
+        assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
+        assert_write!(wtr, terminator, &mut out[..], 1, InputEmpty, "\n");
+        assert_write!(wtr, finish, &mut out[..], 0, InputEmpty, "");
+    }
+
+    #[test]
     fn writer_one_empty_field_finish() {
         let mut wtr = Writer::new();
         let out = &mut [0; 1024];
 
         assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
         assert_write!(wtr, finish, &mut out[..], 2, InputEmpty, "\"\"");
+    }
+
+    #[test]
+    fn writer_one_empty_field_finish_quote_style_never() {
+        let mut wtr = Writer::new();
+        wtr.style = QuoteStyle::Never;
+        let out = &mut [0; 1024];
+
+        assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
+        assert_write!(wtr, finish, &mut out[..], 0, InputEmpty, "");
     }
 
     #[test]
