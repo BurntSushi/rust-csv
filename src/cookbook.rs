@@ -38,9 +38,13 @@ fn example() -> Result<(), Box<dyn Error>> {
     let mut rdr = csv::Reader::from_reader(io::stdin());
     for result in rdr.records() {
         // The iterator yields Result<StringRecord, Error>, so we check the
-        // error here..
+        // error here.
         let record = result?;
-        println!("{:?}", record);
+
+        // Records can be indexed like a vector to return single strings
+        let cell: &str = &record[0];
+
+        println!("The first cell is {:?}", cell);
     }
     Ok(())
 }
@@ -52,6 +56,8 @@ fn main() {
     }
 }
 ```
+
+For more information on how to use a `StringRecord` object, refer its [API page](../struct.StringRecord.html).
 
 The above example can be run like so:
 
