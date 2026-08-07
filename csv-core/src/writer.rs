@@ -246,7 +246,10 @@ impl Writer {
     /// In particular, it will write closing quotes if necessary.
     pub fn finish(&mut self, mut output: &mut [u8]) -> (WriteResult, usize) {
         let mut nout = 0;
-        if self.state.record_bytes == 0 && self.state.in_field {
+        if self.state.record_bytes == 0
+            && self.state.in_field
+            && self.style != QuoteStyle::Never
+        {
             assert!(!self.state.quoting);
             let (res, o) = self.write(&[self.quote, self.quote], output);
             if o == 0 {
@@ -368,7 +371,7 @@ impl Writer {
         mut output: &mut [u8],
     ) -> (WriteResult, usize) {
         let mut nout = 0;
-        if self.state.record_bytes == 0 {
+        if self.state.record_bytes == 0 && self.style != QuoteStyle::Never {
             assert!(!self.state.quoting);
             let (res, o) = self.write(&[self.quote, self.quote], output);
             if o == 0 {
@@ -1074,5 +1077,25 @@ mod tests {
             "\"# abc"
         );
         assert_write!(wtr, finish, &mut out[..], 1, InputEmpty, "\"");
+    }
+
+    #[test]
+    fn never_quote_empty_field_terminator() {
+        let mut wtr =
+            WriterBuilder::new().quote_style(QuoteStyle::Never).build();
+        let out = &mut [0; 1024];
+
+        assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
+        assert_write!(wtr, terminator, &mut out[..], 1, InputEmpty, "\n");
+    }
+
+    #[test]
+    fn never_quote_empty_field_finish() {
+        let mut wtr =
+            WriterBuilder::new().quote_style(QuoteStyle::Never).build();
+        let out = &mut [0; 1024];
+
+        assert_field!(wtr, b(""), &mut out[..], 0, 0, InputEmpty, "");
+        assert_write!(wtr, finish, &mut out[..], 0, InputEmpty, "");
     }
 }

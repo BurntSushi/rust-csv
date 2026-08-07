@@ -1223,6 +1223,7 @@ mod tests {
     };
 
     use super::{Writer, WriterBuilder};
+    use crate::QuoteStyle;
 
     fn wtr_as_string(wtr: Writer<Vec<u8>>) -> String {
         String::from_utf8(wtr.into_inner().unwrap()).unwrap()
@@ -1449,5 +1450,16 @@ mod tests {
         wtr.write_record(["# comment", "another"]).unwrap();
         let buf = wtr.into_inner().unwrap();
         assert_eq!(String::from_utf8(buf).unwrap(), "\"# comment\",another\n");
+    }
+
+    #[test]
+    fn never_quote_empty_field() {
+        let mut wtr = WriterBuilder::new()
+            .quote_style(QuoteStyle::Never)
+            .from_writer(vec![]);
+        wtr.write_record(["foo"]).unwrap();
+        wtr.write_record([""]).unwrap();
+        wtr.write_record(["bar,baz"]).unwrap();
+        assert_eq!(wtr_as_string(wtr), "foo\n\nbar,baz\n");
     }
 }
