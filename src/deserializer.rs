@@ -1206,6 +1206,26 @@ mod tests {
     }
 
     #[test]
+    fn flatten_map() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Row {
+            x: f64,
+            y: f64,
+            #[serde(flatten)]
+            extra: HashMap<String, f64>,
+        }
+
+        let header = StringRecord::from(vec!["x", "y", "prop1", "prop2"]);
+        let record = StringRecord::from(vec!["1", "2", "3", "4"]);
+        let got: Row = record.deserialize(Some(&header)).unwrap();
+        let mut extra = HashMap::new();
+        extra.insert("prop1".to_string(), 3.0);
+        extra.insert("prop2".to_string(), 4.0);
+
+        assert_eq!(got, Row { x: 1.0, y: 2.0, extra });
+    }
+
+    #[test]
     fn partially_invalid_utf8() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Row {

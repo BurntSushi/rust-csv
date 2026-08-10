@@ -200,12 +200,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeRecord<'w, W> {
         self,
         _len: Option<usize>,
     ) -> Result<Self::SerializeMap, Self::Error> {
-        // The right behavior for serializing maps isn't clear.
-        Err(Error::custom(
-            "serializing maps is not supported, \
-             if you have a use case, please file an issue at \
-             https://github.com/BurntSushi/rust-csv",
-        ))
+        Ok(self)
     }
 
     fn serialize_struct(
@@ -297,20 +292,21 @@ impl<'a, 'w, W: io::Write> SerializeMap for &'a mut SeRecord<'w, W> {
 
     fn serialize_key<T: ?Sized + Serialize>(
         &mut self,
-        _key: &T,
+        key: &T,
     ) -> Result<(), Self::Error> {
-        unreachable!()
+        self.wtr.check_map_key(key)
     }
 
     fn serialize_value<T: ?Sized + Serialize>(
         &mut self,
-        _value: &T,
+        value: &T,
     ) -> Result<(), Self::Error> {
-        unreachable!()
+        value.serialize(&mut **self)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unreachable!()
+        self.wtr.on_map_end();
+        Ok(())
     }
 }
 
@@ -646,12 +642,7 @@ impl<'a, 'w, W: io::Write> Serializer for &'a mut SeHeader<'w, W> {
         self,
         _len: Option<usize>,
     ) -> Result<Self::SerializeMap, Self::Error> {
-        // The right behavior for serializing maps isn't clear.
-        Err(Error::custom(
-            "serializing maps is not supported, \
-             if you have a use case, please file an issue at \
-             https://github.com/BurntSushi/rust-csv",
-        ))
+        self.handle_container("map")
     }
 
     fn serialize_struct(
@@ -743,20 +734,45 @@ impl<'a, 'w, W: io::Write> SerializeMap for &'a mut SeHeader<'w, W> {
 
     fn serialize_key<T: ?Sized + Serialize>(
         &mut self,
-        _key: &T,
+        key: &T,
     ) -> Result<(), Self::Error> {
-        unreachable!()
+        // Grab old state and update state to `EncounteredStructField`.
+        let old_state =
+            mem::replace(&mut self.state, HeaderState::EncounteredStructField);
+        if let HeaderState::ErrorIfWrite(err) = old_state {
+            return Err(err);
+        }
+
+        self.wtr.check_map_key(key)?;
+        self.state = HeaderState::InStructField;
+        key.serialize(&mut **self)?; // This does not actually serialize anything, just checks that the key is a scalar value.
+        if let HeaderState::ErrorIfWrite(err) =
+            mem::replace(&mut self.state, HeaderState::InStructField)
+        {
+            return Err(err);
+        }
+        let mut key_serializer = SeRecord { wtr: self.wtr };
+        key.serialize(&mut key_serializer)?;
+        Ok(())
     }
 
     fn serialize_value<T: ?Sized + Serialize>(
         &mut self,
-        _value: &T,
+        value: &T,
     ) -> Result<(), Self::Error> {
-        unreachable!()
+        if !matches!(self.state, HeaderState::InStructField) {
+            return Err(Error::new(ErrorKind::Serialize(
+                "Attempted to serialize value without key".to_string(),
+            )));
+        }
+        value.serialize(&mut **self)?;
+        self.state = HeaderState::EncounteredStructField;
+        Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unreachable!()
+        self.wtr.on_map_end();
+        Ok(())
     }
 }
 
@@ -809,6 +825,8 @@ impl<'a, 'w, W: io::Write> SerializeStructVariant for &'a mut SeHeader<'w, W> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use {bstr::ByteSlice, serde::Serialize};
 
     use crate::{
@@ -845,6 +863,18 @@ mod tests {
     fn serialize_header_err<S: Serialize>(s: S) -> Error {
         let mut wtr = Writer::from_writer(vec![]);
         s.serialize(&mut SeHeader::new(&mut wtr)).unwrap_err()
+    }
+
+    #[derive(Debug)]
+    struct CustomOrderMap(Vec<(&'static str, f64)>);
+
+    impl Serialize for CustomOrderMap {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.collect_map(self.0.iter().copied())
+        }
     }
 
     #[test]
@@ -1118,6 +1148,58 @@ mod tests {
     }
 
     #[test]
+    fn ordered_map() {
+        let mut map = BTreeMap::new();
+        map.insert("a", 2.0);
+        map.insert("b", 1.0);
+
+        let got = serialize(&map);
+        assert_eq!(got, "2.0,1.0\n");
+        let (wrote, got) = serialize_header(map);
+        assert!(wrote);
+        assert_eq!(got, "a,b");
+    }
+
+    #[test]
+    fn ordered_map_with_collection_as_key() {
+        #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+        struct MyKey {
+            name: &'static str,
+            other_attribute: u8,
+        }
+
+        let mut map = BTreeMap::new();
+        map.insert(MyKey { name: "a", other_attribute: 1 }, 2.0);
+
+        let error = serialize_header_err(map);
+        assert!(
+            matches!(error.kind(), ErrorKind::Serialize(_)),
+            "Expected ErrorKind::Serialize but got '{error}'"
+        );
+    }
+
+    #[test]
+    fn unordered_map() {
+        let mut writer = Writer::from_writer(vec![]);
+        writer
+            .serialize(CustomOrderMap(vec![("a", 2.0), ("b", 1.0)]))
+            .unwrap();
+        writer
+            .serialize(CustomOrderMap(vec![("a", 3.0), ("b", 4.0)]))
+            .unwrap();
+        writer.flush().unwrap();
+        let csv = String::from_utf8(writer.get_ref().clone()).unwrap();
+        assert_eq!(csv, "a,b\n2.0,1.0\n3.0,4.0\n");
+        let error = writer
+            .serialize(CustomOrderMap(vec![("b", 2.0), ("a", 1.0)])) // Wrong key order
+            .unwrap_err();
+        assert!(
+            matches!(error.kind(), ErrorKind::Serialize(_)),
+            "Got unexpected error: {error}"
+        )
+    }
+
+    #[test]
     fn struct_no_headers() {
         #[derive(Serialize)]
         struct Foo {
@@ -1324,5 +1406,126 @@ mod tests {
         let (wrote, got) = serialize_header(row.clone());
         assert!(wrote);
         assert_eq!(got, "label,num,label2,value,empty,label,num");
+    }
+
+    #[test]
+    fn flatten() {
+        #[derive(Clone, Serialize, Debug, PartialEq)]
+        struct Input {
+            x: f64,
+            y: f64,
+        }
+
+        #[derive(Clone, Serialize, Debug, PartialEq)]
+        struct Properties {
+            prop1: f64,
+            prop2: f64,
+        }
+
+        #[derive(Clone, Serialize, Debug, PartialEq)]
+        struct Row {
+            #[serde(flatten)]
+            input: Input,
+            #[serde(flatten)]
+            properties: Properties,
+        }
+        let row = Row {
+            input: Input { x: 1.0, y: 2.0 },
+            properties: Properties { prop1: 3.0, prop2: 4.0 },
+        };
+
+        let got = serialize(row.clone());
+        assert_eq!(got, "1.0,2.0,3.0,4.0\n");
+
+        let (wrote, got) = serialize_header(row.clone());
+        assert!(wrote);
+        assert_eq!(got, "x,y,prop1,prop2");
+    }
+
+    #[test]
+    fn flatten_map() {
+        #[derive(Clone, Serialize, Debug, PartialEq)]
+        struct Row {
+            x: f64,
+            y: f64,
+            #[serde(flatten)]
+            extra: BTreeMap<&'static str, f64>,
+        }
+        let mut extra = BTreeMap::new();
+        extra.insert("extra1", 3.0);
+        extra.insert("extra2", 4.0);
+        let row = Row { x: 1.0, y: 2.0, extra };
+
+        let got = serialize(row.clone());
+        assert_eq!(got, format!("1.0,2.0,3.0,4.0\n"));
+
+        let (wrote, got) = serialize_header(row.clone());
+        assert!(wrote);
+        assert_eq!(got, format!("x,y,extra1,extra2"));
+    }
+
+    #[test]
+    fn flatten_map_with_different_key_order() {
+        #[derive(Serialize, Debug)]
+        struct Row {
+            x: f64,
+            y: f64,
+            #[serde(flatten)]
+            extra: CustomOrderMap,
+        }
+        let mut writer = Writer::from_writer(vec![]);
+        writer
+            .serialize(Row {
+                x: 1.0,
+                y: 2.0,
+                extra: CustomOrderMap(vec![("extra1", 3.0), ("extra2", 4.0)]),
+            })
+            .unwrap();
+        let error = writer
+            .serialize(Row {
+                x: 1.0,
+                y: 2.0,
+                extra: CustomOrderMap(vec![("extra2", 4.0), ("extra1", 3.0)]),
+            })
+            .unwrap_err();
+        assert!(
+            matches!(error.kind(), ErrorKind::Serialize(_)),
+            "Expected ErrorKind::Serialize but got '{error}'"
+        );
+    }
+
+    #[test]
+    fn flatten_map_different_num_entries() {
+        #[derive(Clone, Serialize, Debug, PartialEq)]
+        struct Row {
+            x: f64,
+            y: f64,
+            #[serde(flatten)]
+            extra: BTreeMap<&'static str, f64>,
+        }
+        let mut writer = Writer::from_writer(vec![]);
+
+        let mut extra = BTreeMap::new();
+        extra.insert("extra1", 3.0);
+        extra.insert("extra2", 4.0);
+        let row = Row { x: 1.0, y: 2.0, extra };
+        writer.serialize(row).unwrap();
+
+        let mut extra = BTreeMap::new();
+        extra.insert("extra1", 3.0);
+        extra.insert("extra2", 4.0);
+        extra.insert("extra3", 5.0);
+        let row = Row { x: 1.0, y: 2.0, extra };
+        let error = writer.serialize(row).unwrap_err();
+        match *error.kind() {
+            ErrorKind::UnequalLengths {
+                pos: None,
+                expected_len: 4,
+                len: 5,
+            } => {}
+            ref x => {
+                panic!("expected ErrorKind::UnequalLengths but got '{x:?}'")
+            }
+        }
     }
 }

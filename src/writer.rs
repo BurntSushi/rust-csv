@@ -540,6 +540,15 @@ pub struct Writer<W: io::Write> {
     state: WriterState,
 }
 
+/// State for tracking headers while writing.
+#[derive(Debug)]
+struct HeaderTrackingState {
+    /// The serialized headers in their expected order.
+    expected_headers: Vec<Vec<u8>>,
+    /// The index into the `expected_headers` list of the next expected header.
+    next_expected_index: usize,
+}
+
 #[derive(Debug)]
 struct WriterState {
     /// Whether the Serde serializer should attempt to write a header row.
@@ -557,6 +566,9 @@ struct WriterState {
     /// immediately after flushing the buffer. This avoids flushing the buffer
     /// twice if the inner writer panics.
     panicked: bool,
+    /// Header tracking state for map like data, to ensure that column order
+    /// is preserved across all rows.
+    header_tracking: Option<HeaderTrackingState>,
 }
 
 /// HeaderState encodes a small state machine for handling header writes.
@@ -638,6 +650,10 @@ impl<W: io::Write> Writer<W> {
                 first_field_count: None,
                 fields_written: 0,
                 panicked: false,
+                header_tracking: Some(HeaderTrackingState {
+                    expected_headers: Vec::new(),
+                    next_expected_index: 0,
+                }),
             },
         }
     }
@@ -1179,6 +1195,47 @@ impl<W: io::Write> Writer<W> {
             }
         }
         Ok(())
+    }
+
+    /// Track the `key` of a map entry. If this is not the first row, also verify that the
+    /// `key` matches the expected next key.
+    pub(crate) fn check_map_key<T: ?Sized + Serialize>(
+        &mut self,
+        key: &T,
+    ) -> Result<()> {
+        let Some(tracking) = &mut self.state.header_tracking else {
+            return Ok(());
+        };
+        let mut encoded_key_serializer = Writer::from_writer(Vec::new());
+        serialize(&mut encoded_key_serializer, key)?;
+        let encoded_key =
+            encoded_key_serializer.into_inner().map_err(|error| {
+                Error::new(ErrorKind::Serialize(format!(
+                    "Failed to serialize key to bytes: {error:?}"
+                )))
+            })?;
+        if let Some(expected_key) =
+            tracking.expected_headers.get(tracking.next_expected_index)
+        {
+            if expected_key != &encoded_key {
+                return Err(Error::new(ErrorKind::Serialize(format!(
+                    "Out of order key `{}`",
+                    String::from_utf8_lossy(&encoded_key)
+                ))));
+            }
+        } else {
+            // Even if this is not the first row, accept more keys. If the writer is flexible then adding more fields is allowed.
+            tracking.expected_headers.push(encoded_key);
+        }
+        tracking.next_expected_index += 1;
+        Ok(())
+    }
+
+    /// Reset the map key tracking at the end of a row.
+    pub(crate) fn on_map_end(&mut self) {
+        if let Some(tracking) = &mut self.state.header_tracking {
+            tracking.next_expected_index = 0;
+        }
     }
 }
 
