@@ -1,7 +1,7 @@
 use core::fmt;
 use core::str;
 
-use memchr::memchr;
+use memchr::{memchr, memchr2};
 
 use crate::{QuoteStyle, Terminator};
 
@@ -547,16 +547,26 @@ pub fn quote(
 ) -> (WriteResult, usize, usize) {
     let (mut nin, mut nout) = (0, 0);
     loop {
-        match memchr(quote, input) {
+        // Find the next byte that must be escaped. When double quoting is
+        // enabled, only the quote byte needs escaping (by doubling it). When
+        // it is disabled, the escape byte itself must also be escaped (by
+        // preceding it with another escape byte); otherwise an escape byte
+        // occurring in the field data would be indistinguishable from the
+        // start of an escape sequence when the data is read back.
+        let next = if double_quote {
+            memchr(quote, input)
+        } else {
+            memchr2(quote, escape, input)
+        };
+        match next {
             None => {
                 let (res, i, o) = write_optimistic(input, output);
                 nin += i;
                 nout += o;
                 return (res, nin, nout);
             }
-            Some(next_quote) => {
-                let (res, i, o) =
-                    write_optimistic(&input[..next_quote], output);
+            Some(next) => {
+                let (res, i, o) = write_optimistic(&input[..next], output);
                 input = &input[i..];
                 output = &mut moving(output)[o..];
                 nin += i;
@@ -564,21 +574,19 @@ pub fn quote(
                 if let WriteResult::OutputFull = res {
                     return (res, nin, nout);
                 }
-                if double_quote {
-                    let (res, o) = write_pessimistic(&[quote, quote], output);
-                    if let WriteResult::OutputFull = res {
-                        return (res, nin, nout);
-                    }
-                    nout += o;
-                    output = &mut moving(output)[o..];
+                let escaped = if double_quote {
+                    [quote, quote]
                 } else {
-                    let (res, o) = write_pessimistic(&[escape, quote], output);
-                    if let WriteResult::OutputFull = res {
-                        return (res, nin, nout);
-                    }
-                    nout += o;
-                    output = &mut moving(output)[o..];
+                    // `input[0]` is the byte we found: either the quote byte or
+                    // the escape byte. Both are escaped with the escape byte.
+                    [escape, input[0]]
+                };
+                let (res, o) = write_pessimistic(&escaped, output);
+                if let WriteResult::OutputFull = res {
+                    return (res, nin, nout);
                 }
+                nout += o;
+                output = &mut moving(output)[o..];
                 nin += 1;
                 input = &input[1..];
             }
@@ -1012,6 +1020,35 @@ mod tests {
         let out = &mut [0; 1024];
 
         assert_quote!(inp, out, 2, 4, InputEmpty, r#"\"\""#, false);
+    }
+
+    // When double quoting is disabled, the escape byte itself must be escaped
+    // (by doubling it), otherwise it could not be distinguished from the start
+    // of an escape sequence when the data is read back.
+    #[test]
+    fn quote_escaped_escape_one() {
+        let inp = b(r#"\"#);
+        let out = &mut [0; 1024];
+
+        assert_quote!(inp, out, 1, 2, InputEmpty, r#"\\"#, false);
+    }
+
+    #[test]
+    fn quote_escaped_escape_and_quote() {
+        let inp = b(r#"\""#);
+        let out = &mut [0; 1024];
+
+        assert_quote!(inp, out, 2, 4, InputEmpty, r#"\\\""#, false);
+    }
+
+    // With double quoting enabled (the default), the escape byte is not special
+    // and must be written verbatim.
+    #[test]
+    fn quote_double_quote_leaves_escape_byte() {
+        let inp = b(r#"a\b"#);
+        let out = &mut [0; 1024];
+
+        assert_quote!(inp, out, 3, 3, InputEmpty, r#"a\b"#, true);
     }
 
     #[test]

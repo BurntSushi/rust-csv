@@ -1294,6 +1294,42 @@ mod tests {
         assert_eq!(wtr_as_string(wtr), "\"\"\n\"\"\n");
     }
 
+    // Regression test: when `double_quote` is disabled, the writer escapes
+    // quotes with the escape character. It must also escape the escape
+    // character itself, otherwise fields containing it (e.g. Windows paths
+    // like `C:\path`) are silently corrupted when read back.
+    #[test]
+    fn escape_escape_char_when_not_double_quoting() {
+        let mut wtr =
+            WriterBuilder::new().double_quote(false).from_writer(vec![]);
+        wtr.write_record([r#"C:\path"#, "END"]).unwrap();
+
+        // The backslash is doubled so the reader can recover it.
+        assert_eq!(wtr_as_string(wtr), "\"C:\\\\path\",END\n");
+    }
+
+    #[test]
+    fn roundtrip_escape_char_when_not_double_quoting() {
+        use crate::ReaderBuilder;
+
+        let mut wtr =
+            WriterBuilder::new().double_quote(false).from_writer(vec![]);
+        let record = [r#"a\b"#, r#"C:\path\to"#, r#"\"#, "plain"];
+        wtr.write_record(record).unwrap();
+        let data = wtr.into_inner().unwrap();
+
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .double_quote(false)
+            .escape(Some(b'\\'))
+            .from_reader(&*data);
+        let got = rdr.records().next().unwrap().unwrap();
+        assert_eq!(
+            got.iter().collect::<Vec<_>>(),
+            vec![r#"a\b"#, r#"C:\path\to"#, r#"\"#, "plain"],
+        );
+    }
+
     #[test]
     fn unequal_records_bad() {
         let mut wtr = WriterBuilder::new().from_writer(vec![]);
