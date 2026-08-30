@@ -126,6 +126,8 @@ pub struct Reader {
     has_read: bool,
     /// The current position in the output buffer when reading a record.
     output_pos: usize,
+    /// Whether a record ended with `\r` at the end of the input buffer.
+    pending_crlf_record: bool,
 }
 
 impl Default for Reader {
@@ -145,6 +147,7 @@ impl Default for Reader {
             line: 1,
             has_read: false,
             output_pos: 0,
+            pending_crlf_record: false,
         }
     }
 }
@@ -485,6 +488,7 @@ impl Reader {
         self.line = 1;
         self.has_read = false;
         self.output_pos = 0;
+        self.pending_crlf_record = false;
     }
 
     /// Return the current line number as measured by the number of occurrences
@@ -595,6 +599,19 @@ impl Reader {
         ends: &mut [usize],
     ) -> (ReadRecordResult, usize, usize, usize) {
         let (input, bom_nin) = self.strip_utf8_bom(input);
+        if self.pending_crlf_record {
+            self.pending_crlf_record = false;
+            self.output_pos = 0;
+            if self.use_nfa {
+                self.nfa_state = NfaState::StartRecord;
+            } else {
+                self.dfa_state = self.dfa.new_state(NfaState::StartRecord);
+            }
+            let nin = usize::from(input.first() == Some(&b'\n'));
+            self.line += nin as u64;
+            self.has_read = true;
+            return (ReadRecordResult::Record, nin + bom_nin, 0, 0);
+        }
         let (res, nin, nout, nend) = if self.use_nfa {
             self.read_record_nfa(input, output, ends)
         } else {
@@ -660,6 +677,8 @@ impl Reader {
         }
         let (mut nin, mut nout, mut nend) = (0, 0, 0);
         let mut state = self.dfa_state;
+        let crlf = self.dfa.new_state(NfaState::CRLF);
+        let mut completed_crlf = false;
         while nin < input.len() && nout < output.len() && nend < ends.len() {
             let (s, has_out) = self.dfa.get_output(state, input[nin]);
             self.line += (input[nin] == b'\n') as u64;
@@ -669,6 +688,21 @@ impl Reader {
                 nout += 1;
             }
             nin += 1;
+            if state == crlf {
+                ends[nend] = self.output_pos + nout;
+                nend += 1;
+                if nin < input.len() {
+                    if input[nin] == b'\n' {
+                        self.line += 1;
+                        nin += 1;
+                    }
+                    state = self.dfa.new_state(NfaState::StartRecord);
+                    completed_crlf = true;
+                } else {
+                    self.pending_crlf_record = true;
+                }
+                break;
+            }
             if state >= self.dfa.final_field {
                 ends[nend] = self.output_pos + nout;
                 nend += 1;
@@ -682,13 +716,19 @@ impl Reader {
                     .scan_and_copy(input, &mut nin, output, &mut nout);
             }
         }
-        let res = self.dfa.new_read_record_result(
-            state,
-            false,
-            nin >= input.len(),
-            nout >= output.len(),
-            nend >= ends.len(),
-        );
+        let res = if completed_crlf {
+            ReadRecordResult::Record
+        } else if self.pending_crlf_record {
+            ReadRecordResult::InputEmpty
+        } else {
+            self.dfa.new_read_record_result(
+                state,
+                false,
+                nin >= input.len(),
+                nout >= output.len(),
+                nend >= ends.len(),
+            )
+        };
         self.dfa_state = state;
         if res.is_record() {
             self.output_pos = 0;
@@ -879,6 +919,7 @@ impl Reader {
         }
         let (mut nin, mut nout, mut nend) = (0, self.output_pos, 0);
         let mut state = self.nfa_state;
+        let mut completed_crlf = false;
         while nin < input.len() && nout < output.len() && nend < ends.len() {
             let (s, io) = self.transition_nfa(state, input[nin]);
             match io {
@@ -893,6 +934,21 @@ impl Reader {
                 NfaInputAction::Epsilon => {}
             }
             state = s;
+            if state == NfaState::CRLF {
+                ends[nend] = nout;
+                nend += 1;
+                if nin < input.len() {
+                    if input[nin] == b'\n' {
+                        self.line += 1;
+                        nin += 1;
+                    }
+                    state = NfaState::StartRecord;
+                    completed_crlf = true;
+                } else {
+                    self.pending_crlf_record = true;
+                }
+                break;
+            }
             if state.is_field_final() {
                 ends[nend] = nout;
                 nend += 1;
@@ -901,12 +957,18 @@ impl Reader {
                 }
             }
         }
-        let res = ReadRecordResult::from_nfa(
-            state,
-            nin >= input.len(),
-            nout >= output.len(),
-            nend >= ends.len(),
-        );
+        let res = if completed_crlf {
+            ReadRecordResult::Record
+        } else if self.pending_crlf_record {
+            ReadRecordResult::InputEmpty
+        } else {
+            ReadRecordResult::from_nfa(
+                state,
+                nin >= input.len(),
+                nout >= output.len(),
+                nend >= ends.len(),
+            )
+        };
         self.nfa_state = state;
         self.output_pos = if res.is_record() { 0 } else { nout };
         (res, nin, nout, nend)
@@ -1970,6 +2032,44 @@ mod tests {
         assert_eq!(ends[0], 3);
 
         assert_read_record!(rdr, &inp, out, ends, 0, 0, 0, End);
+    }
+
+    #[test]
+    fn stream_record_with_crlf() {
+        use crate::ReadRecordResult::*;
+
+        let out = &mut [0; 1024];
+        let ends = &mut [0; 10];
+        let mut rdr = Reader::new();
+
+        assert_eq!(rdr.line(), 1);
+        assert_read_record!(rdr, b("foo,bar\r\n"), out, ends, 9, 6, 2, Record);
+        assert_eq!(&ends[..2], &[3, 6]);
+        assert_eq!(rdr.line(), 2);
+    }
+
+    #[test]
+    fn stream_record_with_split_crlf() {
+        use crate::ReadRecordResult::*;
+
+        let out = &mut [0; 1024];
+        let ends = &mut [0; 10];
+        let mut rdr = Reader::new();
+
+        assert_read_record!(
+            rdr,
+            b("foo,bar\r"),
+            out,
+            ends,
+            8,
+            6,
+            2,
+            InputEmpty
+        );
+        assert_eq!(rdr.line(), 1);
+
+        assert_read_record!(rdr, b("\n"), out, ends, 1, 0, 0, Record);
+        assert_eq!(rdr.line(), 2);
     }
 
     // Test that if our output ends are full during the last read that

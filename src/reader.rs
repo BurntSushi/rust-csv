@@ -2597,6 +2597,22 @@ mod tests {
         assert_eq!(pos.record(), 1);
     }
 
+    #[test]
+    fn positions_crlf() {
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(b("a,b\r\nc,d\r\n"));
+        let mut record = StringRecord::new();
+
+        assert!(rdr.read_record(&mut record).unwrap());
+        assert_eq!(record.position().unwrap().line(), 1);
+        assert_eq!(rdr.position().line(), 2);
+
+        assert!(rdr.read_record(&mut record).unwrap());
+        assert_eq!(record.position().unwrap().line(), 2);
+        assert_eq!(rdr.position().line(), 3);
+    }
+
     // Test that position info is reported correctly with headers.
     #[test]
     fn positions_headers() {
