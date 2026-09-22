@@ -225,11 +225,7 @@ impl fmt::Display for FromUtf8Error {
     }
 }
 
-impl StdError for FromUtf8Error {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        Some(&self.err)
-    }
-}
+impl StdError for FromUtf8Error {}
 
 /// A UTF-8 validation error.
 ///
