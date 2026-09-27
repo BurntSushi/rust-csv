@@ -708,7 +708,7 @@ impl ReaderBuilder {
 ///   a field `xyz` into an `i32` field will result in an error.
 ///
 /// For more details on the precise semantics of errors, see the
-/// [`Error`](enum.Error.html) type.
+/// [`Error`](struct.Error.html) type.
 #[derive(Debug)]
 pub struct Reader<R> {
     /// The underlying CSV parser.
