@@ -65,7 +65,7 @@ fn count_fields(rdr: &mut Reader, mut data: &[u8]) -> u64 {
         match res {
             InputEmpty => {}
             OutputFull => panic!("field too large"),
-            Field { .. } => {
+            Field { .. } | Invalid { .. } => {
                 count += 1;
             }
             End => break,
@@ -86,7 +86,7 @@ fn count_records(rdr: &mut Reader, mut data: &[u8]) -> u64 {
         match res {
             InputEmpty => {}
             OutputFull | OutputEndsFull => panic!("field too large"),
-            Record => count += 1,
+            Record | Invalid => count += 1,
             End => break,
         }
     }

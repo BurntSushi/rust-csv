@@ -2362,7 +2362,9 @@ fn run(mut data: &[u8]) -> Option<u64> {
             }
             // This case happens when we've successfully read a field. If the
             // field is the last field in a record, then `record_end` is true.
-            ReadFieldResult::Field { record_end } => {
+            // (`Invalid` is only reported when strict parsing is enabled.)
+            ReadFieldResult::Field { record_end }
+            | ReadFieldResult::Invalid { record_end } => {
                 if fieldidx == 0 && field == b"us" {
                     inus = true;
                 } else if inus && fieldidx == 3 && field == b"MA" {

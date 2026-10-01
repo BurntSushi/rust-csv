@@ -542,6 +542,28 @@ impl ReaderBuilder {
         self
     }
 
+    /// Enable or disable strict parsing of quotes.
+    ///
+    /// When enabled, reading a record with invalid quoting returns an error
+    /// of kind `ErrorKind::InvalidQuoting` whose position is the position of
+    /// that record. Quoting is invalid when a quote appears in a field that
+    /// does not start with a quote, when the closing quote of a quoted field
+    /// is followed by anything other than a delimiter, a record terminator or
+    /// the end of the data, or when the data ends inside a quoted field.
+    ///
+    /// A record with invalid quoting is consumed by the read that reports it,
+    /// so reading continues with the next record. It counts towards the
+    /// record numbers of the positions of later records, but it is never used
+    /// as the header row, and it is not compared with other records when the
+    /// `flexible` option is disabled.
+    ///
+    /// Strict parsing has no effect when quoting is disabled. This is
+    /// disabled by default.
+    pub fn strict(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.builder.strict(yes);
+        self
+    }
+
     /// The comment character to use when parsing CSV.
     ///
     /// If the start of a record begins with the byte given here, then that
@@ -1665,6 +1687,13 @@ impl<R: io::Read> Reader<R> {
                     self.state.add_record(record)?;
                     return Ok(true);
                 }
+                Invalid => {
+                    record.set_len(endlen);
+                    self.state.add_invalid_record();
+                    return Err(Error::new(ErrorKind::InvalidQuoting {
+                        pos: record.position().cloned(),
+                    }));
+                }
                 End => {
                     self.state.eof = ReaderEofState::Eof;
                     return Ok(false);
@@ -1898,6 +1927,13 @@ impl ReaderState {
         }
         Ok(())
     }
+
+    /// Counts a record with invalid quoting, which is otherwise ignored.
+    #[inline(always)]
+    fn add_invalid_record(&mut self) {
+        let i = self.cur_pos.record();
+        self.cur_pos.set_record(i.checked_add(1).unwrap());
+    }
 }
 
 /// An owned iterator over deserialized records.
@@ -1908,20 +1944,20 @@ pub struct DeserializeRecordsIntoIter<R, D> {
     rdr: Reader<R>,
     rec: StringRecord,
     headers: Option<StringRecord>,
+    headers_err: Option<Error>,
+    headers_pending: bool,
     _priv: PhantomData<D>,
 }
 
 impl<R: io::Read, D: DeserializeOwned> DeserializeRecordsIntoIter<R, D> {
     fn new(mut rdr: Reader<R>) -> DeserializeRecordsIntoIter<R, D> {
-        let headers = if !rdr.state.has_headers {
-            None
-        } else {
-            rdr.headers().ok().cloned()
-        };
+        let (headers, headers_err) = read_deserialize_headers(&mut rdr);
         DeserializeRecordsIntoIter {
             rdr,
             rec: StringRecord::new(),
             headers,
+            headers_err,
+            headers_pending: false,
             _priv: PhantomData,
         }
     }
@@ -1948,12 +1984,63 @@ impl<R: io::Read, D: DeserializeOwned> Iterator
     type Item = Result<D>;
 
     fn next(&mut self) -> Option<Result<D>> {
+        if let Some(err) = next_headers_error(
+            &mut self.rdr,
+            &mut self.headers,
+            &mut self.headers_err,
+            &mut self.headers_pending,
+        ) {
+            return Some(Err(err));
+        }
         match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
             Ok(false) => None,
             Ok(true) => Some(self.rec.deserialize(self.headers.as_ref())),
         }
     }
+}
+
+/// Reads the header row used by a deserializing iterator.
+///
+/// A header row with invalid quoting is returned as an error, so that the
+/// iterator can report it before taking its headers from the next row.
+fn read_deserialize_headers<R: io::Read>(
+    rdr: &mut Reader<R>,
+) -> (Option<StringRecord>, Option<Error>) {
+    if !rdr.state.has_headers {
+        return (None, None);
+    }
+    match rdr.headers() {
+        Ok(headers) => (Some(headers.clone()), None),
+        Err(err) => match *err.kind() {
+            ErrorKind::InvalidQuoting { .. } => (None, Some(err)),
+            _ => (None, None),
+        },
+    }
+}
+
+/// Returns the next header row error a deserializing iterator must report,
+/// reading the header row again once a previous error has been reported.
+fn next_headers_error<R: io::Read>(
+    rdr: &mut Reader<R>,
+    headers: &mut Option<StringRecord>,
+    headers_err: &mut Option<Error>,
+    headers_pending: &mut bool,
+) -> Option<Error> {
+    if let Some(err) = headers_err.take() {
+        *headers_pending = true;
+        return Some(err);
+    }
+    if *headers_pending {
+        *headers_pending = false;
+        let (new_headers, err) = read_deserialize_headers(rdr);
+        *headers = new_headers;
+        if err.is_some() {
+            *headers_pending = true;
+        }
+        return err;
+    }
+    None
 }
 
 /// A borrowed iterator over deserialized records.
@@ -1966,20 +2053,20 @@ pub struct DeserializeRecordsIter<'r, R: 'r, D> {
     rdr: &'r mut Reader<R>,
     rec: StringRecord,
     headers: Option<StringRecord>,
+    headers_err: Option<Error>,
+    headers_pending: bool,
     _priv: PhantomData<D>,
 }
 
 impl<'r, R: io::Read, D: DeserializeOwned> DeserializeRecordsIter<'r, R, D> {
     fn new(rdr: &'r mut Reader<R>) -> DeserializeRecordsIter<'r, R, D> {
-        let headers = if !rdr.state.has_headers {
-            None
-        } else {
-            rdr.headers().ok().cloned()
-        };
+        let (headers, headers_err) = read_deserialize_headers(rdr);
         DeserializeRecordsIter {
             rdr,
             rec: StringRecord::new(),
             headers,
+            headers_err,
+            headers_pending: false,
             _priv: PhantomData,
         }
     }
@@ -2001,6 +2088,14 @@ impl<'r, R: io::Read, D: DeserializeOwned> Iterator
     type Item = Result<D>;
 
     fn next(&mut self) -> Option<Result<D>> {
+        if let Some(err) = next_headers_error(
+            self.rdr,
+            &mut self.headers,
+            &mut self.headers_err,
+            &mut self.headers_pending,
+        ) {
+            return Some(Err(err));
+        }
         match self.rdr.read_record(&mut self.rec) {
             Err(err) => Some(Err(err)),
             Ok(false) => None,

@@ -52,7 +52,8 @@ loop {
     match result {
         ReadFieldResult::InputEmpty => {},
         ReadFieldResult::OutputFull => panic!("field too large"),
-        ReadFieldResult::Field { record_end } => {
+        ReadFieldResult::Field { record_end }
+        | ReadFieldResult::Invalid { record_end } => {
             count_fields += 1;
             if record_end {
                 count_records += 1;
