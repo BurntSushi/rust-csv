@@ -92,6 +92,9 @@ use crate::Terminator;
 ///   default.
 /// * Records are permitted to be of varying length.
 /// * Empty lines (that do not include other whitespace) are ignored.
+///
+/// A reader built with [`ReaderBuilder::strict`] still finds the same parse,
+/// but reports fields and records containing invalid quoting.
 #[derive(Clone, Debug)]
 pub struct Reader {
     /// A table-based DFA for parsing CSV.
@@ -115,6 +118,12 @@ pub struct Reader {
     /// If enabled (the default), then quotes are respected. When disabled,
     /// quotes are not treated specially.
     quoting: bool,
+    /// Whether to report fields and records with invalid quoting.
+    strict: bool,
+    /// Whether the field being parsed has invalid quoting.
+    invalid_field: bool,
+    /// Whether the record being parsed has invalid quoting.
+    invalid_record: bool,
     /// Whether to use the NFA for parsing.
     ///
     /// Generally this is for debugging. There's otherwise no good reason
@@ -141,6 +150,9 @@ impl Default for Reader {
             double_quote: true,
             comment: None,
             quoting: true,
+            strict: false,
+            invalid_field: false,
+            invalid_record: false,
             use_nfa: false,
             line: 1,
             has_read: false,
@@ -238,6 +250,29 @@ impl ReaderBuilder {
         self
     }
 
+    /// Enable or disable strict parsing.
+    ///
+    /// When enabled, a field with invalid quoting is reported as
+    /// `ReadFieldResult::Invalid` by `read_field`, and a record containing
+    /// such a field is reported as `ReadRecordResult::Invalid` by
+    /// `read_record`. The parse itself is unchanged: the field data and
+    /// field ends written to the output buffers are the same as without
+    /// strict parsing.
+    ///
+    /// Quoting is invalid when a quote appears in a field that does not start
+    /// with a quote, when the closing quote of a quoted field is followed by
+    /// anything other than a delimiter, a record terminator or the end of the
+    /// data, or when the data ends inside a quoted field. A quote that is part
+    /// of a doubled quote or that follows the escape byte inside a quoted field
+    /// is not a closing quote. Strict parsing has no effect when quoting is
+    /// disabled.
+    ///
+    /// This is disabled by default.
+    pub fn strict(&mut self, yes: bool) -> &mut ReaderBuilder {
+        self.rdr.strict = yes;
+        self
+    }
+
     /// A convenience method for specifying a configuration to read ASCII
     /// delimited text.
     ///
@@ -280,6 +315,15 @@ pub enum ReadFieldResult {
     /// This state can only be returned when an empty input buffer is provided
     /// by the caller.
     End,
+    /// The end of a field with invalid quoting was found.
+    ///
+    /// This is only returned when strict parsing is enabled. It is returned
+    /// in place of `Field`, and the field data is the same as it would be for
+    /// `Field`.
+    Invalid {
+        /// Whether this was the last field in a record or not.
+        record_end: bool,
+    },
 }
 
 impl ReadFieldResult {
@@ -349,11 +393,18 @@ pub enum ReadRecordResult {
     /// This state can only be returned when an empty input buffer is provided
     /// by the caller.
     End,
+    /// The end of a record with invalid quoting in at least one of its fields
+    /// was found.
+    ///
+    /// This is only returned when strict parsing is enabled. It is returned
+    /// in place of `Record`, and the record data and field ends are the same
+    /// as they would be for `Record`.
+    Invalid,
 }
 
 impl ReadRecordResult {
     fn is_record(&self) -> bool {
-        *self == ReadRecordResult::Record
+        matches!(*self, ReadRecordResult::Record | ReadRecordResult::Invalid)
     }
 
     fn from_nfa(
@@ -485,6 +536,8 @@ impl Reader {
         self.line = 1;
         self.has_read = false;
         self.output_pos = 0;
+        self.invalid_field = false;
+        self.invalid_record = false;
     }
 
     /// Return the current line number as measured by the number of occurrences
@@ -531,7 +584,8 @@ impl Reader {
     /// # Errors
     ///
     /// This CSV reader can never return an error. Instead, it prefers *a*
-    /// parse over *no* parse.
+    /// parse over *no* parse. When strict parsing is enabled, a field with
+    /// invalid quoting is reported with `ReadFieldResult::Invalid`.
     pub fn read_field(
         &mut self,
         input: &[u8],
@@ -587,7 +641,8 @@ impl Reader {
     /// # Errors
     ///
     /// This CSV reader can never return an error. Instead, it prefers *a*
-    /// parse over *no* parse.
+    /// parse over *no* parse. When strict parsing is enabled, a record with
+    /// invalid quoting is reported with `ReadRecordResult::Invalid`.
     pub fn read_record(
         &mut self,
         input: &[u8],
@@ -626,6 +681,9 @@ impl Reader {
         ends: &mut [usize],
     ) -> (ReadRecordResult, usize, usize, usize) {
         if input.is_empty() {
+            if self.is_invalid_end_dfa(self.dfa_state) {
+                self.set_invalid();
+            }
             let s = self.transition_final_dfa(self.dfa_state);
             let res =
                 self.dfa.new_read_record_result(s, true, false, false, false);
@@ -644,7 +702,7 @@ impl Reader {
                     self.dfa_state = s;
                     ends[0] = self.output_pos;
                     self.output_pos = 0;
-                    (res, 0, 0, 1)
+                    (self.finish_record(res), 0, 0, 1)
                 }
                 _ => {
                     self.dfa_state = s;
@@ -661,7 +719,10 @@ impl Reader {
         let (mut nin, mut nout, mut nend) = (0, 0, 0);
         let mut state = self.dfa_state;
         while nin < input.len() && nout < output.len() && nend < ends.len() {
-            let (s, has_out) = self.dfa.get_output(state, input[nin]);
+            let (s, has_out, invalid) = self.dfa.get_output(state, input[nin]);
+            if invalid {
+                self.set_invalid();
+            }
             self.line += (input[nin] == b'\n') as u64;
             state = s;
             if has_out {
@@ -689,6 +750,7 @@ impl Reader {
             nout >= output.len(),
             nend >= ends.len(),
         );
+        let res = self.finish_record(res);
         self.dfa_state = state;
         if res.is_record() {
             self.output_pos = 0;
@@ -705,6 +767,9 @@ impl Reader {
         output: &mut [u8],
     ) -> (ReadFieldResult, usize, usize) {
         if input.is_empty() {
+            if self.is_invalid_end_dfa(self.dfa_state) {
+                self.set_invalid();
+            }
             self.dfa_state = self.transition_final_dfa(self.dfa_state);
             let res = self.dfa.new_read_field_result(
                 self.dfa_state,
@@ -712,7 +777,7 @@ impl Reader {
                 false,
                 false,
             );
-            return (res, 0, 0);
+            return (self.finish_field(res), 0, 0);
         }
         if output.is_empty() {
             return (ReadFieldResult::OutputFull, 0, 0);
@@ -722,7 +787,10 @@ impl Reader {
         while nin < input.len() && nout < output.len() {
             let b = input[nin];
             self.line += (b == b'\n') as u64;
-            let (s, has_out) = self.dfa.get_output(state, b);
+            let (s, has_out, invalid) = self.dfa.get_output(state, b);
+            if invalid {
+                self.set_invalid();
+            }
             state = s;
             if has_out {
                 output[nout] = b;
@@ -740,7 +808,7 @@ impl Reader {
             nout >= output.len(),
         );
         self.dfa_state = state;
-        (res, nin, nout)
+        (self.finish_field(res), nin, nout)
     }
 
     /// Perform the final state transition, i.e., when the caller indicates
@@ -819,13 +887,21 @@ impl Reader {
         // possible combinations of state and input byte.
         for &state in NFA_STATES {
             for c in (0..256).map(|c| c as u8) {
+                let mut nfa_from = state;
                 let mut nfa_result = (state, NfaInputAction::Epsilon);
                 // Consume NFA states until we hit a non-epsilon transition.
                 while nfa_result.0 != NfaState::End
                     && nfa_result.1 == NfaInputAction::Epsilon
                 {
+                    nfa_from = nfa_result.0;
                     nfa_result = self.transition_nfa(nfa_result.0, c);
                 }
+                let invalid = self.is_invalid_transition(
+                    nfa_from,
+                    c,
+                    nfa_result.0,
+                    &nfa_result.1,
+                );
                 let from = self.dfa.new_state(state);
                 let to = self.dfa.new_state(nfa_result.0);
                 self.dfa.set(
@@ -833,6 +909,7 @@ impl Reader {
                     c,
                     to,
                     nfa_result.1 == NfaInputAction::CopyToOutput,
+                    invalid,
                 );
             }
         }
@@ -853,6 +930,9 @@ impl Reader {
         ends: &mut [usize],
     ) -> (ReadRecordResult, usize, usize, usize) {
         if input.is_empty() {
+            if self.is_invalid_end(self.nfa_state) {
+                self.set_invalid();
+            }
             let s = self.transition_final_nfa(self.nfa_state);
             let res = ReadRecordResult::from_nfa(s, false, false, false);
             return match res {
@@ -863,7 +943,7 @@ impl Reader {
                     self.nfa_state = s;
                     ends[0] = self.output_pos;
                     self.output_pos = 0;
-                    (res, 0, 0, 1)
+                    (self.finish_record(res), 0, 0, 1)
                 }
                 _ => {
                     self.nfa_state = s;
@@ -877,10 +957,13 @@ impl Reader {
         if ends.is_empty() {
             return (ReadRecordResult::OutputEndsFull, 0, 0, 0);
         }
-        let (mut nin, mut nout, mut nend) = (0, self.output_pos, 0);
+        let (mut nin, mut nout, mut nend) = (0, 0, 0);
         let mut state = self.nfa_state;
         while nin < input.len() && nout < output.len() && nend < ends.len() {
             let (s, io) = self.transition_nfa(state, input[nin]);
+            if self.is_invalid_transition(state, input[nin], s, &io) {
+                self.set_invalid();
+            }
             match io {
                 NfaInputAction::CopyToOutput => {
                     output[nout] = input[nin];
@@ -894,7 +977,7 @@ impl Reader {
             }
             state = s;
             if state.is_field_final() {
-                ends[nend] = nout;
+                ends[nend] = self.output_pos + nout;
                 nend += 1;
                 if state != NfaState::EndFieldDelim {
                     break;
@@ -907,8 +990,13 @@ impl Reader {
             nout >= output.len(),
             nend >= ends.len(),
         );
+        let res = self.finish_record(res);
         self.nfa_state = state;
-        self.output_pos = if res.is_record() { 0 } else { nout };
+        if res.is_record() {
+            self.output_pos = 0;
+        } else {
+            self.output_pos += nout;
+        }
         (res, nin, nout, nend)
     }
 
@@ -919,9 +1007,12 @@ impl Reader {
         output: &mut [u8],
     ) -> (ReadFieldResult, usize, usize) {
         if input.is_empty() {
+            if self.is_invalid_end(self.nfa_state) {
+                self.set_invalid();
+            }
             self.nfa_state = self.transition_final_nfa(self.nfa_state);
             let res = ReadFieldResult::from_nfa(self.nfa_state, false, false);
-            return (res, 0, 0);
+            return (self.finish_field(res), 0, 0);
         }
         if output.is_empty() {
             // If the output buffer is empty, then we can never make progress,
@@ -932,6 +1023,9 @@ impl Reader {
         let mut state = self.nfa_state;
         while nin < input.len() && nout < output.len() {
             let (s, io) = self.transition_nfa(state, input[nin]);
+            if self.is_invalid_transition(state, input[nin], s, &io) {
+                self.set_invalid();
+            }
             match io {
                 NfaInputAction::CopyToOutput => {
                     output[nout] = input[nin];
@@ -954,7 +1048,95 @@ impl Reader {
             nout >= output.len(),
         );
         self.nfa_state = state;
-        (res, nin, nout)
+        (self.finish_field(res), nin, nout)
+    }
+
+    /// Returns true if strict parsing rejects the given NFA transition on the
+    /// input byte `c`.
+    ///
+    /// Only a transition that copies a byte into an unquoted field can be
+    /// invalid: either a quote inside a field that did not start with a quote,
+    /// or a byte following the closing quote of a quoted field that is
+    /// neither a delimiter, a record terminator nor a doubled quote.
+    fn is_invalid_transition(
+        &self,
+        from: NfaState,
+        c: u8,
+        to: NfaState,
+        action: &NfaInputAction,
+    ) -> bool {
+        if !self.strict
+            || !self.quoting
+            || to != NfaState::InField
+            || *action != NfaInputAction::CopyToOutput
+        {
+            return false;
+        }
+        match from {
+            NfaState::InField => c == self.quote,
+            NfaState::InDoubleEscapedQuote => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if strict parsing rejects the end of the data in the
+    /// given NFA state, which is the case inside a quoted field.
+    fn is_invalid_end(&self, state: NfaState) -> bool {
+        self.strict
+            && matches!(
+                state,
+                NfaState::InQuotedField | NfaState::InEscapedQuote
+            )
+    }
+
+    /// Like `is_invalid_end`, but for a DFA state.
+    fn is_invalid_end_dfa(&self, state: DfaState) -> bool {
+        self.strict
+            && (state == self.dfa.in_quoted || state == self.dfa.in_escaped)
+    }
+
+    /// Marks the current field and record as having invalid quoting.
+    fn set_invalid(&mut self) {
+        self.invalid_field = true;
+        self.invalid_record = true;
+    }
+
+    /// Reports the end of a field as invalid if strict parsing rejected any
+    /// part of it.
+    fn finish_field(&mut self, res: ReadFieldResult) -> ReadFieldResult {
+        match res {
+            ReadFieldResult::Field { record_end } => {
+                let invalid = self.invalid_field;
+                self.invalid_field = false;
+                if record_end {
+                    self.invalid_record = false;
+                }
+                if invalid {
+                    ReadFieldResult::Invalid { record_end }
+                } else {
+                    res
+                }
+            }
+            res => res,
+        }
+    }
+
+    /// Reports the end of a record as invalid if strict parsing rejected any
+    /// part of it.
+    fn finish_record(&mut self, res: ReadRecordResult) -> ReadRecordResult {
+        match res {
+            ReadRecordResult::Record => {
+                let invalid = self.invalid_record;
+                self.invalid_field = false;
+                self.invalid_record = false;
+                if invalid {
+                    ReadRecordResult::Invalid
+                } else {
+                    res
+                }
+            }
+            res => res,
+        }
     }
 
     /// Compute the final NFA transition after all caller-provided input has
@@ -1105,6 +1287,10 @@ struct Dfa {
     /// whether a particular `(state, equivalence class)` pair should emit an
     /// output byte.
     has_output: [bool; TRANS_SIZE],
+    /// A table with the same layout as `trans`, except its values indicate
+    /// whether a particular `(state, equivalence class)` pair is rejected by
+    /// strict parsing.
+    invalid: [bool; TRANS_SIZE],
     /// A map from input byte to equivalence class.
     ///
     /// This is responsible for reducing the effective alphabet size from
@@ -1114,6 +1300,9 @@ struct Dfa {
     in_field: DfaState,
     /// The DFA state corresponding to being inside an quoted field.
     in_quoted: DfaState,
+    /// The DFA state corresponding to having seen an escape byte inside a
+    /// quoted field.
+    in_escaped: DfaState,
     /// The minimum DFA state that indicates a field has been parsed. All DFA
     /// states greater than this are also final-field states.
     final_field: DfaState,
@@ -1127,9 +1316,11 @@ impl Dfa {
         Dfa {
             trans: [DfaState(0); TRANS_SIZE],
             has_output: [false; TRANS_SIZE],
+            invalid: [false; TRANS_SIZE],
             classes: DfaClasses::new(),
             in_field: DfaState(0),
             in_quoted: DfaState(0),
+            in_escaped: DfaState(0),
             final_field: DfaState(0),
             final_record: DfaState(0),
         }
@@ -1149,22 +1340,31 @@ impl Dfa {
         self.new_state(NfaState::EndRecord)
     }
 
-    fn get_output(&self, state: DfaState, c: u8) -> (DfaState, bool) {
+    fn get_output(&self, state: DfaState, c: u8) -> (DfaState, bool, bool) {
         let cls = self.classes.classes[c as usize];
         let idx = state.0 as usize + cls as usize;
-        (self.trans[idx], self.has_output[idx])
+        (self.trans[idx], self.has_output[idx], self.invalid[idx])
     }
 
-    fn set(&mut self, from: DfaState, c: u8, to: DfaState, output: bool) {
+    fn set(
+        &mut self,
+        from: DfaState,
+        c: u8,
+        to: DfaState,
+        output: bool,
+        invalid: bool,
+    ) {
         let cls = self.classes.classes[c as usize];
         let idx = from.0 as usize + cls as usize;
         self.trans[idx] = to;
         self.has_output[idx] = output;
+        self.invalid[idx] = invalid;
     }
 
     fn finish(&mut self) {
         self.in_field = self.new_state(NfaState::InField);
         self.in_quoted = self.new_state(NfaState::InQuotedField);
+        self.in_escaped = self.new_state(NfaState::InEscapedQuote);
         self.final_field = self.new_state(NfaState::EndFieldDelim);
         self.final_record = self.new_state(NfaState::EndRecord);
     }
@@ -1413,7 +1613,8 @@ mod tests {
                     }
                 }
                 ReadFieldResult::OutputFull => panic!("field too large"),
-                ReadFieldResult::Field { record_end } => {
+                ReadFieldResult::Field { record_end }
+                | ReadFieldResult::Invalid { record_end } => {
                     let s = str::from_utf8(&field[..outpos]).unwrap();
                     row.push(Field::from(s).unwrap());
                     outpos = 0;
@@ -1456,7 +1657,7 @@ mod tests {
                 }
                 OutputFull => panic!("record too large (out buffer)"),
                 OutputEndsFull => panic!("record too large (end buffer)"),
-                Record => {
+                Record | Invalid => {
                     let s = str::from_utf8(&record[..outpos]).unwrap();
                     let mut start = 0;
                     let mut row = Row::new();

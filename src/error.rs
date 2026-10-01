@@ -14,8 +14,8 @@ pub type Result<T> = result::Result<T, Error>;
 ///
 /// There are some important scenarios where an error is impossible to occur.
 /// For example, if a CSV reader is used on an in-memory buffer with the
-/// `flexible` option enabled and one is reading records as raw byte strings,
-/// then no error can occur.
+/// `flexible` option enabled and the `strict` option disabled, and one is
+/// reading records as raw byte strings, then no error can occur.
 #[derive(Debug)]
 pub struct Error(Box<ErrorKind>);
 
@@ -95,6 +95,12 @@ pub enum ErrorKind {
         /// The deserialization error.
         err: DeserializeError,
     },
+    /// This error occurs when a record has invalid quoting. This error only
+    /// occurs when the `strict` option in a CSV reader is enabled.
+    InvalidQuoting {
+        /// The position of the record with invalid quoting, if available.
+        pos: Option<Position>,
+    },
 }
 
 impl ErrorKind {
@@ -107,6 +113,7 @@ impl ErrorKind {
             ErrorKind::Utf8 { ref pos, .. } => pos.as_ref(),
             ErrorKind::UnequalLengths { ref pos, .. } => pos.as_ref(),
             ErrorKind::Deserialize { ref pos, .. } => pos.as_ref(),
+            ErrorKind::InvalidQuoting { ref pos } => pos.as_ref(),
             _ => None,
         }
     }
@@ -187,6 +194,17 @@ impl fmt::Display for Error {
                 pos.line(),
                 pos.byte(),
                 err
+            ),
+            ErrorKind::InvalidQuoting { pos: None } => {
+                write!(f, "CSV parse error: found record with invalid quoting")
+            }
+            ErrorKind::InvalidQuoting { pos: Some(ref pos) } => write!(
+                f,
+                "CSV parse error: record {} (line: {}, byte: {}): \
+                 found record with invalid quoting",
+                pos.record(),
+                pos.line(),
+                pos.byte()
             ),
         }
     }
