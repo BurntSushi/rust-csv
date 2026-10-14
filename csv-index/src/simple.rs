@@ -11,9 +11,17 @@ use csv;
 /// The format of the index is simplistic and amenable to serializing to disk.
 /// It consists of exactly `N+1` 64 bit big-endian integers, where `N` is the
 /// number of records in the CSV data that is indexed. Each `i`th integer
-/// corresponds to the approximate byte offset where the `i`th record in the
-/// CSV data begins. One additional integer is written to the end of the index
-/// which indicates the total number of records in the CSV data.
+/// is a byte offset from which the CSV reader can read the `i`th record.
+/// One additional integer is written to the end of the index which indicates
+/// the total number of records in the CSV data.
+///
+/// An offset need not point to the first byte of the record's first field.
+/// For example, the CSV reader ignores empty lines, so an offset may point to
+/// an empty line preceding the record. The offset is not an estimate that
+/// needs to be adjusted: pass the position returned by
+/// [`get`](RandomAccessSimple::get) to [`csv::Reader::seek`], then read the next
+/// record normally. Use the same CSV data and reader configuration that were
+/// used to create the index.
 ///
 /// This indexing format does not store the line numbers of CSV records, so
 /// using the positions returned by this index to seek a CSV reader will likely
@@ -172,7 +180,9 @@ impl<R: io::Read + io::Seek> RandomAccessSimple<R> {
     /// # Example
     ///
     /// This example shows how to create a simple random access index, open it
-    /// and use it to seek a CSV reader to read an arbitrary record.
+    /// and use it to seek a CSV reader to read an arbitrary record. The empty
+    /// line before Concord does not add a record to the index, and seeking
+    /// does not require manually skipping that line.
     ///
     /// ```
     /// use std::error::Error;
@@ -184,6 +194,7 @@ impl<R: io::Read + io::Seek> RandomAccessSimple<R> {
     ///     let data = "\
     /// city,country,pop
     /// Boston,United States,4628910
+    ///
     /// Concord,United States,42695
     /// ";
     ///     // Note that we wrap our CSV data in an io::Cursor, which makes it
