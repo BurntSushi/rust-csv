@@ -25,9 +25,12 @@ csv-index = "0.1.6"
 ### Example: build a simple random access index
 
 The `RandomAccessSimple` index is a simple data structure that maps record
-indices to the byte offset corresponding to the start of that record in CSV
-data. This example shows how to save this index to disk for a particular CSV
-file.
+indices to byte offsets from which a CSV reader can read those records. An
+offset may precede empty lines that the reader will skip; it is a seek position,
+not necessarily the first byte of a field. See the
+[`RandomAccessSimple` documentation](https://docs.rs/csv-index/latest/csv_index/struct.RandomAccessSimple.html)
+for the index format and its guarantees. This example shows how to save this
+index to disk for a particular CSV file.
 
 ```rust
 use std::error::Error;
