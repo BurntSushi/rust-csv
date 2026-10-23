@@ -877,7 +877,7 @@ impl Reader {
         if ends.is_empty() {
             return (ReadRecordResult::OutputEndsFull, 0, 0, 0);
         }
-        let (mut nin, mut nout, mut nend) = (0, self.output_pos, 0);
+        let (mut nin, mut nout, mut nend) = (0, 0, 0);
         let mut state = self.nfa_state;
         while nin < input.len() && nout < output.len() && nend < ends.len() {
             let (s, io) = self.transition_nfa(state, input[nin]);
@@ -894,7 +894,7 @@ impl Reader {
             }
             state = s;
             if state.is_field_final() {
-                ends[nend] = nout;
+                ends[nend] = self.output_pos + nout;
                 nend += 1;
                 if state != NfaState::EndFieldDelim {
                     break;
@@ -908,7 +908,11 @@ impl Reader {
             nend >= ends.len(),
         );
         self.nfa_state = state;
-        self.output_pos = if res.is_record() { 0 } else { nout };
+        if res.is_record() {
+            self.output_pos = 0;
+        } else {
+            self.output_pos += nout;
+        }
         (res, nin, nout, nend)
     }
 
