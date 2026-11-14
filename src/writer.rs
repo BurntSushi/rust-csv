@@ -1126,14 +1126,17 @@ impl<W: io::Write> Writer<W> {
 
     /// Write a CSV terminator.
     fn write_terminator(&mut self) -> Result<()> {
-        self.check_field_count()?;
+        // The fields are already written at this point, so finish the record
+        // even on a length mismatch. Otherwise the next record is glued onto
+        // this one and every later field count is off.
+        let count = self.check_field_count();
         loop {
             let (res, nout) = self.core.terminator(self.buf.writable());
             self.buf.written(nout);
             match res {
                 WriteResult::InputEmpty => {
                     self.state.fields_written = 0;
-                    return Ok(());
+                    return count;
                 }
                 WriteResult::OutputFull => self.flush_buf()?,
             }
@@ -1144,7 +1147,8 @@ impl<W: io::Write> Writer<W> {
     /// buffer.
     #[inline(never)]
     fn write_terminator_into_buffer(&mut self) -> Result<()> {
-        self.check_field_count()?;
+        // See write_terminator.
+        let count = self.check_field_count();
         match self.core.get_terminator() {
             csv_core::Terminator::CRLF => {
                 self.buf.writable()[0] = b'\r';
@@ -1158,7 +1162,7 @@ impl<W: io::Write> Writer<W> {
             _ => unreachable!(),
         }
         self.state.fields_written = 0;
-        Ok(())
+        count
     }
 
     fn check_field_count(&mut self) -> Result<()> {
@@ -1327,6 +1331,17 @@ mod tests {
                 panic!("expected UnequalLengths error, but got '{:?}'", x);
             }
         }
+    }
+
+    #[test]
+    fn unequal_records_bad_recovers() {
+        let mut wtr = WriterBuilder::new().from_writer(vec![]);
+        wtr.write_record(&["a", "b"]).unwrap();
+        assert!(wtr.write_record(&["x", "y", "z"]).is_err());
+        wtr.write_record(&["c", "d"]).unwrap();
+        assert!(wtr.write_byte_record(&ByteRecord::from(vec!["z"])).is_err());
+        wtr.write_byte_record(&ByteRecord::from(vec!["e", "f"])).unwrap();
+        assert_eq!(wtr_as_string(wtr), "a,b\nx,y,z\nc,d\nz\ne,f\n");
     }
 
     #[test]
