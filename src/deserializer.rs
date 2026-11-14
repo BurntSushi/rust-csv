@@ -448,6 +448,11 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
         self,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
+        // With headers, the map key already took this column's header, so
+        // the field has to be taken too or every later field shifts by one.
+        if self.has_headers() {
+            let _ = self.next_field_bytes();
+        }
         visitor.visit_unit()
     }
 
@@ -456,7 +461,7 @@ impl<'a, 'de: 'a, T: DeRecord<'de>> Deserializer<'de>
         _name: &'static str,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        visitor.visit_unit()
+        self.deserialize_unit(visitor)
     }
 
     fn deserialize_newtype_struct<V: Visitor<'de>>(
@@ -1226,6 +1231,45 @@ mod tests {
                 h2: BString::from(b"foo\xFFbar".to_vec()),
                 h3: "quux".to_string(),
             }
+        );
+    }
+
+    #[test]
+    fn unit_field_with_headers() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct U;
+
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Row {
+            a: String,
+            b: (),
+            c: String,
+            d: U,
+            e: String,
+        }
+
+        let got: Row =
+            de_headers(&["a", "b", "c", "d", "e"], &["1", "2", "3", "4", "5"])
+                .unwrap();
+        assert_eq!(
+            got,
+            Row { a: "1".into(), b: (), c: "3".into(), d: U, e: "5".into() }
+        );
+    }
+
+    #[test]
+    fn phantom_data_without_headers() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Row {
+            a: String,
+            m: std::marker::PhantomData<u8>,
+            b: String,
+        }
+
+        let got: Row = de(&["1", "2"]).unwrap();
+        assert_eq!(
+            got,
+            Row { a: "1".into(), m: std::marker::PhantomData, b: "2".into() }
         );
     }
 }
