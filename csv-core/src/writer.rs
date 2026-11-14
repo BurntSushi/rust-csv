@@ -504,14 +504,21 @@ impl Default for WriterState {
 
 /// Returns true if and only if the given input is non-numeric.
 pub fn is_non_numeric(input: &[u8]) -> bool {
-    let s = match str::from_utf8(input) {
-        Err(_) => return true,
-        Ok(s) => s,
+    let unsigned = match input {
+        [b'+' | b'-', rest @ ..] => rest,
+        _ => input,
     };
-    // I suppose this could be faster if we wrote validators of numbers instead
-    // of using the actual parser, but that's probably a lot of work for a bit
-    // of a niche feature.
-    s.parse::<f64>().is_err() && s.parse::<i128>().is_err()
+    // Plain integers are the common case and need no parsing at all.
+    if !unsigned.is_empty() && unsigned.iter().all(u8::is_ascii_digit) {
+        return false;
+    }
+    // Anything else `f64` accepts starts with one of these.
+    match unsigned.first() {
+        Some(b'0'..=b'9' | b'.' | b'i' | b'I' | b'n' | b'N') => {}
+        _ => return true,
+    }
+    // Every integer that parses as an `i128` also parses as an `f64`.
+    str::from_utf8(input).map_or(true, |s| s.parse::<f64>().is_err())
 }
 
 /// Escape quotes `input` and writes the result to `output`.
@@ -830,6 +837,20 @@ mod tests {
         assert_write!(wtr, finish, &mut out[n..], 0, InputEmpty, "");
 
         assert_eq!("\"abc\",5.2,98", s(&out[..n]));
+    }
+
+    #[test]
+    fn non_numeric() {
+        use super::is_non_numeric;
+
+        for num in ["0", "-12", "+7", "1.5", ".5", "-1e9", "inf", "-NaN"] {
+            assert!(!is_non_numeric(b(num)), "{}", num);
+        }
+        for text in ["", "-", "+", "abc", "1a", "1-2", " 1", "e5"] {
+            assert!(is_non_numeric(b(text)), "{}", text);
+        }
+        assert!(is_non_numeric(b"\xFF"));
+        assert!(!is_non_numeric(b("170141183460469231731687303715884105728")));
     }
 
     #[test]
