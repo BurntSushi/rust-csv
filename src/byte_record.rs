@@ -544,8 +544,16 @@ impl ByteRecord {
     #[inline]
     pub(crate) fn validate(&self) -> result::Result<(), Utf8Error> {
         // If the entire buffer is ASCII, then we have nothing to fear.
-        if self.0.fields[..self.0.bounds.end()].is_ascii() {
+        let buf = &self.0.fields[..self.0.bounds.end()];
+        if buf.is_ascii() {
             return Ok(());
+        }
+        // If the entire buffer is valid UTF-8 and no field boundary splits a
+        // codepoint, then every field is valid UTF-8 on its own.
+        if let Ok(s) = std::str::from_utf8(buf) {
+            if self.0.bounds.ends().iter().all(|&e| s.is_char_boundary(e)) {
+                return Ok(());
+            }
         }
         // Otherwise, we must check each field individually to ensure that
         // it's valid UTF-8.
@@ -1187,5 +1195,20 @@ mod tests {
         let test1 = ByteRecord::from(vec!["12", "34", "56"]);
         let test2 = ByteRecord::from(vec!["12", "34"]);
         assert_ne!(test1, test2);
+    }
+
+    #[test]
+    fn validate_utf8() {
+        let ok = ByteRecord::from(vec![b("α"), b("bé"), b("")]);
+        assert!(ok.validate().is_ok());
+
+        // Valid UTF-8 as a whole, but the boundary splits a codepoint.
+        let split = ByteRecord::from(vec![&b"x\xCE"[..], &b"\xB1"[..]]);
+        let err = split.validate().unwrap_err();
+        assert_eq!((err.field(), err.valid_up_to()), (0, 1));
+
+        let bad = ByteRecord::from(vec![b("α"), &b"a\xFF"[..]]);
+        let err = bad.validate().unwrap_err();
+        assert_eq!((err.field(), err.valid_up_to()), (1, 1));
     }
 }
