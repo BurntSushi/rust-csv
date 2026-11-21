@@ -1,7 +1,7 @@
 use core::fmt;
 use core::str;
 
-use memchr::memchr;
+use memchr::{memchr, memchr2};
 
 use crate::{QuoteStyle, Terminator};
 
@@ -534,7 +534,8 @@ pub fn is_non_numeric(input: &[u8]) -> bool {
 ///
 /// `quote` is the quote byte and `escape` is the escape byte. If
 /// `double_quote` is true, then quotes are escaped by doubling them,
-/// otherwise, quotes are escaped with the `escape` byte.
+/// otherwise, quotes and escape characters are escaped with the `escape`
+/// byte.
 ///
 /// N.B. This function is provided for low level usage. It is called
 /// automatically if you're using a `Writer`.
@@ -547,16 +548,21 @@ pub fn quote(
 ) -> (WriteResult, usize, usize) {
     let (mut nin, mut nout) = (0, 0);
     loop {
-        match memchr(quote, input) {
+        let next = if double_quote || escape == quote {
+            memchr(quote, input)
+        } else {
+            memchr2(quote, escape, input)
+        };
+        match next {
             None => {
                 let (res, i, o) = write_optimistic(input, output);
                 nin += i;
                 nout += o;
                 return (res, nin, nout);
             }
-            Some(next_quote) => {
+            Some(next_special) => {
                 let (res, i, o) =
-                    write_optimistic(&input[..next_quote], output);
+                    write_optimistic(&input[..next_special], output);
                 input = &input[i..];
                 output = &mut moving(output)[o..];
                 nin += i;
@@ -564,21 +570,19 @@ pub fn quote(
                 if let WriteResult::OutputFull = res {
                     return (res, nin, nout);
                 }
-                if double_quote {
-                    let (res, o) = write_pessimistic(&[quote, quote], output);
-                    if let WriteResult::OutputFull = res {
-                        return (res, nin, nout);
-                    }
-                    nout += o;
-                    output = &mut moving(output)[o..];
+                let to_write = if double_quote {
+                    [quote, quote]
+                } else if input[0] == quote {
+                    [escape, quote]
                 } else {
-                    let (res, o) = write_pessimistic(&[escape, quote], output);
-                    if let WriteResult::OutputFull = res {
-                        return (res, nin, nout);
-                    }
-                    nout += o;
-                    output = &mut moving(output)[o..];
+                    [escape, escape]
+                };
+                let (res, o) = write_pessimistic(&to_write, output);
+                if let WriteResult::OutputFull = res {
+                    return (res, nin, nout);
                 }
+                nout += o;
+                output = &mut moving(output)[o..];
                 nin += 1;
                 input = &input[1..];
             }
@@ -740,6 +744,27 @@ mod tests {
             "\"a\"\"bc"
         );
         n += 6;
+
+        assert_write!(wtr, finish, &mut out[n..], 1, InputEmpty, "\"");
+    }
+
+    #[test]
+    fn writer_one_field_escaped_escape() {
+        let mut wtr =
+            WriterBuilder::new().double_quote(false).escape(b'\\').build();
+        let out = &mut [0; 1024];
+        let mut n = 0;
+
+        assert_field!(
+            wtr,
+            b("a\\b"),
+            &mut out[n..],
+            3,
+            5,
+            InputEmpty,
+            "\"a\\\\b"
+        );
+        n += 5;
 
         assert_write!(wtr, finish, &mut out[n..], 1, InputEmpty, "\"");
     }
@@ -1012,6 +1037,22 @@ mod tests {
         let out = &mut [0; 1024];
 
         assert_quote!(inp, out, 2, 4, InputEmpty, r#"\"\""#, false);
+    }
+
+    #[test]
+    fn quote_escaped_escape() {
+        let inp = b("a\\b");
+        let out = &mut [0; 1024];
+
+        assert_quote!(inp, out, 3, 4, InputEmpty, r#"a\\b"#, false);
+    }
+
+    #[test]
+    fn quote_escaped_escape_and_quote() {
+        let inp = b(r#"a\b"c"#);
+        let out = &mut [0; 1024];
+
+        assert_quote!(inp, out, 5, 7, InputEmpty, r#"a\\b\"c"#, false);
     }
 
     #[test]
