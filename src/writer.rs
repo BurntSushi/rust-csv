@@ -1450,4 +1450,23 @@ mod tests {
         let buf = wtr.into_inner().unwrap();
         assert_eq!(String::from_utf8(buf).unwrap(), "\"# comment\",another\n");
     }
+
+    #[test]
+    fn escape_char_is_escaped_when_double_quote_false() {
+        let mut wtr = WriterBuilder::new()
+            .double_quote(false)
+            .escape(b'\\')
+            .from_writer(vec![]);
+        wtr.write_record(["a\\b", "c\"d"]).unwrap();
+        let data = wtr_as_string(wtr);
+        assert_eq!(data, "\"a\\\\b\",\"c\\\"d\"\n");
+
+        let mut rdr = crate::ReaderBuilder::new()
+            .has_headers(false)
+            .escape(Some(b'\\'))
+            .from_reader(data.as_bytes());
+        let rec = rdr.records().next().unwrap().unwrap();
+        assert_eq!(rec.get(0), Some("a\\b"));
+        assert_eq!(rec.get(1), Some("c\"d"));
+    }
 }
